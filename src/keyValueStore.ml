@@ -1,3 +1,5 @@
+exception File_not_found
+
 module type FileStore =
 sig
   type data
@@ -6,6 +8,9 @@ sig
     path : string;
     data : data
   }
+
+  val path : (t, string) GapiLens.t
+  val data : (t, data) GapiLens.t
 
   val save : t -> unit
 
@@ -32,7 +37,17 @@ struct
     data : data
   }
 
+	let path = {
+		GapiLens.get = (fun x -> x.path);
+		GapiLens.set = (fun v x -> { x with path = v })
+	}
+	let data = {
+		GapiLens.get = (fun x -> x.data);
+		GapiLens.set = (fun v x -> { x with data = v })
+	}
+
   let load filename =
+    if not (Sys.file_exists filename) then raise File_not_found;
     let sb = Scanf.Scanning.from_file filename in
     let table = Hashtbl.create 16 in
       while (not (Scanf.Scanning.end_of_input sb)) do
