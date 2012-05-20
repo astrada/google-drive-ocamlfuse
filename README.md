@@ -14,11 +14,13 @@ packages for Debian](http://ocaml.debian.net/debian/ocaml-3.12.1/)):
 
 * [OCaml][] = 3.12.1
 * [Findlib][] = 1.2.7
+* [ocamlfuse][] = 2.7.1
 * [gapi-ocaml][] = 0.1.8
 
 [OCaml]: http://caml.inria.fr/ocaml/release.en.html
 [Findlib]: http://projects.camlcity.org/projects/findlib.html/
-[gapi-ocaml]: http://forge.ocamlcore.org/projects/gapi-ocaml
+[ocamlfulse]: http://sourceforge.net/projects/ocamlfuse/
+[gapi-ocaml]: http://forge.ocamlcore.org/projects/gapi-ocaml/
 
 ### Configuration and installation
 
