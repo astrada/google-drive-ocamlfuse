@@ -1,0 +1,26 @@
+OASISFormat: 0.2
+OCamlVersion: >= 3.12.0
+Name: google-drive-ocamlfuse
+Version: 0.1
+Synopsis: A FUSE filesystem over Google Drive
+Authors: Alessandro Strada
+License: MIT
+LicenseFile: LICENSE
+Homepage: https://github.com/astrada/google-drive-ocamlfuse
+BuildTools: ocamlbuild
+
+# Executables
+Executable gdfuse
+  Path: src
+  MainIs: gdfuse.ml
+  Install: true
+  CompiledObject: best
+  BuildDepends: gdata
+
+# VCS
+SourceRepository head
+  Type: git
+  Location: https://github.com/astrada/google-drive-ocamlfuse.git
+  Browser: https://github.com/astrada/google-drive-ocamlfuse
+  Branch: master
+

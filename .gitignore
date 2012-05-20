@@ -1,0 +1,11 @@
+*.swp
+*.bak
+
+_build
+*.byte
+*.native
+
+*.docdir
+setup.data
+setup.log
+
