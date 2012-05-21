@@ -60,11 +60,10 @@ let start_browser request_id =
     if not status then
       failwith ("Error opening URL:" ^ url)
 
-let get_tokens context =
-  log_message "Getting tokens from GAE proxy...";
+let gae_proxy_request page context =
   let request_id = context |. Context.request_id_lens in
   let rid = Netencoding.Url.encode request_id in
-  let gettokens_url = gae_proxy ^ "/gettokens?requestid=" ^ rid in
+  let page_url = Printf.sprintf "%s/%s?requestid=%s" gae_proxy page rid in
     GapiConversation.with_curl
       context.Context.gapi_config
       (fun session ->
@@ -72,7 +71,7 @@ let get_tokens context =
            GapiConversation.request
              GapiCore.HttpMethod.GET
              session
-             gettokens_url
+             page_url
              (fun pipe code headers session ->
                 let response = GapiConversation.read_all pipe in
                 if code <> 200 then begin
@@ -114,6 +113,10 @@ let get_tokens context =
          in
            tokens)
 
+let get_tokens context =
+  log_message "Getting tokens from GAE proxy...";
+  gae_proxy_request "gettokens" context
+
 let start_server_polling context =
   let rec loop n =
     if n = 24 then failwith "Cannot retrieve auth tokens: Timeout expired";
@@ -124,6 +127,10 @@ let start_server_polling context =
       loop (succ n)
   in
     loop 0
+
+let refresh_access_token context =
+  log_message "Refreshing access token...";
+  gae_proxy_request "refreshtoken" context
 (* END Authorization *)
 
 (* Setup *)
