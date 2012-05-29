@@ -15,7 +15,7 @@ Executable gdfuse
   MainIs: gdfuse.ml
   Install: true
   CompiledObject: best
-  BuildDepends: gdata
+  BuildDepends: gdata, Fuse, sqlite3, threads
 
 # VCS
 SourceRepository head

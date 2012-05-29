@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: e60a74c16bd8a001456b1ccc7cc6fb74)
+# DO NOT EDIT (digest: 358891eb7b1df7ca5415cd94410d9ba3)
 # Ignore VCS directories, you can use the same kind of rule outside 
 # OASIS_START/STOP if you want to exclude directories that contains 
 # useless stuff for the build process
@@ -14,6 +14,12 @@
 "_darcs": -traverse
 "_darcs": not_hygienic
 # Executable gdfuse
+<src/gdfuse.{native,byte}>: pkg_threads
+<src/gdfuse.{native,byte}>: pkg_sqlite3
 <src/gdfuse.{native,byte}>: pkg_gdata
+<src/gdfuse.{native,byte}>: pkg_Fuse
+<src/*.ml{,i}>: pkg_threads
+<src/*.ml{,i}>: pkg_sqlite3
 <src/*.ml{,i}>: pkg_gdata
+<src/*.ml{,i}>: pkg_Fuse
 # OASIS_STOP
