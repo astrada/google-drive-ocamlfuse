@@ -45,7 +45,7 @@ let create fs_label =
       app_dir;
       config_path = Filename.concat app_dir "config";
       state_path = Filename.concat app_dir "state";
-      log_path = Filename.concat app_dir "log";
+      log_path = Filename.concat app_dir "curl.log";
       cache_dir = Filename.concat app_dir "cache";
     }
 
@@ -57,5 +57,6 @@ let create_directories app_dir =
       with Sys_error _ -> ()
   in
     safe_makedir app_dir.base_dir;
-    safe_makedir app_dir.app_dir
+    safe_makedir app_dir.app_dir;
+    safe_makedir app_dir.cache_dir
 
