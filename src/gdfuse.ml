@@ -1,9 +1,6 @@
 open Utils.Infix
 open GapiLens.Infix
 open GapiLens.StateInfix
-open GapiMonad.SessionM.Infix
-open GdataDocumentsV3Model
-open GdataDocumentsV3Service
 
 exception ServerError of string
 
@@ -213,7 +210,11 @@ let setup_application fs_label =
       save_state context.Context.state_store;
       try
         start_browser request_id;
-        start_server_polling context |> save_state_from_context;
+        let context =
+          start_server_polling context
+        in
+          save_state_from_context context;
+          context
       with
           ServerError e ->
             log_message "Removing invalid request_id=%s\n%!" request_id;
@@ -229,6 +230,7 @@ let setup_application fs_label =
   log_message "Setting up %s filesystem...\n" fs_label;
   let app_dir = AppDir.create fs_label in
   let () = AppDir.create_directories app_dir in
+  let cache = Cache.setup_db app_dir in
   let config_store = get_config_store app_dir in
   let gapi_config =
     Config.create_gapi_config
@@ -240,29 +242,108 @@ let setup_application fs_label =
     config_store;
     gapi_config;
     state_store;
+    cache;
   } in
   let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
       get_auth_tokens_from_server context
-    else
-      log_message "Refresh token already present.\n%!"
+    else begin
+      log_message "Refresh token already present.\n%!";
+      context
+    end
 (* END setup *)
 
 (* FUSE bindings *)
-let init_filesystem mounpoint =
-  log_message "Init filesystem %s\n" mounpoint
+let init_filesystem () =
+  log_message "init_filesystem\n%!"
+
+    (* TODO:
+let statfs path =
+  log_message "statfs %s\n%!" path;
+  { Unix_util.f_bsize = 0L;
+    f_frsize = 0L;
+    f_blocks = 0L;
+    f_bfree = 0L;
+    f_bavail = 0L;
+    f_files = 0L;
+    f_ffree = 0L;
+    f_favail = 0L;
+    f_fsid = 0L;
+    f_flag = 0L;
+    f_namemax = 0L;
+  } *)
+
+let getattr path =
+  log_message "getattr %s\n%!" path;
+  Unix.LargeFile.lstat path
+
+let readdir path hnd =
+  log_message "readdir %s %d\n%!" path hnd;
+  "." :: ".." :: (Array.to_list (Sys.readdir path))
+
+let start_filesystem mounpoint fuse_args context =
+  log_message "Starting filesystem %s\n%!" mounpoint;
+  let fuse_argv =
+    Sys.argv.(0) :: (fuse_args @ [mounpoint])
+    |> Array.of_list
+  in
+    Fuse.main fuse_argv {
+      Fuse.default_operations with
+          Fuse.init = init_filesystem;
+          (* statfs; *)
+          getattr;
+          readdir;
+          (*
+          opendir = (fun path flags -> Unix.close (Unix.openfile path flags 0);None);
+          releasedir = (fun path mode hnd -> ());
+          fsyncdir = (fun path ds hnd -> Printf.printf "sync dir\n%!");
+          readlink = Unix.readlink;
+          utime = Unix.utimes;
+          fopen = (fun path flags -> Some (store_descr (Unix.openfile path flags 0)));
+          read = xmp_read;
+          write = xmp_write;
+          mknod = (fun path mode -> close (openfile path [O_CREAT;O_EXCL] mode));
+          mkdir = Unix.mkdir;
+          unlink = Unix.unlink;
+          rmdir = Unix.rmdir;
+          symlink = Unix.symlink;
+          rename = Unix.rename;
+          link = Unix.link;
+          chmod = Unix.chmod;
+          chown = Unix.chown;
+          truncate = Unix.LargeFile.truncate;
+          release = (fun path mode hnd -> Unix.close (retrieve_descr hnd));
+          flush = (fun path hnd -> ());
+          fsync = (fun path ds hnd -> Printf.printf "sync\n%!");
+          listxattr = (fun path -> init_attr xattr path;lskeys (Hashtbl.find xattr path));
+          getxattr = (fun path attr ->
+                        with_xattr_lock (fun () ->
+                                           init_attr xattr path;
+                                           try
+                                             Hashtbl.find (Hashtbl.find xattr path) attr
+                                           with Not_found -> raise (Unix.Unix_error (EUNKNOWNERR 61 (* TODO: this is system-dependent *),"getxattr",path)))());
+          setxattr = (fun path attr value flag -> (* TODO: This currently ignores flags *)
+                        with_xattr_lock (fun () ->
+                                           init_attr xattr path;
+                                           Hashtbl.replace (Hashtbl.find xattr path) attr value) ());
+          removexattr = (fun path attr ->
+                           with_xattr_lock (fun () ->
+                                              init_attr xattr path;
+                                              Hashtbl.remove (Hashtbl.find xattr path) attr) ());
+           *)
+    }
 (* END FUSE bindings *)
 
 (* Main program *)
 let () =
-  let setup = ref false in
   let fs_label = ref "default" in
   let mountpoint = ref "" in
+  let fuse_args = ref [] in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
-      "Usage: %s [-verbose] [-label fslabel] -setup\n       %s mountpoint"
-      program program in
+      "Usage: %s [-verbose] [-label fslabel] [-f] [-d] [-s] mountpoint"
+      program in
   let arg_specs =
     Arg.align (
       ["-verbose",
@@ -272,9 +353,15 @@ let () =
        Arg.Set_string fs_label,
        " Use a specific label to identify the filesystem. \
         Default is \"default\".";
-       "-setup",
-       Arg.Set setup,
-       " Create configuration directory ~/.gdfuse and request oauth2 tokens.";
+       "-f",
+       Arg.Unit (fun _ -> fuse_args := "-f" :: !fuse_args),
+       " keep the process in foreground.";
+       "-d",
+       Arg.Unit (fun _ -> fuse_args := "-d" :: !fuse_args),
+       " enable FUSE debug output (implies -f).";
+       "-s",
+       Arg.Unit (fun _ -> fuse_args := "-s" :: !fuse_args),
+       " disable multi-threaded operation.";
       ]) in
   let () =
     Arg.parse
@@ -282,17 +369,24 @@ let () =
       (fun s -> mountpoint := s)
       usage in
   let () =
-    if not !setup && !mountpoint = "" then begin
-      prerr_endline "You must specify a mountpoint (or -setup option).";
+    if !mountpoint = "" then begin
+      prerr_endline "You must specify a mountpoint.";
       prerr_endline usage;
       exit 1
     end
   in
-    if !setup then begin
-      setup_application !fs_label;
-    end;
-    if !mountpoint <> "" then begin
-      init_filesystem !mountpoint;
-    end
+
+  let context = setup_application !fs_label in
+    at_exit
+      (fun () ->
+         let res = Cache.close_db context.Context.cache in
+           log_message "close_db: %b\n%!" res);
+    try
+      start_filesystem !mountpoint !fuse_args context
+    with e ->
+      let error_message = Printexc.to_string e in begin
+        Printf.eprintf "Error: %s\nExiting.\n" error_message;
+        exit 1
+      end
 (* END Main program *)
 
