@@ -9,6 +9,7 @@ type t = {
   config_store : ConfigFileStore.t;
   state_store : StateFileStore.t;
   gapi_config : GapiConfig.t;
+  cache : Cache.t;
 }
 
 let app_dir = {
@@ -26,6 +27,10 @@ let state_store = {
 let gapi_config = {
   GapiLens.get = (fun x -> x.gapi_config);
   GapiLens.set = (fun v x -> { x with gapi_config = v })
+}
+let cache = {
+  GapiLens.get = (fun x -> x.cache);
+  GapiLens.set = (fun v x -> { x with cache = v })
 }
 
 let request_id_lens =
