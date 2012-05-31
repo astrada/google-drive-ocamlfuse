@@ -7,6 +7,11 @@ type t = {
   debug : bool;
 }
 
+let debug = {
+  GapiLens.get = (fun x -> x.debug);
+  GapiLens.set = (fun v x -> { debug = v })
+}
+
 let of_table table =
   let get = Hashtbl.find table in
     { debug = get "debug" |> bool_of_string;
@@ -52,4 +57,8 @@ let create_gapi_config config app_dir =
   in
     gapi_config
     |> GapiConfig.application_name ^= application_name
+    (* Do not set client_id and client_secret, because authorization is
+     * handled by the GAE proxy *)
+    |> GapiConfig.auth ^= GapiConfig.OAuth2 { GapiConfig.client_id = "";
+                                              client_secret = "" }
 
