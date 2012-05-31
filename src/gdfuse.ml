@@ -2,22 +2,14 @@ open Utils.Infix
 open GapiLens.Infix
 open GapiLens.StateInfix
 
-exception ServerError of string
-
-let verbose = ref false
 let default_fs_label = "default"
 
-let gae_proxy = "http://localhost:8080"
 let client_id = "564921029129.apps.googleusercontent.com"
-let redirect_uri = gae_proxy ^ "/oauth2callback"
+let redirect_uri = GaeProxy.gae_proxy_url ^ "/oauth2callback"
 let scope = [GdataDocumentsV3Service.all_scopes]
 
 (* Logging *)
-let log_message format =
-  if !verbose then
-    Printf.printf format
-  else
-    Printf.ifprintf stdout format
+let log_message = Utils.log_message
 
 (* Authorization *)
 let get_authorization_url request_id =
@@ -56,78 +48,6 @@ let start_browser request_id =
   in
     if not status then
       failwith ("Error opening URL:" ^ url)
-
-let gae_proxy_request page context =
-  let request_id = context |. Context.request_id_lens in
-  let rid = Netencoding.Url.encode request_id in
-  let page_url = Printf.sprintf "%s/%s?requestid=%s" gae_proxy page rid in
-    GapiConversation.with_curl
-      context.Context.gapi_config
-      (fun session ->
-         let (tokens, _) =
-           GapiConversation.request
-             GapiCore.HttpMethod.GET
-             session
-             page_url
-             (fun pipe code headers session ->
-                let response = GapiConversation.read_all pipe in
-                if code <> 200 then begin
-                  log_message "fail\n%!";
-                  raise (ServerError (Printf.sprintf
-                                        "Server response: %s (code=%d)"
-                                        response code));
-                end else begin
-                  match response with
-                      "Not_found" ->
-                        log_message "not found, retrying\n%!";
-                        raise Not_found
-                    | "access_denied"
-                    | "ConflictError"
-                    | "Exception" as error_code ->
-                        log_message "fail (error_code=%s)\n%!" error_code;
-                        raise (ServerError ("error_code " ^ error_code))
-                    | "Missing_request_id" ->
-                        failwith "Bug! Missing_request_id"
-                    | _ -> ()
-                end;
-                log_message "ok\n%!";
-                let json = Json_io.json_of_string response in
-                let open Json_type.Browse in
-                let obj = objekt json in
-                let table = make_table obj in
-                  context
-                  |> Context.state_store
-                  ^%= Context.StateFileStore.data ^= {
-                    State.auth_request_id =
-                      field table "request_id" |> string;
-                    auth_request_date =
-                      field table "date" |> string |> GapiDate.of_string;
-                    user_id = field table "user_id" |> string;
-                    refresh_token = field table "refresh_token" |> string;
-                    last_access_token = field table "access_token" |> string;
-                  }
-             )
-         in
-           tokens)
-
-let get_tokens context =
-  log_message "Getting tokens from GAE proxy...";
-  gae_proxy_request "gettokens" context
-
-let start_server_polling context =
-  let rec loop n =
-    if n = 24 then failwith "Cannot retrieve auth tokens: Timeout expired";
-    try
-      get_tokens context
-    with Not_found ->
-      Unix.sleep 5;
-      loop (succ n)
-  in
-    loop 0
-
-let refresh_access_token context =
-  log_message "Refreshing access token...";
-  gae_proxy_request "refreshtoken" context
 (* END Authorization *)
 
 (* Setup *)
@@ -137,8 +57,10 @@ let rng =
     string dev_rng 20 |> pseudo_rng
 
 (* Application configuration *)
-let create_default_config_store app_dir =
-  let config = Config.default_debug in
+let create_default_config_store debug app_dir =
+  let config =
+    if debug then Config.default_debug
+    else Config.default in
   (* Save configuration file *)
   let config_store = {
     Context.ConfigFileStore.path = app_dir |. AppDir.config_path;
@@ -151,7 +73,7 @@ let create_default_config_store app_dir =
     log_message "done\n";
     config_store
 
-let get_config_store app_dir =
+let get_config_store debug app_dir =
   let config_path = app_dir |. AppDir.config_path in
     try
       log_message "Loading configuration from %s..." config_path;
@@ -160,7 +82,7 @@ let get_config_store app_dir =
         config_store
     with KeyValueStore.File_not_found ->
       log_message "not found.\n";
-      create_default_config_store app_dir
+      create_default_config_store debug app_dir
 (* END Application configuration *)
 
 (* Application state *)
@@ -199,7 +121,7 @@ let get_state_store app_dir =
       create_empty_state_store app_dir
 (* END Application state *)
 
-let setup_application fs_label =
+let setup_application debug fs_label =
   let get_auth_tokens_from_server context =
     let request_id =
       let rid = context |. Context.request_id_lens in
@@ -211,12 +133,12 @@ let setup_application fs_label =
       try
         start_browser request_id;
         let context =
-          start_server_polling context
+          GaeProxy.start_server_polling context
         in
           save_state_from_context context;
           context
       with
-          ServerError e ->
+          GaeProxy.ServerError e ->
             log_message "Removing invalid request_id=%s\n%!" request_id;
             context |> Context.request_id_lens ^= "" |> save_state_from_context;
             Printf.eprintf "Cannot retrieve auth tokens: %s\n%!" e;
@@ -230,19 +152,28 @@ let setup_application fs_label =
   log_message "Setting up %s filesystem...\n" fs_label;
   let app_dir = AppDir.create fs_label in
   let () = AppDir.create_directories app_dir in
+  log_message "Setting up cache db...";
   let cache = Cache.setup_db app_dir in
-  let config_store = get_config_store app_dir in
+  log_message "done\n";
+  let config_store = get_config_store debug app_dir in
+  let config_store = config_store
+    |> Context.ConfigFileStore.data
+    ^%= Config.debug ^= debug in
   let gapi_config =
     Config.create_gapi_config
       (config_store |. Context.ConfigFileStore.data)
       app_dir in
   let state_store = get_state_store app_dir in
+  log_message "Setting up CURL...";
+  let curl_state = GapiCurl.global_init () in
+  log_message "done\n";
   let context = {
     Context.app_dir;
     config_store;
     gapi_config;
     state_store;
     cache;
+    curl_state;
   } in
   let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
@@ -273,13 +204,43 @@ let statfs path =
     f_namemax = 0L;
   } *)
 
+(* TODO: do not access filesystem *)
+let default_stats = Unix.LargeFile.stat "."
+
 let getattr path =
   log_message "getattr %s\n%!" path;
-  Unix.LargeFile.lstat path
+  if path = "/" then default_stats
+  else
+    { default_stats with 
+      Unix.LargeFile.st_nlink = 1;
+      st_kind = Unix.S_REG;
+      st_perm = 0o444;
+      st_size = 0L (*FIXME*) }
+      (*
+  else raise (Unix_error (ENOENT, "stat", path))
+       *)
 
-let readdir path hnd =
+(*
+        self.st_mode = stat.S_IFDIR | 0744
+        self.st_ino = 0
+        self.st_dev = 0
+        self.st_nlink = 2
+        self.st_uid = os.getuid()
+        self.st_gid = os.getgid()
+        self.st_size = 4096
+        self.st_atime = time.time()
+        self.st_mtime = self.st_atime
+        self.st_ctime = self.st_atime
+*)
+
+let readdir context path hnd =
   log_message "readdir %s %d\n%!" path hnd;
-  "." :: ".." :: (Array.to_list (Sys.readdir path))
+  let dir_list =
+    try
+      Docs.get_dir_list context
+    with _ -> []
+  in
+    "." :: ".." :: dir_list
 
 let start_filesystem mounpoint fuse_args context =
   log_message "Starting filesystem %s\n%!" mounpoint;
@@ -292,7 +253,7 @@ let start_filesystem mounpoint fuse_args context =
           Fuse.init = init_filesystem;
           (* statfs; *)
           getattr;
-          readdir;
+          readdir = readdir context;
           (*
           opendir = (fun path flags -> Unix.close (Unix.openfile path flags 0);None);
           releasedir = (fun path mode hnd -> ());
@@ -339,16 +300,23 @@ let () =
   let fs_label = ref "default" in
   let mountpoint = ref "" in
   let fuse_args = ref [] in
+  let debug = ref false in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
-      "Usage: %s [-verbose] [-label fslabel] [-f] [-d] [-s] mountpoint"
+      "Usage: %s [-verbose] [-debug] [-label fslabel] [-f] [-d] [-s] mountpoint"
       program in
   let arg_specs =
     Arg.align (
       ["-verbose",
-       Arg.Set verbose,
-       " Enable verbose logging for application setup. Default is false.";
+       Arg.Set Utils.verbose,
+       " Enable verbose logging on stdout. Default is false.";
+       "-debug",
+       Arg.Unit (fun () ->
+                   debug := true;
+                   Utils.verbose := true;
+                   fuse_args := "-f" :: !fuse_args),
+       " Enable debug mode (implies -verbose, and -f). Default is false.";
        "-label",
        Arg.Set_string fs_label,
        " Use a specific label to identify the filesystem. \
@@ -376,13 +344,16 @@ let () =
     end
   in
 
-  let context = setup_application !fs_label in
-    at_exit
-      (fun () ->
-         let res = Cache.close_db context.Context.cache in
-           log_message "close_db: %b\n%!" res);
     try
-      start_filesystem !mountpoint !fuse_args context
+      let context = setup_application !debug !fs_label in
+        at_exit
+          (fun () ->
+             log_message "CURL cleanup...";
+             ignore (GapiCurl.global_cleanup context.Context.curl_state);
+             log_message "done\nClosing cache db...\n";
+             let res = Cache.close_db context.Context.cache in
+             log_message "Sqlite3.close_db: %b\n%!" res);
+        start_filesystem !mountpoint !fuse_args context
     with e ->
       let error_message = Printexc.to_string e in begin
         Printf.eprintf "Error: %s\nExiting.\n" error_message;
