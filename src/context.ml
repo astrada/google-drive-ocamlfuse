@@ -10,6 +10,7 @@ type t = {
   state_store : StateFileStore.t;
   gapi_config : GapiConfig.t;
   cache : Cache.t;
+  curl_state : [`Initialized] GapiCurl.t;
 }
 
 let app_dir = {
@@ -32,10 +33,20 @@ let cache = {
   GapiLens.get = (fun x -> x.cache);
   GapiLens.set = (fun v x -> { x with cache = v })
 }
+let curl_state = {
+  GapiLens.get = (fun x -> x.curl_state);
+  GapiLens.set = (fun v x -> { x with curl_state = v })
+}
+
+let config_lens =
+  config_store |-- ConfigFileStore.data
+
+let state_lens =
+  state_store |-- StateFileStore.data
 
 let request_id_lens =
-  state_store |-- StateFileStore.data |-- State.auth_request_id
+  state_lens |-- State.auth_request_id
 
 let refresh_token_lens =
-  state_store |-- StateFileStore.data |-- State.refresh_token
+  state_lens |-- State.refresh_token
 
