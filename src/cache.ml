@@ -1,20 +1,6 @@
 open Utils.Infix
 open GapiLens.Infix
 
-(* Record:
- * id: INTEGER PRIMARY KEY (int64)
- *
- * resourceId : TEXT (string)
- * category : TEXT (string) : folder, document, spreadsheet, pdf, file, ...
- * remoteId : TEXT (string)
- * extension : TEXT (string)
- * changestamp : INT (int)
- *
- * path : TEXT (string) <- TODO: normalize path
- * state : TEXT (string) : in_sync, to_upload, to_download, conflict, error?
- *
- * Indexes: path, resourceId, remoteId
- *)
 type t = {
   cache_dir : string;
   db : Sqlite3.db;
@@ -52,6 +38,15 @@ struct
 
 end
 
+(* TODO: add
+ * md5Checksum:string
+ * modifiedByMeDate:float
+ * lastViewed:float (?)
+ * atime, ctime, mtime:float (?)
+ * size:int64 (?)
+ *
+ * add table of directory content
+ *)
 type resource = {
   (* rowid *)
   id : int64;
@@ -303,7 +298,7 @@ let setup_db app_dir =
   let db = Sqlite3.db_open filename in
   let _ = wrap_exec_not_null_no_headers db
     "CREATE TABLE IF NOT EXISTS resource ( \
-        id PRIMARY INTEGER KEY, \
+        id INTEGER PRIMARY KEY, \
         resource_id TEXT NULL, \
         category TEXT NULL, \
         remote_id TEXT NULL, \
