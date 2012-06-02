@@ -54,6 +54,10 @@ let ctx : t Global.t = Global.empty "context"
 
 let get_ctx () = Global.get ctx
 
+let set_ctx context = Global.set ctx context
+
+let undef_ctx () = Global.undef ctx
+
 let save_state_store state_store =
   Utils.log_message "Saving application state in %s..."
     state_store.StateFileStore.path;
@@ -61,7 +65,7 @@ let save_state_store state_store =
   Utils.log_message "done\n"
 
 let save_state_from_context context =
-  Global.set ctx context;
+  set_ctx context;
   save_state_store context.state_store
 
 let save_config_store config_store =
