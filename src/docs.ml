@@ -5,6 +5,7 @@ open GapiMonad.SessionM.Infix
 open GdataDocumentsV3Model
 open GdataDocumentsV3Service
 
+(* Gapi request wrapper *)
 let do_request interact =
   let rec try_request () =
     try
@@ -52,25 +53,59 @@ let do_request interact =
             failwith message
   in
     try_request ()
+(* END Gapi request wrapper *)
 
-let get_folder_id path =
-  root_folder_id
+(* Resources *)
+let cache_lookup path map =
+  let cache = Context.get_ctx () |. Context.cache in
+  let resource = Cache.select_resource_with_path path cache in
+    Option.map map resource
+
+let get_resource_id parent_folder_id title =
+  let parameters = QueryParameters.default
+    |> QueryParameters.showfolders ^= true
+    |> QueryParameters.title ^= title
+    |> QueryParameters.title_exact ^= true
+  in
+    query_folder_contents ~parameters parent_folder_id >>= fun feed ->
+      SessionM.return
+        (feed
+           |. Document.Feed.entries
+           |. GapiLens.head
+           |. Document.Entry.resourceId)
+
+(* END Resources *)
+
+(* Folders *)
+let root_directory = "/"
+
+let rec get_folder_id path =
+  if path = root_directory then
+    SessionM.return root_folder_id
+  else
+    let cached_id =
+      cache_lookup path
+        (fun resource -> resource.Cache.resource_id |> Option.get)
+    in
+      match cached_id with
+          Some id -> SessionM.return id
+        | None ->
+            let parent_path = Filename.dirname path in
+            let title = Filename.basename path in
+              get_folder_id parent_path >>= fun parent_folder_id ->
+              get_resource_id parent_folder_id title
 
 let get_dir_list path =
-  let folder_id =
-    if path = "/" then root_folder_id
-    else get_folder_id path in
-
   let get_feed =
     let parameters = QueryParameters.default
       |> QueryParameters.showfolders ^= true
     in
+      get_folder_id path >>= fun folder_id ->
       query_folder_contents ~parameters folder_id >>= fun feed ->
-          SessionM.return feed
+        SessionM.return feed
   in
 
-  let (feed, _) =
-    do_request get_feed in
+  let feed = do_request get_feed |> fst in
   let dir_list =
     List.map
       (fun entry ->
@@ -78,4 +113,5 @@ let get_dir_list path =
       feed.Document.Feed.entries
   in
     dir_list
+(* END Folders *)
 
