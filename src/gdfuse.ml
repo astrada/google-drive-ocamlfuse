@@ -67,10 +67,7 @@ let create_default_config_store debug app_dir =
     data = config
   }
   in
-    log_message "Saving configuration in %s..."
-      config_store.Context.ConfigFileStore.path;
-    Context.ConfigFileStore.save config_store;
-    log_message "done\n";
+    Context.save_config_store config_store;
     config_store
 
 let get_config_store debug app_dir =
@@ -89,15 +86,6 @@ let get_config_store debug app_dir =
 let generate_request_id () =
   Cryptokit.Random.string rng 32 |> Base64.str_encode
 
-let save_state state_store =
-  log_message "Saving application state in %s..."
-    state_store.Context.StateFileStore.path;
-  Context.StateFileStore.save state_store;
-  log_message "done\n"
-
-let save_state_from_context context =
-  save_state context.Context.state_store
-
 let create_empty_state_store app_dir =
   let request_id = generate_request_id () in
   let state = State.empty |> State.auth_request_id ^= request_id in
@@ -106,7 +94,7 @@ let create_empty_state_store app_dir =
     data = state
   }
   in
-    save_state state_store;
+    Context.save_state_store state_store;
     state_store
 
 let get_state_store app_dir =
@@ -122,25 +110,25 @@ let get_state_store app_dir =
 (* END Application state *)
 
 let setup_application debug fs_label =
-  let get_auth_tokens_from_server context =
+  let get_auth_tokens_from_server () =
+    let context = Context.get_ctx () in
     let request_id =
       let rid = context |. Context.request_id_lens in
         if rid = "" then generate_request_id ()
         else rid
     in
-    let context = context |> Context.request_id_lens ^= request_id in
-      save_state context.Context.state_store;
+      context
+        |> Context.request_id_lens ^= request_id
+        |> Context.save_state_from_context;
       try
         start_browser request_id;
-        let context =
-          GaeProxy.start_server_polling context
-        in
-          save_state_from_context context;
-          context
+        GaeProxy.start_server_polling ()
       with
           GaeProxy.ServerError e ->
             log_message "Removing invalid request_id=%s\n%!" request_id;
-            context |> Context.request_id_lens ^= "" |> save_state_from_context;
+            context
+              |> Context.request_id_lens ^= ""
+              |> Context.save_state_from_context;
             Printf.eprintf "Cannot retrieve auth tokens: %s\n%!" e;
             exit 1
         | e ->
@@ -177,11 +165,9 @@ let setup_application debug fs_label =
   } in
   let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
-      get_auth_tokens_from_server context
-    else begin
-      log_message "Refresh token already present.\n%!";
-      context
-    end
+      get_auth_tokens_from_server ()
+    else
+      log_message "Refresh token already present.\n%!"
 (* END setup *)
 
 (* FUSE bindings *)
@@ -233,16 +219,16 @@ let getattr path =
         self.st_ctime = self.st_atime
 *)
 
-let readdir context path hnd =
+let readdir path hnd =
   log_message "readdir %s %d\n%!" path hnd;
   let dir_list =
     try
-      Docs.get_dir_list context
+      Docs.get_dir_list path
     with _ -> []
   in
     "." :: ".." :: dir_list
 
-let start_filesystem mounpoint fuse_args context =
+let start_filesystem mounpoint fuse_args =
   log_message "Starting filesystem %s\n%!" mounpoint;
   let fuse_argv =
     Sys.argv.(0) :: (fuse_args @ [mounpoint])
@@ -253,7 +239,7 @@ let start_filesystem mounpoint fuse_args context =
           Fuse.init = init_filesystem;
           (* statfs; *)
           getattr;
-          readdir = readdir context;
+          readdir;
           (*
           opendir = (fun path flags -> Unix.close (Unix.openfile path flags 0);None);
           releasedir = (fun path mode hnd -> ());
@@ -345,15 +331,16 @@ let () =
   in
 
     try
-      let context = setup_application !debug !fs_label in
-        at_exit
-          (fun () ->
-             log_message "CURL cleanup...";
-             ignore (GapiCurl.global_cleanup context.Context.curl_state);
-             log_message "done\nClosing cache db...\n";
-             let res = Cache.close_db context.Context.cache in
-             log_message "Sqlite3.close_db: %b\n%!" res);
-        start_filesystem !mountpoint !fuse_args context
+      setup_application !debug !fs_label;
+      at_exit
+        (fun () ->
+           log_message "CURL cleanup...";
+           let context = Context.get_ctx () in
+           ignore (GapiCurl.global_cleanup context.Context.curl_state);
+           log_message "done\nClosing cache db...\n";
+           let res = Cache.close_db context.Context.cache in
+           log_message "Sqlite3.close_db: %b\n%!" res);
+      start_filesystem !mountpoint !fuse_args
     with e ->
       let error_message = Printexc.to_string e in begin
         Printf.eprintf "Error: %s\nExiting.\n" error_message;

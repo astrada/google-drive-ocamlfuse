@@ -50,3 +50,23 @@ let request_id_lens =
 let refresh_token_lens =
   state_lens |-- State.refresh_token
 
+let ctx : t Global.t = Global.empty "context"
+
+let get_ctx () = Global.get ctx
+
+let save_state_store state_store =
+  Utils.log_message "Saving application state in %s..."
+    state_store.StateFileStore.path;
+  StateFileStore.save state_store;
+  Utils.log_message "done\n"
+
+let save_state_from_context context =
+  Global.set ctx context;
+  save_state_store context.state_store
+
+let save_config_store config_store =
+  Utils.log_message "Saving configuration in %s..."
+    config_store.ConfigFileStore.path;
+  ConfigFileStore.save config_store;
+  Utils.log_message "done\n"
+

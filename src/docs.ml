@@ -1,14 +1,14 @@
 open Utils.Infix
 open GapiLens.Infix
+open GapiMonad
 open GapiMonad.SessionM.Infix
 open GdataDocumentsV3Model
 open GdataDocumentsV3Service
 
-let do_request
-      initial_context
-      interact =
-  let rec try_request context =
+let do_request interact =
+  let rec try_request () =
     try
+      let context = Context.get_ctx () in
       let state = context |. Context.state_lens in
       let config = context.Context.gapi_config in
       let curl_state = context.Context.curl_state in
@@ -25,26 +25,23 @@ let do_request
           interact
     with
         Failure message as e ->
-          if ExtString.String.exists
-               message "CURLE_OPERATION_TIMEOUTED" then
+          if ExtString.String.exists message "CURLE_OPERATION_TIMEOUTED" then
             (* Retry on timeout *)
-            try_request context
+            try_request ()
           else begin
             Utils.log_message "Failure %s\n%!" message;
             raise e
           end
       | GapiRequest.RefreshTokenFailed _ ->
-          let updated_context =
-            try
-              GaeProxy.refresh_access_token context
-            with e ->
-              Utils.log_message "Exception: %s\n%!" (Printexc.to_string e);
-              raise e
-          in
+          begin try
+            GaeProxy.refresh_access_token ();
             Utils.log_message "done.\n%!";
-            Context.StateFileStore.save updated_context.Context.state_store;
             (* Retry with refreshed token *)
-            try_request updated_context
+            try_request ()
+          with e ->
+            Utils.log_message "Exception: %s\n%!" (Printexc.to_string e);
+            raise e
+          end
       | GapiService.ServiceError e ->
           Utils.log_message "ServiceError\n%!";
           let message =
@@ -54,22 +51,31 @@ let do_request
           in
             failwith message
   in
-    try_request initial_context
+    try_request ()
 
-let get_dir_list context =
-    do_request
-      context
-      (fun session ->
-         let parameters = QueryParameters.default
-           |> QueryParameters.showfolders ^= true in
-         let (feed, session) =
-           query_folder_contents
-             ~parameters
-             root_folder_id
-             session
-         in
-           List.map
-             (fun entry ->
-                entry |. Document.Entry.title |. GdataAtom.Title.value)
-             feed.Document.Feed.entries)
+let get_folder_id path =
+  root_folder_id
+
+let get_dir_list path =
+  let folder_id =
+    if path = "/" then root_folder_id
+    else get_folder_id path in
+
+  let get_feed =
+    let parameters = QueryParameters.default
+      |> QueryParameters.showfolders ^= true
+    in
+      query_folder_contents ~parameters folder_id >>= fun feed ->
+          SessionM.return feed
+  in
+
+  let (feed, _) =
+    do_request get_feed in
+  let dir_list =
+    List.map
+      (fun entry ->
+         entry |. Document.Entry.title |. GdataAtom.Title.value)
+      feed.Document.Feed.entries
+  in
+    dir_list
 
