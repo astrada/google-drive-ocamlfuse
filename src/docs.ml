@@ -55,6 +55,8 @@ let do_request interact =
     try_request ()
 (* END Gapi request wrapper *)
 
+let root_directory = "/"
+
 (* Resources *)
 let cache_lookup path map =
   let cache = Context.get_ctx () |. Context.cache in
@@ -76,9 +78,37 @@ let get_resource_id parent_folder_id title =
 
 (* END Resources *)
 
-(* Folders *)
-let root_directory = "/"
+(* Stat *)
+let get_attr path =
+  let context = Context.get_ctx () in
+  if path = root_directory then
+    Unix.LargeFile.stat context.Context.mountpoint
+  else
+    (* FIXME *)
+    let default_stats =
+      Unix.LargeFile.stat context.Context.mountpoint
+    in
+    { default_stats with 
+      Unix.LargeFile.st_nlink = 1;
+      st_kind = Unix.S_REG;
+      st_perm = 0o444;
+      st_size = 0L (*FIXME*) }
 
+(*
+        self.st_mode = stat.S_IFDIR | 0744
+        self.st_ino = 0
+        self.st_dev = 0
+        self.st_nlink = 2
+        self.st_uid = os.getuid()
+        self.st_gid = os.getgid()
+        self.st_size = 4096
+        self.st_atime = time.time()
+        self.st_mtime = self.st_atime
+        self.st_ctime = self.st_atime
+*)
+(* END Stat *)
+
+(* Folders *)
 let rec get_folder_id path =
   if path = root_directory then
     SessionM.return root_folder_id

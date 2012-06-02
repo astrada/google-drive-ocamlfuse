@@ -109,7 +109,7 @@ let get_state_store app_dir =
       create_empty_state_store app_dir
 (* END Application state *)
 
-let setup_application debug fs_label =
+let setup_application debug fs_label mountpoint =
   let get_auth_tokens_from_server () =
     let context = Context.get_ctx () in
     let request_id =
@@ -162,6 +162,7 @@ let setup_application debug fs_label =
     state_store;
     cache;
     curl_state;
+    mountpoint;
   } in
   let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
@@ -192,41 +193,20 @@ let statfs path =
     f_namemax = 0L;
   } *)
 
-(* TODO: do not access filesystem *)
-let default_stats = Unix.LargeFile.stat "."
-
 let getattr path =
   log_message "getattr %s\n%!" path;
-  if path = "/" then default_stats
-  else
-    { default_stats with 
-      Unix.LargeFile.st_nlink = 1;
-      st_kind = Unix.S_REG;
-      st_perm = 0o444;
-      st_size = 0L (*FIXME*) }
-      (*
-  else raise (Unix_error (ENOENT, "stat", path))
-       *)
-
-(*
-        self.st_mode = stat.S_IFDIR | 0744
-        self.st_ino = 0
-        self.st_dev = 0
-        self.st_nlink = 2
-        self.st_uid = os.getuid()
-        self.st_gid = os.getgid()
-        self.st_size = 4096
-        self.st_atime = time.time()
-        self.st_mtime = self.st_atime
-        self.st_ctime = self.st_atime
-*)
+  try
+    Docs.get_attr path
+  with _ ->
+      raise (Unix.Unix_error (Unix.ENOENT, "stat", path))
 
 let readdir path hnd =
   log_message "readdir %s %d\n%!" path hnd;
   let dir_list =
     try
       Docs.get_dir_list path
-    with _ -> []
+    with _ ->
+      raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
   in
     Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
 
@@ -333,7 +313,7 @@ let () =
   in
 
     try
-      setup_application !debug !fs_label;
+      setup_application !debug !fs_label !mountpoint;
       at_exit
         (fun () ->
            let context = Context.get_ctx () in
