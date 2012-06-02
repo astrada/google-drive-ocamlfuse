@@ -11,6 +11,7 @@ type t = {
   gapi_config : GapiConfig.t;
   cache : Cache.t;
   curl_state : [`Initialized] GapiCurl.t;
+  mountpoint : string;
 }
 
 let app_dir = {
@@ -36,6 +37,10 @@ let cache = {
 let curl_state = {
   GapiLens.get = (fun x -> x.curl_state);
   GapiLens.set = (fun v x -> { x with curl_state = v })
+}
+let mountpoint = {
+  GapiLens.get = (fun x -> x.mountpoint);
+  GapiLens.set = (fun v x -> { x with mountpoint = v })
 }
 
 let config_lens =
