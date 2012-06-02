@@ -166,8 +166,10 @@ let setup_application debug fs_label =
   let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
       get_auth_tokens_from_server ()
-    else
+    else begin
+      Context.set_ctx context;
       log_message "Refresh token already present.\n%!"
+    end
 (* END setup *)
 
 (* FUSE bindings *)
@@ -226,7 +228,7 @@ let readdir path hnd =
       Docs.get_dir_list path
     with _ -> []
   in
-    "." :: ".." :: dir_list
+    Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
 
 let start_filesystem mounpoint fuse_args =
   log_message "Starting filesystem %s\n%!" mounpoint;
@@ -334,12 +336,13 @@ let () =
       setup_application !debug !fs_label;
       at_exit
         (fun () ->
-           log_message "CURL cleanup...";
            let context = Context.get_ctx () in
+           log_message "CURL cleanup...";
            ignore (GapiCurl.global_cleanup context.Context.curl_state);
            log_message "done\nClosing cache db...\n";
            let res = Cache.close_db context.Context.cache in
-           log_message "Sqlite3.close_db: %b\n%!" res);
+           log_message "Sqlite3.close_db: %b\n%!" res;
+           Context.undef_ctx ());
       start_filesystem !mountpoint !fuse_args
     with e ->
       let error_message = Printexc.to_string e in begin
