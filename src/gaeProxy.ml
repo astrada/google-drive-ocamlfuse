@@ -1,4 +1,4 @@
-open Utils.Infix
+open GapiUtils.Infix
 open GapiLens.Infix
 
 exception ServerError of string
@@ -53,19 +53,21 @@ let get_tokens () =
   let query_string =
     Netencoding.Url.mk_url_encoded_parameters [("requestid", request_id)] in
   let table = gae_proxy_request "gettokens" query_string in
+  let current_state = context |. Context.state_lens in
   let open Json_type.Browse in
     context
-      |> Context.state_lens ^=
-        { State.auth_request_id =
-            field table "request_id" |> string;
-          auth_request_date =
-            field table "refresh_date" |> string |> GapiDate.of_string;
-          refresh_token = field table "refresh_token" |> string;
-          last_access_token = field table "access_token" |> string;
-          access_token_date =
-            field table "refresh_date" |> string |> GapiDate.of_string;
-        }
-      |> Context.save_state_from_context
+    |> Context.state_lens ^=
+      { current_state with
+            State.auth_request_id =
+              field table "request_id" |> string;
+            auth_request_date =
+              field table "refresh_date" |> string |> GapiDate.of_string;
+            refresh_token = field table "refresh_token" |> string;
+            last_access_token = field table "access_token" |> string;
+            access_token_date =
+              field table "refresh_date" |> string |> GapiDate.of_string;
+      }
+    |> Context.save_state_from_context
 
 let start_server_polling () =
   let rec loop n =
@@ -88,11 +90,11 @@ let refresh_access_token () =
   let current_state = context |. Context.state_lens in
   let open Json_type.Browse in
     context
-      |> Context.state_lens ^=
-        { current_state with
-              State.last_access_token = field table "access_token" |> string;
-              access_token_date =
-                field table "refresh_date" |> string |> GapiDate.of_string;
-        }
-      |> Context.save_state_from_context
+    |> Context.state_lens ^=
+      { current_state with
+            State.last_access_token = field table "access_token" |> string;
+            access_token_date =
+              field table "refresh_date" |> string |> GapiDate.of_string;
+      }
+    |> Context.save_state_from_context
 
