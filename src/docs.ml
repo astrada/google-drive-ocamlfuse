@@ -31,20 +31,12 @@ let do_request interact =
           if ExtString.String.exists message "CURLE_OPERATION_TIMEOUTED" then
             (* Retry on timeout *)
             try_request ()
-          else begin
-            Utils.log_message "Failure %s\n%!" message;
-            raise e
-          end
+          else raise e
       | GapiRequest.RefreshTokenFailed _ ->
-          begin try
-            GaeProxy.refresh_access_token ();
-            Utils.log_message "done.\n%!";
-            (* Retry with refreshed token *)
-            try_request ()
-          with e ->
-            Utils.log_message "Exception: %s\n%!" (Printexc.to_string e);
-            raise e
-          end
+          GaeProxy.refresh_access_token ();
+          Utils.log_message "done.\n%!";
+          (* Retry with refreshed token *)
+          try_request ()
       | GapiService.ServiceError e ->
           Utils.log_message "ServiceError\n%!";
           let message =
@@ -82,18 +74,18 @@ let get_metadata () =
   let refresh_metadata () =
     Utils.log_message "Refreshing metadata...%!";
     let metadata = do_request go |> fst in
-      Utils.log_message "done\nUpdating db...%!";
-      Cache.Metadata.insert_metadata context.Context.cache metadata;
-      Utils.log_message "done\nUpdating context...%!";
-      context |> Context.metadata ^= Some metadata |> Context.set_ctx;
-      Utils.log_message "done\n%!";
-      metadata
+    Utils.log_message "done\nUpdating db...%!";
+    Cache.Metadata.insert_metadata (Context.get_cache ()) metadata;
+    Utils.log_message "done\nUpdating context...%!";
+    context |> Context.metadata ^= Some metadata |> Context.set_ctx;
+    Utils.log_message "done\n%!";
+    metadata
   in
 
   let metadata =
     if Option.is_none context.Context.metadata then begin
       Utils.log_message "Loading metadata from db...%!";
-      let db_metadata = Cache.Metadata.select_metadata context.Context.cache in
+      let db_metadata = Cache.Metadata.select_metadata (Context.get_cache ()) in
         context |> Context.metadata ^= db_metadata |> Context.set_ctx;
         db_metadata
     end else begin
@@ -180,7 +172,6 @@ let create_root_resource () =
           kind = Some "folder";
           size = Some 0L;
           parent_path = "";
-          state = Cache.Resource.State.InSync;
     }
 
 let update_resource_from_entry resource entry =
@@ -210,7 +201,7 @@ let update_resource_from_entry resource entry =
 
 let lookup_resource path =
   Utils.log_message "Loading resource %s from db...%!" path;
-  let cache = Context.get_ctx () |. Context.cache in
+  let cache = Context.get_cache () in
   let resource =
     Cache.Resource.select_resource_with_path cache path
   in
@@ -221,7 +212,7 @@ let lookup_resource path =
     resource
 
 let get_root_resource () =
-  let cache = Context.get_ctx () |. Context.cache in
+  let cache = Context.get_cache () in
     match lookup_resource root_directory with
         None ->
           let root_resource = create_root_resource () in
@@ -232,7 +223,7 @@ let get_root_resource () =
       | Some resource -> resource
 
 let update_root_resource root_resource =
-  let cache = Context.get_ctx () |. Context.cache in
+  let cache = Context.get_cache () in
     Utils.log_message "Updating root resource in db...%!";
     Cache.Resource.update_resource cache root_resource;
     Utils.log_message "done\n%!"
@@ -305,7 +296,7 @@ and get_resource path =
     let root_resource = get_root_resource () in
     SessionM.return root_resource
   else
-    let cache = Context.get_ctx () |. Context.cache in
+    let cache = Context.get_cache () in
     begin match lookup_resource path with
         None ->
           let new_resource = create_resource path in
@@ -334,7 +325,11 @@ let check_resource_in_cache cache path =
     match lookup_resource path with
         None -> false
       | Some resource ->
-          Cache.Resource.is_valid resource changestamp
+          if Cache.Resource.is_valid resource changestamp then
+            if Cache.Resource.is_folder resource then
+              resource.Cache.Resource.state = Cache.Resource.State.InSync
+            else true
+          else false
 (* END Resources *)
 
 (* Stat *)
@@ -393,17 +388,16 @@ let read_dir path =
       let metadata = Context.get_ctx ()
         |. Context.metadata |. GapiLens.option_get in
       let changestamp = metadata |. Cache.Metadata.largest_changestamp in
-      let updated_resource = {
-        resource with
-            Cache.Resource.changestamp;
-      }
+      let updated_resource = resource
+        |> Cache.Resource.changestamp ^= changestamp
+        |> Cache.Resource.state ^= Cache.Resource.State.InSync
       in
         update_root_resource updated_resource
     end;
     SessionM.return feed
   in
 
-  let cache = Context.get_ctx () |. Context.cache in
+  let cache = Context.get_cache () in
   let resources =
     if check_resource_in_cache cache path then begin
       Utils.log_message "Getting resources from db (parent path=%s)...%!"

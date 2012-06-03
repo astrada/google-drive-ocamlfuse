@@ -1,3 +1,4 @@
+open GapiUtils.Infix
 open GapiLens.Infix
 
 module ConfigFileStore = KeyValueStore.MakeFileStore(Config)
@@ -14,7 +15,7 @@ type t = {
   (* Gapi configuration *)
   gapi_config : GapiConfig.t;
   (* Sqlite3 cache *)
-  cache : Cache.t;
+  cache_table : (int, Cache.t) Hashtbl.t;
   (* CURL global state *)
   curl_state : [`Initialized] GapiCurl.t;
   (* Mountpoint current stats *)
@@ -39,9 +40,9 @@ let gapi_config = {
   GapiLens.get = (fun x -> x.gapi_config);
   GapiLens.set = (fun v x -> { x with gapi_config = v })
 }
-let cache = {
-  GapiLens.get = (fun x -> x.cache);
-  GapiLens.set = (fun v x -> { x with cache = v })
+let cache_table = {
+  GapiLens.get = (fun x -> x.cache_table);
+  GapiLens.set = (fun v x -> { x with cache_table = v })
 }
 let curl_state = {
   GapiLens.get = (fun x -> x.curl_state);
@@ -68,13 +69,14 @@ let request_id_lens =
 let refresh_token_lens =
   state_lens |-- State.refresh_token
 
-let ctx : t Global.t = Global.empty "context"
+module ConcurrentContext =
+  ConcurrentGlobal.Make(struct type u = t let label = "context" end)
 
-let get_ctx () = Global.get ctx
+let get_ctx = ConcurrentContext.get
 
-let set_ctx context = Global.set ctx context
+let set_ctx = ConcurrentContext.set
 
-let undef_ctx () = Global.undef ctx
+let clear_ctx = ConcurrentContext.clear
 
 let save_state_store state_store =
   Utils.log_message "Saving application state in %s..."
@@ -83,12 +85,45 @@ let save_state_store state_store =
   Utils.log_message "done\n"
 
 let save_state_from_context context =
-  set_ctx context;
-  save_state_store context.state_store
+  ConcurrentContext.with_lock
+    (fun () ->
+       save_state_store context.state_store;
+       ConcurrentContext.set_no_lock context)
 
 let save_config_store config_store =
-  Utils.log_message "Saving configuration in %s..."
-    config_store.ConfigFileStore.path;
-  ConfigFileStore.save config_store;
-  Utils.log_message "done\n"
+  ConcurrentContext.with_lock
+    (fun () ->
+       Utils.log_message "Saving configuration in %s..."
+         config_store.ConfigFileStore.path;
+       ConfigFileStore.save config_store;
+       Utils.log_message "done\n")
+
+let set_cache cache =
+  ConcurrentContext.with_lock
+    (fun () ->
+       let context = ConcurrentContext.get_no_lock () in
+       let key = Thread.self () |> Thread.id in
+         Hashtbl.add context.cache_table key cache)
+
+let get_cache () =
+  ConcurrentContext.with_lock
+    (fun () ->
+       let context = ConcurrentContext.get_no_lock () in
+       let key = Thread.self () |> Thread.id in
+         match Utils.safe_find context.cache_table key with
+             None ->
+               let cache = Cache.open_db context.app_dir in
+                 Hashtbl.add context.cache_table key cache;
+                 cache
+           | Some cache -> cache)
+
+let close_cache () =
+  ConcurrentContext.with_lock
+    (fun () ->
+       let context = ConcurrentContext.get_no_lock () in
+         Hashtbl.iter
+           (fun key cache ->
+              let res = Cache.close_db cache in
+              Utils.log_message "Thread id: %d Sqlite3.close_db: %b\n" key res)
+           context.cache_table)
 

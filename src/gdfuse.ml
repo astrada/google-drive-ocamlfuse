@@ -143,7 +143,8 @@ let setup_application debug fs_label mountpoint =
   let app_dir = AppDir.create fs_label in
   let () = AppDir.create_directories app_dir in
   log_message "Setting up cache db...";
-  let cache = Cache.setup_db app_dir in
+  let cache = Cache.open_db app_dir in
+  Cache.setup_db cache;
   log_message "done\n";
   let config_store = get_config_store debug app_dir in
   let config_store = config_store
@@ -162,18 +163,18 @@ let setup_application debug fs_label mountpoint =
     config_store;
     gapi_config;
     state_store;
-    cache;
+    cache_table = Hashtbl.create 16;
     curl_state;
     mountpoint_stats = Unix.LargeFile.stat mountpoint;
     metadata = None;
   } in
+  Context.set_ctx context;
+  Context.set_cache cache;
   let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
       get_auth_tokens_from_server ()
-    else begin
-      Context.set_ctx context;
+    else
       log_message "Refresh token already present.\n%!"
-    end
 (* END setup *)
 
 (* FUSE bindings *)
@@ -284,7 +285,7 @@ let () =
                    debug := true;
                    Utils.verbose := true;
                    fuse_args := "-f" :: !fuse_args),
-       " Enable debug mode (implies -verbose, and -f). Default is false.";
+       " Enable debug mode (implies -verbose, -f). Default is false.";
        "-label",
        Arg.Set_string fs_label,
        " Use a specific label to identify the filesystem. \
@@ -324,9 +325,9 @@ let () =
            log_message "CURL cleanup...";
            ignore (GapiCurl.global_cleanup context.Context.curl_state);
            log_message "done\nClosing cache db...\n";
-           let res = Cache.close_db context.Context.cache in
-           log_message "Sqlite3.close_db: %b\nResetting context..." res;
-           Context.undef_ctx ();
+           Context.close_cache ();
+           log_message "done\nClearing context...";
+           Context.clear_ctx ();
            log_message "done\n%!");
       start_filesystem !mountpoint !fuse_args
     with
