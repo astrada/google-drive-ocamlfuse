@@ -156,6 +156,33 @@ let entry_to_xml_string entry =
     |> Document.entry_to_data_model
     |> GdataUtils.data_to_xml_string
 
+let create_resource path =
+  let metadata = get_metadata () in
+  let changestamp = metadata |. Cache.Metadata.largest_changestamp in
+    { Cache.Resource.id = 0L;
+      resource_id = None;
+      kind = None;
+      md5_checksum = None;
+      size = None;
+      last_viewed = None;
+      last_modified = None;
+      parent_path = Filename.dirname path;
+      path;
+      state = Cache.Resource.State.ToDownload;
+      changestamp;
+      last_update = Unix.gettimeofday ();
+    }
+
+let create_root_resource () =
+  let resource = create_resource root_directory in
+    { resource with
+          Cache.Resource.resource_id = Some root_folder_id;
+          kind = Some "folder";
+          size = Some 0L;
+          parent_path = "";
+          state = Cache.Resource.State.InSync;
+    }
+
 let update_resource_from_entry resource entry =
   let kind =
     try
@@ -193,6 +220,23 @@ let lookup_resource path =
       Utils.log_message "found\n%!";
     resource
 
+let get_root_resource () =
+  let cache = Context.get_ctx () |. Context.cache in
+    match lookup_resource root_directory with
+        None ->
+          let root_resource = create_root_resource () in
+            Utils.log_message "Saving root resource to db...%!";
+            let inserted = Cache.Resource.insert_resource cache root_resource in
+            Utils.log_message "done\n%!";
+            inserted
+      | Some resource -> resource
+
+let update_root_resource root_resource =
+  let cache = Context.get_ctx () |. Context.cache in
+    Utils.log_message "Updating root resource in db...%!";
+    Cache.Resource.update_resource cache root_resource;
+    Utils.log_message "done\n%!"
+
 let get_resource_from_server parent_folder_id title new_resource cache =
   Utils.log_message "Getting resource %s (in folder %s) from server...%!"
     title parent_folder_id;
@@ -204,16 +248,27 @@ let get_resource_from_server parent_folder_id title new_resource cache =
     query_folder_contents ~parameters parent_folder_id >>= fun feed ->
     Utils.log_message "done\n%!";
     let entries = feed |. Document.Feed.entries in
-    if List.length entries = 0 then raise File_not_found;
-    let entry = entries |. GapiLens.head in
-    let resource = update_resource_from_entry new_resource entry in
-    Utils.log_message "Saving resource to db...%!";
-    let inserted = Cache.Resource.insert_resource cache resource in
-    Utils.log_message "done\nSaving resource entry...%!";
-    let xml_string = entry_to_xml_string entry in
-    Cache.save_xml_entry cache inserted.Cache.Resource.id xml_string;
-    Utils.log_message "done\n%!";
-    SessionM.return inserted
+    let result =
+    if List.length entries = 0 then begin
+      Utils.log_message "Saving not found resource to db...%!";
+      let resource = new_resource
+        |> Cache.Resource.state ^= Cache.Resource.State.NotFound in
+      let inserted =
+        Cache.Resource.insert_resource cache resource in
+      Utils.log_message "done\n%!";
+      inserted
+    end else begin
+      let entry = entries |. GapiLens.head in
+      let resource = update_resource_from_entry new_resource entry in
+      Utils.log_message "Saving resource to db...%!";
+      let inserted = Cache.Resource.insert_resource cache resource in
+      Utils.log_message "done\nSaving resource entry...%!";
+      let xml_string = entry_to_xml_string entry in
+      Cache.save_xml_entry cache inserted.Cache.Resource.id xml_string;
+      Utils.log_message "done\n%!";
+      inserted
+    end in
+    SessionM.return result
 
 let rec get_folder_id path =
   if path = root_directory then
@@ -225,21 +280,6 @@ let rec get_folder_id path =
 and get_resource path =
   let metadata = get_metadata () in
   let changestamp = metadata |. Cache.Metadata.largest_changestamp in
-  let create_resource () = {
-    Cache.Resource.id = 0L;
-    resource_id = None;
-    kind = None;
-    md5_checksum = None;
-    size = None;
-    last_viewed = None;
-    last_modified = None;
-    parent_path = Filename.dirname path;
-    path;
-    state = Cache.Resource.State.ToDownload;
-    changestamp;
-    last_update = Unix.gettimeofday ();
-  }
-  in
 
   let refresh_resource resource cache =
     Utils.log_message "Loading xml entry id=%Ld...%!"
@@ -261,10 +301,14 @@ and get_resource path =
     SessionM.return (updated_resource)
   in
 
-  let cache = Context.get_ctx () |. Context.cache in
-    match lookup_resource path with
+  if path = root_directory then
+    let root_resource = get_root_resource () in
+    SessionM.return root_resource
+  else
+    let cache = Context.get_ctx () |. Context.cache in
+    begin match lookup_resource path with
         None ->
-          let new_resource = create_resource () in
+          let new_resource = create_resource path in
           let title = Filename.basename path in
           get_folder_id
             new_resource.Cache.Resource.parent_path >>= fun parent_folder_id ->
@@ -276,6 +320,21 @@ and get_resource path =
             SessionM.return resource
           else
             refresh_resource resource cache
+    end >>= fun resource ->
+    begin match resource.Cache.Resource.state with
+        Cache.Resource.State.NotFound ->
+          raise File_not_found 
+      | _ ->
+          SessionM.return resource
+    end
+
+let check_resource_in_cache cache path =
+  let metadata = get_metadata () in
+  let changestamp = metadata |. Cache.Metadata.largest_changestamp in
+    match lookup_resource path with
+        None -> false
+      | Some resource ->
+          Cache.Resource.is_valid resource changestamp
 (* END Resources *)
 
 (* Stat *)
@@ -309,6 +368,7 @@ let get_attr path =
       if Cache.Resource.is_folder resource then f_bsize
       else resource |. Cache.Resource.size |. GapiLens.option_get
     in
+      (* TODO: atime, ctime, mtime *)
       { context.Context.mountpoint_stats with 
             Unix.LargeFile.st_nlink;
             st_kind;
@@ -316,39 +376,77 @@ let get_attr path =
             st_size;
       }
   end
-
-(*
-        self.st_mode = stat.S_IFDIR | 0744
-        self.st_ino = 0
-        self.st_dev = 0
-        self.st_nlink = 2
-        self.st_uid = os.getuid()
-        self.st_gid = os.getgid()
-        self.st_size = 4096
-        self.st_atime = time.time()
-        self.st_mtime = self.st_atime
-        self.st_ctime = self.st_atime
-*)
 (* END Stat *)
 
 (* Folders *)
-let get_dir_list path =
-  let get_feed =
+let read_dir path =
+  let go =
+    Utils.log_message "Getting folder content (path=%s)\n%!" path;
+    get_resource path >>= fun resource ->
     let parameters = QueryParameters.default
-      |> QueryParameters.showfolders ^= true
-    in
-      get_folder_id path >>= fun folder_id ->
-      query_folder_contents ~parameters folder_id >>= fun feed ->
-      SessionM.return feed
+      |> QueryParameters.showfolders ^= true in
+    get_folder_id path >>= fun folder_id ->
+    query_folder_contents ~parameters folder_id >>= fun feed ->
+    Utils.log_message "Done getting folder content (path=%s)\n%!" path;
+    if path = root_directory then begin
+      (* TODO: refactor *)
+      let metadata = Context.get_ctx ()
+        |. Context.metadata |. GapiLens.option_get in
+      let changestamp = metadata |. Cache.Metadata.largest_changestamp in
+      let updated_resource = {
+        resource with
+            Cache.Resource.changestamp;
+      }
+      in
+        update_root_resource updated_resource
+    end;
+    SessionM.return feed
   in
 
-  let feed = do_request get_feed |> fst in
-  let dir_list =
-    List.map
-      (fun entry ->
-         entry |. Document.Entry.title |. GdataAtom.Title.value)
-      feed.Document.Feed.entries
+  let cache = Context.get_ctx () |. Context.cache in
+  let resources =
+    if check_resource_in_cache cache path then begin
+      Utils.log_message "Getting resources from db (parent path=%s)...%!"
+        path;
+      let resources =
+        Cache.Resource.select_resources_with_parent_path cache path in
+      Utils.log_message "done\n%!";
+      resources
+    end else begin
+      let feed = do_request go |> fst in
+      let resources =
+        List.map
+          (fun entry ->
+             let filename =
+               entry |. Document.Entry.title |. GdataAtom.Title.value in
+             let resource_path =
+               Filename.concat path filename in
+             let resource = create_resource resource_path in
+               update_resource_from_entry resource entry)
+          feed.Document.Feed.entries
+      in
+        Utils.log_message "Inserting folder resources into db...%!";
+        let inserted_resources =
+          Cache.Resource.insert_resources cache resources path in
+        Utils.log_message "done\nSaving resource entries...%!";
+        List.iter
+          (fun resource ->
+             let entry =
+               List.find
+                 (fun e ->
+                    e |. Document.Entry.resourceId =
+                      Option.get resource.Cache.Resource.resource_id)
+                 feed.Document.Feed.entries in
+             let xml_string = entry_to_xml_string entry in
+               Cache.save_xml_entry cache resource.Cache.Resource.id xml_string)
+          inserted_resources;
+        Utils.log_message "done\n%!";
+        inserted_resources
+    end
   in
-    dir_list
+    List.map
+      (fun resource ->
+         Filename.basename resource.Cache.Resource.path)
+      resources
 (* END Folders *)
 

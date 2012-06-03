@@ -62,15 +62,29 @@ let data_to_float = function
   | Sqlite3.Data.FLOAT v -> Some v
   | _ -> failwith "data_to_float: data does not contain a FLOAT value"
 
-let select_first_row stmt bind_parameters row_to_data =
-  Sqlite3.reset stmt |> fail_if_not_ok;
-  bind_parameters stmt;
+let get_next_row stmt row_to_data =
   let rc = Sqlite3.step stmt in
     match rc with
         Sqlite3.Rc.ROW ->
           Some (Sqlite3.row_data stmt |> row_to_data)
       | Sqlite3.Rc.DONE -> None
       | _ -> fail rc
+
+let select_first_row stmt bind_parameters row_to_data =
+  Sqlite3.reset stmt |> fail_if_not_ok;
+  bind_parameters stmt;
+  get_next_row stmt row_to_data
+
+let select_all_rows stmt bind_parameters row_to_data =
+  Sqlite3.reset stmt |> fail_if_not_ok;
+  bind_parameters stmt;
+  let rec loop rows =
+    let row = get_next_row stmt row_to_data in
+      match row with
+          None -> rows
+        | Some r -> loop (r :: rows)
+  in
+    loop []
 (* END Query helpers *)
 
 (* Prepare SQL *)
@@ -87,7 +101,9 @@ struct
     insert_stmt : Sqlite3.stmt;
     update_stmt : Sqlite3.stmt;
     delete_stmt : Sqlite3.stmt;
+    delete_with_parent_path_stmt : Sqlite3.stmt;
     select_with_path_stmt : Sqlite3.stmt;
+    select_with_parent_path_stmt : Sqlite3.stmt;
   }
 
   let prepare_insert_stmt db =
@@ -147,6 +163,14 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_delete_with_parent_path_stmt db =
+    let sql =
+      "DELETE \
+       FROM resource \
+       WHERE parent_path = :parent_path;"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_select_with_path_stmt db =
     let sql =
       "SELECT \
@@ -167,18 +191,43 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_select_with_parent_path_stmt db =
+    let sql =
+      "SELECT \
+         id, \
+         resource_id, \
+         kind, \
+         md5_checksum, \
+         size, \
+         last_viewed, \
+         last_modified, \
+         parent_path, \
+         path, \
+         state, \
+         changestamp, \
+         last_update \
+       FROM resource \
+       WHERE parent_path = :parent_path \
+         AND state <> 'NotFound';"
+    in
+      Sqlite3.prepare db sql
+
   let create db = {
     insert_stmt = prepare_insert_stmt db;
     update_stmt = prepare_update_stmt db;
     delete_stmt = prepare_delete_stmt db;
+    delete_with_parent_path_stmt = prepare_delete_with_parent_path_stmt db;
     select_with_path_stmt = prepare_select_with_path_stmt db;
+    select_with_parent_path_stmt = prepare_select_with_parent_path_stmt db;
   }
 
   let finalize stmts =
     Sqlite3.finalize stmts.insert_stmt |> ignore;
     Sqlite3.finalize stmts.update_stmt |> ignore;
     Sqlite3.finalize stmts.delete_stmt |> ignore;
-    Sqlite3.finalize stmts.select_with_path_stmt |> ignore
+    Sqlite3.finalize stmts.delete_with_parent_path_stmt |> ignore;
+    Sqlite3.finalize stmts.select_with_path_stmt |> ignore;
+    Sqlite3.finalize stmts.select_with_parent_path_stmt |> ignore
 
 end
 
@@ -253,21 +302,21 @@ struct
       | ToDownload
       | ToDelete
       | Conflict
-      | Error
+      | NotFound
 
     let to_string = function
         InSync -> "InSync"
       | ToDownload -> "ToDownload"
       | ToDelete -> "ToDelete"
       | Conflict -> "Conflict"
-      | Error -> "Error"
+      | NotFound -> "NotFound"
 
     let of_string = function
         "InSync" -> InSync
       | "ToDownload" -> ToDownload
       | "ToDelete" -> ToDelete
       | "Conflict" -> Conflict
-      | "Error" -> Error
+      | "NotFound" -> NotFound
       | s -> failwith ("Resource state unexpected: " ^ s)
 
   end
@@ -376,9 +425,18 @@ struct
       bind_int stmt ":id" (Some resource.id);
       Sqlite3.step stmt |> expect Sqlite3.Rc.DONE
 
-  let insert_resources resources cache =
+  let delete_resources cache parent_path =
+    let stmt =
+      cache.resource_stmts.ResourceStmts.delete_with_parent_path_stmt
+    in
+      Sqlite3.reset stmt |> fail_if_not_ok;
+      bind_text stmt ":parent_path" (Some parent_path);
+      Sqlite3.step stmt |> expect Sqlite3.Rc.DONE
+
+  let insert_resources cache resources parent_path =
     Sqlite3.reset cache.begin_tran_stmt |> fail_if_not_ok;
     Sqlite3.step cache.begin_tran_stmt |> expect Sqlite3.Rc.DONE;
+    delete_resources cache parent_path;
     let results =
       List.map
         (insert_resource cache)
@@ -406,6 +464,13 @@ struct
     let stmt = cache.resource_stmts.ResourceStmts.select_with_path_stmt in
       select_first_row stmt
         (fun stmt -> bind_text stmt ":path" (Some path))
+        row_to_resource
+
+  let select_resources_with_parent_path cache parent_path =
+    let stmt =
+      cache.resource_stmts.ResourceStmts.select_with_parent_path_stmt in
+      select_all_rows stmt
+        (fun stmt -> bind_text stmt ":parent_path" (Some parent_path))
         row_to_resource
   (* END Queries *)
 
@@ -521,8 +586,8 @@ let setup_db app_dir =
         changestamp INTEGER NULL, \
         last_update REAL NOT NULL \
      ); \
-     CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path); \
      CREATE INDEX IF NOT EXISTS path_index ON resource (path); \
+     CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path); \
      CREATE INDEX IF NOT EXISTS resource_id_index ON resource (resource_id); \
      CREATE TABLE IF NOT EXISTS metadata ( \
         id INTEGER PRIMARY KEY, \

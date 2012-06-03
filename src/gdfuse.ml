@@ -203,7 +203,7 @@ let readdir path hnd =
   log_message "readdir %s %d\n%!" path hnd;
   let dir_list =
     try
-      Docs.get_dir_list path
+      Docs.read_dir path
     with e ->
       Utils.log_exception e;
       raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
