@@ -5,13 +5,22 @@ module ConfigFileStore = KeyValueStore.MakeFileStore(Config)
 module StateFileStore = KeyValueStore.MakeFileStore(State)
 
 type t = {
+  (* Application paths *)
   app_dir : AppDir.t;
+  (* Configuration filesystem storage *)
   config_store : ConfigFileStore.t;
+  (* State filesystem storage *)
   state_store : StateFileStore.t;
+  (* Gapi configuration *)
   gapi_config : GapiConfig.t;
+  (* Sqlite3 cache *)
   cache : Cache.t;
+  (* CURL global state *)
   curl_state : [`Initialized] GapiCurl.t;
-  mountpoint : string;
+  (* Mountpoint current stats *)
+  mountpoint_stats : Unix.LargeFile.stats;
+  (* Current metadata *)
+  metadata : Cache.Metadata.t option;
 }
 
 let app_dir = {
@@ -38,9 +47,13 @@ let curl_state = {
   GapiLens.get = (fun x -> x.curl_state);
   GapiLens.set = (fun v x -> { x with curl_state = v })
 }
-let mountpoint = {
-  GapiLens.get = (fun x -> x.mountpoint);
-  GapiLens.set = (fun v x -> { x with mountpoint = v })
+let mountpoint_stats = {
+  GapiLens.get = (fun x -> x.mountpoint_stats);
+  GapiLens.set = (fun v x -> { x with mountpoint_stats = v })
+}
+let metadata = {
+  GapiLens.get = (fun x -> x.metadata);
+  GapiLens.set = (fun v x -> { x with metadata = v })
 }
 
 let config_lens =
