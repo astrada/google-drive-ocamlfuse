@@ -1,4 +1,4 @@
-open Utils.Infix
+open GapiUtils.Infix
 open GapiLens.Infix
 open GapiLens.StateInfix
 
@@ -27,7 +27,7 @@ let start_browser request_id =
     let ch = Unix.open_process_in command in
     let status = Unix.close_process_in ch in
       if status = (Unix.WEXITED 0) then begin
-        log_message "ok\n%!";
+        log_message "done\n%!";
         true
       end else begin
         log_message "fail\n%!";
@@ -110,6 +110,8 @@ let get_state_store app_dir =
 (* END Application state *)
 
 let setup_application debug fs_label mountpoint =
+  if not (Sys.file_exists mountpoint && Sys.is_directory mountpoint) then
+    failwith ("Mountpoint " ^ mountpoint ^ " should be an existing directory.");
   let get_auth_tokens_from_server () =
     let context = Context.get_ctx () in
     let request_id =
@@ -162,7 +164,8 @@ let setup_application debug fs_label mountpoint =
     state_store;
     cache;
     curl_state;
-    mountpoint;
+    mountpoint_stats = Unix.LargeFile.stat mountpoint;
+    metadata = None;
   } in
   let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
@@ -177,49 +180,46 @@ let setup_application debug fs_label mountpoint =
 let init_filesystem () =
   log_message "init_filesystem\n%!"
 
-    (* TODO:
 let statfs path =
   log_message "statfs %s\n%!" path;
-  { Unix_util.f_bsize = 0L;
-    f_frsize = 0L;
-    f_blocks = 0L;
-    f_bfree = 0L;
-    f_bavail = 0L;
-    f_files = 0L;
-    f_ffree = 0L;
-    f_favail = 0L;
-    f_fsid = 0L;
-    f_flag = 0L;
-    f_namemax = 0L;
-  } *)
+  try
+    Docs.statfs ()
+  with e ->
+    Utils.log_exception e;
+    raise (Unix.Unix_error (Unix.EBUSY, "statfs", path))
 
 let getattr path =
   log_message "getattr %s\n%!" path;
   try
     Docs.get_attr path
-  with _ ->
-      raise (Unix.Unix_error (Unix.ENOENT, "stat", path))
+  with Docs.File_not_found ->
+        log_message "File not found %s\n%!" path;
+        raise (Unix.Unix_error (Unix.ENOENT, "stat", path))
+    | e ->
+        Utils.log_exception e;
+        raise (Unix.Unix_error (Unix.EBUSY, "stat", path))
 
 let readdir path hnd =
   log_message "readdir %s %d\n%!" path hnd;
   let dir_list =
     try
       Docs.get_dir_list path
-    with _ ->
+    with e ->
+      Utils.log_exception e;
       raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
   in
     Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
 
-let start_filesystem mounpoint fuse_args =
-  log_message "Starting filesystem %s\n%!" mounpoint;
+let start_filesystem mountpoint fuse_args =
+  log_message "Starting filesystem %s\n%!" mountpoint;
   let fuse_argv =
-    Sys.argv.(0) :: (fuse_args @ [mounpoint])
+    Sys.argv.(0) :: (fuse_args @ [mountpoint])
     |> Array.of_list
   in
     Fuse.main fuse_argv {
       Fuse.default_operations with
           Fuse.init = init_filesystem;
-          (* statfs; *)
+          statfs;
           getattr;
           readdir;
           (*
@@ -309,25 +309,30 @@ let () =
       prerr_endline "You must specify a mountpoint.";
       prerr_endline usage;
       exit 1
-    end
+    end in
+  let quit error_message =
+    Printf.eprintf "Error: %s\n" error_message;
+    exit 1
   in
 
     try
       setup_application !debug !fs_label !mountpoint;
       at_exit
         (fun () ->
+           log_message "Exiting.\n";
            let context = Context.get_ctx () in
            log_message "CURL cleanup...";
            ignore (GapiCurl.global_cleanup context.Context.curl_state);
            log_message "done\nClosing cache db...\n";
            let res = Cache.close_db context.Context.cache in
-           log_message "Sqlite3.close_db: %b\n%!" res;
-           Context.undef_ctx ());
+           log_message "Sqlite3.close_db: %b\nResetting context..." res;
+           Context.undef_ctx ();
+           log_message "done\n%!");
       start_filesystem !mountpoint !fuse_args
-    with e ->
-      let error_message = Printexc.to_string e in begin
-        Printf.eprintf "Error: %s\nExiting.\n" error_message;
-        exit 1
-      end
+    with
+        Failure error_message -> quit error_message
+      | e ->
+          let error_message = Printexc.to_string e in
+            quit error_message
 (* END Main program *)
 
