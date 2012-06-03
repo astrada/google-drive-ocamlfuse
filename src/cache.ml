@@ -144,6 +144,7 @@ struct
           resource_id = :resource_id, \
           kind = :kind, \
           md5_checksum = :md5_checksum, \
+          size = :size, \
           last_viewed = :last_viewed, \
           last_modified = :last_modified, \
           parent_path = :parent_path, \
@@ -442,7 +443,7 @@ struct
         (insert_resource cache)
         resources in
     Sqlite3.reset cache.commit_tran_stmt |> fail_if_not_ok;
-    Sqlite3.step cache.begin_tran_stmt |> expect Sqlite3.Rc.DONE;
+    Sqlite3.step cache.commit_tran_stmt |> expect Sqlite3.Rc.DONE;
     results
 
   let row_to_resource row_data =
@@ -567,11 +568,20 @@ let save_xml_entry cache id xml_string =
 (* END Resource XML entry *)
 
 (* Setup *)
-let setup_db app_dir =
+let open_db app_dir =
   let cache_dir = app_dir.AppDir.cache_dir in
   let filename = Filename.concat cache_dir "cache.db" in
   let db = Sqlite3.db_open filename in
-  let _ = wrap_exec_not_null_no_headers db
+    { cache_dir;
+      db;
+      begin_tran_stmt = prepare_begin_tran_stmt db;
+      commit_tran_stmt = prepare_commit_tran_stmt db;
+      resource_stmts = ResourceStmts.create db;
+      metadata_stmts = MetadataStmts.create db;
+    }
+
+let setup_db cache =
+  wrap_exec_not_null_no_headers cache.db
     "CREATE TABLE IF NOT EXISTS resource ( \
         id INTEGER PRIMARY KEY, \
         resource_id TEXT NULL, \
@@ -596,14 +606,7 @@ let setup_db app_dir =
         quota_bytes_total INTEGER NOT NULL, \
         quota_bytes_used INTEGER NOT NULL, \
         last_update REAL NOT NULL \
-     );" in
-    { cache_dir;
-      db;
-      begin_tran_stmt = prepare_begin_tran_stmt db;
-      commit_tran_stmt = prepare_commit_tran_stmt db;
-      resource_stmts = ResourceStmts.create db;
-      metadata_stmts = MetadataStmts.create db;
-    }
+     );" |> ignore
 (* END Setup *)
 
 (* Teardown *)
