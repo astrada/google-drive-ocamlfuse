@@ -1,34 +1,51 @@
-open Utils.Infix
+open GapiUtils.Infix
 open GapiLens.Infix
 
 let application_name = "google-drive-ocamlfuse"
 
 type t = {
+  (* Debug mode *)
   debug : bool;
+  (* Number of seconds metadata should be cached. *)
+  metadata_cache_time : int;
 }
 
 let debug = {
   GapiLens.get = (fun x -> x.debug);
-  GapiLens.set = (fun v x -> { debug = v })
+  GapiLens.set = (fun v x -> { x with debug = v })
+}
+let metadata_cache_time = {
+  GapiLens.get = (fun x -> x.metadata_cache_time);
+  GapiLens.set = (fun v x -> { x with metadata_cache_time = v })
+}
+
+let empty = {
+  debug = false;
+  metadata_cache_time = 0;
 }
 
 let of_table table =
-  let get = Hashtbl.find table in
-    { debug = get "debug" |> bool_of_string;
+  let get k = Utils.get_from_string_table table k in
+    { debug = get "debug" bool_of_string empty.debug;
+      metadata_cache_time =
+        get "metadata_cache_time" int_of_string empty.metadata_cache_time;
     }
 
 let to_table data =
   let table = Hashtbl.create 1 in
   let add = Hashtbl.add table in
     add "debug" (data.debug |> string_of_bool);
+    add "metadata_cache_time" (data.metadata_cache_time |> string_of_int);
     table
 
 let default = {
   debug = false;
+  metadata_cache_time = 60;
 }
 
 let default_debug = {
   debug = true;
+  metadata_cache_time = 60;
 }
 
 let debug_print out_ch start_time curl info_type info =
