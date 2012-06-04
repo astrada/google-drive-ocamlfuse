@@ -75,7 +75,7 @@ let get_metadata () =
     Utils.log_message "Refreshing metadata...%!";
     let metadata = do_request go |> fst in
     Utils.log_message "done\nUpdating db...%!";
-    Cache.Metadata.insert_metadata (Context.get_cache ()) metadata;
+    Cache.Metadata.insert_metadata context.Context.cache metadata;
     Utils.log_message "done\nUpdating context...%!";
     context |> Context.metadata ^= Some metadata |> Context.set_ctx;
     Utils.log_message "done\n%!";
@@ -85,7 +85,7 @@ let get_metadata () =
   let metadata =
     if Option.is_none context.Context.metadata then begin
       Utils.log_message "Loading metadata from db...%!";
-      let db_metadata = Cache.Metadata.select_metadata (Context.get_cache ()) in
+      let db_metadata = Cache.Metadata.select_metadata context.Context.cache in
         context |> Context.metadata ^= db_metadata |> Context.set_ctx;
         db_metadata
     end else begin
@@ -222,10 +222,11 @@ let get_root_resource () =
             inserted
       | Some resource -> resource
 
-let update_root_resource root_resource =
+let update_resource resource =
   let cache = Context.get_cache () in
-    Utils.log_message "Updating root resource in db...%!";
-    Cache.Resource.update_resource cache root_resource;
+    Utils.log_message "Updating resource in db (id=%Ld)...%!"
+      resource.Cache.Resource.id;
+    Cache.Resource.update_resource cache resource;
     Utils.log_message "done\n%!"
 
 let get_resource_from_server parent_folder_id title new_resource cache =
@@ -283,9 +284,7 @@ and get_resource path =
     Utils.log_message "done\n%!";
     let updated_resource =
       update_resource_from_entry resource refreshed_entry in
-    Utils.log_message "Updating resource in db...%!";
-    Cache.Resource.update_resource cache updated_resource;
-    Utils.log_message "done\nSaving resource entry...%!";
+    update_resource updated_resource;
     let xml_string = entry_to_xml_string refreshed_entry in
     Cache.save_xml_entry cache updated_resource.Cache.Resource.id xml_string;
     Utils.log_message "done\n%!";
@@ -356,9 +355,14 @@ let get_attr path =
         | Some "spreadsheet" -> Unix.S_LNK *)
       if Cache.Resource.is_folder resource then Unix.S_DIR
       else Unix.S_REG in
-    let st_perm =
-      if Cache.Resource.is_folder resource then 0o555
-      else 0o444 in
+    let config = context |. Context.config_lens in
+    let perm =
+      if Cache.Resource.is_folder resource then 0o777
+      else 0o666 in
+    let mask =
+      lnot config.Config.umask land
+      (if config.Config.read_only then 0o555 else 0o777) in
+    let st_perm = perm land mask in
     let st_size =
       if Cache.Resource.is_folder resource then f_bsize
       else resource |. Cache.Resource.size |. GapiLens.option_get
@@ -383,18 +387,7 @@ let read_dir path =
     get_folder_id path >>= fun folder_id ->
     query_folder_contents ~parameters folder_id >>= fun feed ->
     Utils.log_message "Done getting folder content (path=%s)\n%!" path;
-    if path = root_directory then begin
-      (* TODO: refactor *)
-      let metadata = Context.get_ctx ()
-        |. Context.metadata |. GapiLens.option_get in
-      let changestamp = metadata |. Cache.Metadata.largest_changestamp in
-      let updated_resource = resource
-        |> Cache.Resource.changestamp ^= changestamp
-        |> Cache.Resource.state ^= Cache.Resource.State.InSync
-      in
-        update_root_resource updated_resource
-    end;
-    SessionM.return feed
+    SessionM.return (feed, resource)
   in
 
   let cache = Context.get_cache () in
@@ -407,7 +400,7 @@ let read_dir path =
       Utils.log_message "done\n%!";
       resources
     end else begin
-      let feed = do_request go |> fst in
+      let (feed, folder_resource) = do_request go |> fst in
       let resources =
         List.map
           (fun entry ->
@@ -435,6 +428,14 @@ let read_dir path =
                Cache.save_xml_entry cache resource.Cache.Resource.id xml_string)
           inserted_resources;
         Utils.log_message "done\n%!";
+        let metadata = Context.get_ctx ()
+          |. Context.metadata |. GapiLens.option_get in
+        let changestamp = metadata |. Cache.Metadata.largest_changestamp in
+        let updated_resource = folder_resource
+          |> Cache.Resource.changestamp ^= changestamp
+          |> Cache.Resource.state ^= Cache.Resource.State.InSync
+        in
+          update_resource updated_resource;
         inserted_resources
     end
   in
