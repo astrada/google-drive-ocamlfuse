@@ -31,6 +31,15 @@ let wrap_exec
   let cb row headers = result := callback row headers in
   let rc = Sqlite3.exec db ~cb sql in
     get_result rc result
+
+let reset_stmt stmt =
+  Sqlite3.reset stmt |> fail_if_not_ok
+
+let finalize_stmt stmt =
+  Sqlite3.finalize stmt |> fail_if_not_ok
+
+let final_step stmt =
+  Sqlite3.step stmt |> expect Sqlite3.Rc.DONE
 (* END Helpers *)
 
 (* Query helpers *)
@@ -71,12 +80,10 @@ let get_next_row stmt row_to_data =
       | _ -> fail rc
 
 let select_first_row stmt bind_parameters row_to_data =
-  Sqlite3.reset stmt |> fail_if_not_ok;
   bind_parameters stmt;
   get_next_row stmt row_to_data
 
 let select_all_rows stmt bind_parameters row_to_data =
-  Sqlite3.reset stmt |> fail_if_not_ok;
   bind_parameters stmt;
   let rec loop rows =
     let row = get_next_row stmt row_to_data in
@@ -93,19 +100,12 @@ let prepare_begin_tran_stmt db =
 
 let prepare_commit_tran_stmt db =
   Sqlite3.prepare db "COMMIT TRANSACTION;"
-(* END Prepare SQL *)
+
+let prepare_rollback_tran_stmt db =
+  Sqlite3.prepare db "ROLLBACK TRANSACTION;"
 
 module ResourceStmts =
 struct
-  type t = {
-    insert_stmt : Sqlite3.stmt;
-    update_stmt : Sqlite3.stmt;
-    delete_stmt : Sqlite3.stmt;
-    delete_with_parent_path_stmt : Sqlite3.stmt;
-    select_with_path_stmt : Sqlite3.stmt;
-    select_with_parent_path_stmt : Sqlite3.stmt;
-  }
-
   let prepare_insert_stmt db =
     let sql =
       "INSERT INTO resource ( \
@@ -213,32 +213,10 @@ struct
     in
       Sqlite3.prepare db sql
 
-  let create db = {
-    insert_stmt = prepare_insert_stmt db;
-    update_stmt = prepare_update_stmt db;
-    delete_stmt = prepare_delete_stmt db;
-    delete_with_parent_path_stmt = prepare_delete_with_parent_path_stmt db;
-    select_with_path_stmt = prepare_select_with_path_stmt db;
-    select_with_parent_path_stmt = prepare_select_with_parent_path_stmt db;
-  }
-
-  let finalize stmts =
-    Sqlite3.finalize stmts.insert_stmt |> ignore;
-    Sqlite3.finalize stmts.update_stmt |> ignore;
-    Sqlite3.finalize stmts.delete_stmt |> ignore;
-    Sqlite3.finalize stmts.delete_with_parent_path_stmt |> ignore;
-    Sqlite3.finalize stmts.select_with_path_stmt |> ignore;
-    Sqlite3.finalize stmts.select_with_parent_path_stmt |> ignore
-
 end
 
 module MetadataStmts =
 struct
-  type t = {
-    insert_stmt : Sqlite3.stmt;
-    select_stmt : Sqlite3.stmt;
-  }
-
   let prepare_insert_stmt db =
     let sql =
       "INSERT OR REPLACE INTO metadata ( \
@@ -273,26 +251,46 @@ struct
     in
       Sqlite3.prepare db sql
 
-  let create db = {
-    insert_stmt = prepare_insert_stmt db;
-    select_stmt = prepare_select_stmt db;
-  }
-
-  let finalize stmts =
-    Sqlite3.finalize stmts.insert_stmt |> ignore;
-    Sqlite3.finalize stmts.select_stmt |> ignore
-
 end
+(* END Prepare SQL *)
 
+(* Open/close db *)
 type t = {
   cache_dir : string;
-  db : Sqlite3.db;
-  (* Query cache *)
-  begin_tran_stmt : Sqlite3.stmt;
-  commit_tran_stmt : Sqlite3.stmt;
-  resource_stmts : ResourceStmts.t;
-  metadata_stmts : MetadataStmts.t;
+  db_path : string;
+  busy_timeout : int;
 }
+
+let create_cache app_dir config =
+  let cache_dir = app_dir.AppDir.cache_dir in
+  let db_path = Filename.concat cache_dir "cache.db" in
+  let busy_timeout = config.Config.sqlite3_busy_timeout in
+    { cache_dir;
+      db_path;
+      busy_timeout;
+    }
+
+let open_db cache =
+  let db = Sqlite3.db_open cache.db_path in
+    Sqlite3.busy_timeout db cache.busy_timeout;
+    db
+
+let close_db db =
+  try
+    (* TODO: handle busy db (close_db returns false) *)
+    Sqlite3.db_close db
+  with _ -> false
+
+let with_db cache f =
+  let db = open_db cache in
+    try
+      let result = f db in
+        close_db db |> ignore;
+        result
+    with e ->
+      close_db db |> ignore;
+      raise e
+(* END Open/close db *)
 
 module Resource =
 struct
@@ -322,9 +320,6 @@ struct
 
   end
 
-  (* TODO:
-   * add table of directory content (?)
-   *)
   type t = {
     (* rowid *)
     id : int64;
@@ -406,45 +401,62 @@ struct
     bind_int stmt ":changestamp" (Some resource.changestamp);
     bind_float stmt ":last_update" (Some resource.last_update)
 
+  let step_insert_resource db stmt resource =
+    reset_stmt stmt;
+    bind_resource_parameters stmt resource;
+    final_step stmt;
+    resource |> id ^= Sqlite3.last_insert_rowid db
+
   let insert_resource cache resource =
-    let stmt = cache.resource_stmts.ResourceStmts.insert_stmt in
-      Sqlite3.reset stmt |> fail_if_not_ok;
-      bind_resource_parameters stmt resource;
-      Sqlite3.step stmt |> expect Sqlite3.Rc.DONE;
-      resource |> id ^= Sqlite3.last_insert_rowid cache.db
+    with_db cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_insert_stmt db in
+         let result = step_insert_resource db stmt resource in
+           finalize_stmt stmt;
+           result)
 
   let update_resource cache resource =
-    let stmt = cache.resource_stmts.ResourceStmts.update_stmt in
-      Sqlite3.reset stmt |> fail_if_not_ok;
-      bind_resource_parameters stmt resource;
-      bind_int stmt ":id" (Some resource.id);
-      Sqlite3.step stmt |> expect Sqlite3.Rc.DONE
+    with_db cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_update_stmt db in
+           bind_resource_parameters stmt resource;
+           bind_int stmt ":id" (Some resource.id);
+           final_step stmt;
+           finalize_stmt stmt)
 
   let delete_resource cache resource =
-    let stmt = cache.resource_stmts.ResourceStmts.delete_stmt in
-      Sqlite3.reset stmt |> fail_if_not_ok;
-      bind_int stmt ":id" (Some resource.id);
-      Sqlite3.step stmt |> expect Sqlite3.Rc.DONE
+    with_db cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_delete_stmt db in
+           bind_int stmt ":id" (Some resource.id);
+           final_step stmt;
+           finalize_stmt stmt)
 
   let delete_resources cache parent_path =
-    let stmt =
-      cache.resource_stmts.ResourceStmts.delete_with_parent_path_stmt
-    in
-      Sqlite3.reset stmt |> fail_if_not_ok;
-      bind_text stmt ":parent_path" (Some parent_path);
-      Sqlite3.step stmt |> expect Sqlite3.Rc.DONE
+    with_db cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_delete_with_parent_path_stmt db in
+           bind_text stmt ":parent_path" (Some parent_path);
+           final_step stmt;
+           finalize_stmt stmt)
 
   let insert_resources cache resources parent_path =
-    Sqlite3.reset cache.begin_tran_stmt |> fail_if_not_ok;
-    Sqlite3.step cache.begin_tran_stmt |> expect Sqlite3.Rc.DONE;
-    delete_resources cache parent_path;
-    let results =
-      List.map
-        (insert_resource cache)
-        resources in
-    Sqlite3.reset cache.commit_tran_stmt |> fail_if_not_ok;
-    Sqlite3.step cache.commit_tran_stmt |> expect Sqlite3.Rc.DONE;
-    results
+    with_db cache
+      (fun db ->
+         let begin_tran_stmt = prepare_begin_tran_stmt db in
+         let commit_tran_stmt = prepare_commit_tran_stmt db in
+         let stmt = ResourceStmts.prepare_insert_stmt db in
+         final_step begin_tran_stmt;
+         delete_resources cache parent_path;
+         let results =
+           List.map
+             (step_insert_resource db stmt)
+             resources in
+         final_step commit_tran_stmt;
+         finalize_stmt begin_tran_stmt;
+         finalize_stmt commit_tran_stmt;
+         finalize_stmt stmt;
+         results)
 
   let row_to_resource row_data =
     { id = row_data.(0) |> data_to_int64 |> Option.get;
@@ -462,17 +474,28 @@ struct
     }
 
   let select_resource_with_path cache path =
-    let stmt = cache.resource_stmts.ResourceStmts.select_with_path_stmt in
-      select_first_row stmt
-        (fun stmt -> bind_text stmt ":path" (Some path))
-        row_to_resource
+    with_db cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_select_with_path_stmt db in
+         let result =
+           select_first_row stmt
+             (fun stmt -> bind_text stmt ":path" (Some path))
+             row_to_resource
+         in
+           finalize_stmt stmt;
+           result)
 
   let select_resources_with_parent_path cache parent_path =
-    let stmt =
-      cache.resource_stmts.ResourceStmts.select_with_parent_path_stmt in
-      select_all_rows stmt
-        (fun stmt -> bind_text stmt ":parent_path" (Some parent_path))
-        row_to_resource
+    with_db cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_select_with_parent_path_stmt db in
+         let results =
+           select_all_rows stmt
+             (fun stmt -> bind_text stmt ":parent_path" (Some parent_path))
+             row_to_resource
+         in
+           finalize_stmt stmt;
+           results)
   (* END Queries *)
 
   let is_folder resource =
@@ -518,18 +541,21 @@ struct
 
   (* Queries *)
   let save_metadata stmt metadata =
-    Sqlite3.reset stmt |> fail_if_not_ok;
+    reset_stmt stmt;
     bind_int stmt ":largest_changestamp" (Some metadata.largest_changestamp);
     bind_int stmt ":remaining_changestamps"
       (Some metadata.remaining_changestamps);
     bind_int stmt ":quota_bytes_total" (Some metadata.quota_bytes_total);
     bind_int stmt ":quota_bytes_used" (Some metadata.quota_bytes_used);
     bind_float stmt ":last_update" (Some metadata.last_update);
-    Sqlite3.step stmt |> expect Sqlite3.Rc.DONE
+    final_step stmt
 
   let insert_metadata cache resource =
-    let stmt = cache.metadata_stmts.MetadataStmts.insert_stmt in
-      save_metadata stmt resource
+    with_db cache
+      (fun db ->
+         let stmt = MetadataStmts.prepare_insert_stmt db in
+           save_metadata stmt resource;
+           finalize_stmt stmt)
 
   let row_to_metadata row_data =
     { largest_changestamp = row_data.(0) |> data_to_int64 |> Option.get;
@@ -540,8 +566,14 @@ struct
     }
 
   let select_metadata cache =
-    let stmt = cache.metadata_stmts.MetadataStmts.select_stmt in
-      select_first_row stmt (fun _ -> ()) row_to_metadata
+    with_db cache
+      (fun db ->
+         let stmt = MetadataStmts.prepare_select_stmt db in
+         let result =
+           select_first_row stmt (fun _ -> ()) row_to_metadata
+         in
+           finalize_stmt stmt;
+           result)
   (* END Queries *)
 
   let is_valid metadata_cache_time metadata =
@@ -568,56 +600,34 @@ let save_xml_entry cache id xml_string =
 (* END Resource XML entry *)
 
 (* Setup *)
-let open_db app_dir =
-  let cache_dir = app_dir.AppDir.cache_dir in
-  let filename = Filename.concat cache_dir "cache.db" in
-  let db = Sqlite3.db_open filename in
-    { cache_dir;
-      db;
-      begin_tran_stmt = prepare_begin_tran_stmt db;
-      commit_tran_stmt = prepare_commit_tran_stmt db;
-      resource_stmts = ResourceStmts.create db;
-      metadata_stmts = MetadataStmts.create db;
-    }
-
 let setup_db cache =
-  wrap_exec_not_null_no_headers cache.db
-    "CREATE TABLE IF NOT EXISTS resource ( \
-        id INTEGER PRIMARY KEY, \
-        resource_id TEXT NULL, \
-        kind TEXT NULL, \
-        md5_checksum TEXT NULL, \
-        size INTEGER NULL, \
-        last_viewed REAL NULL, \
-        last_modified REAL NULL, \
-        parent_path TEXT NOT NULL, \
-        path TEXT NOT NULL, \
-        state TEXT NOT NULL, \
-        changestamp INTEGER NULL, \
-        last_update REAL NOT NULL \
-     ); \
-     CREATE INDEX IF NOT EXISTS path_index ON resource (path); \
-     CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path); \
-     CREATE INDEX IF NOT EXISTS resource_id_index ON resource (resource_id); \
-     CREATE TABLE IF NOT EXISTS metadata ( \
-        id INTEGER PRIMARY KEY, \
-        largest_changestamp INTEGER NOT NULL, \
-        remaining_changestamps INTEGER NOT NULL, \
-        quota_bytes_total INTEGER NOT NULL, \
-        quota_bytes_used INTEGER NOT NULL, \
-        last_update REAL NOT NULL \
-     );" |> ignore
+  with_db cache
+    (fun db ->
+      wrap_exec_not_null_no_headers db
+        "CREATE TABLE IF NOT EXISTS resource ( \
+            id INTEGER PRIMARY KEY, \
+            resource_id TEXT NULL, \
+            kind TEXT NULL, \
+            md5_checksum TEXT NULL, \
+            size INTEGER NULL, \
+            last_viewed REAL NULL, \
+            last_modified REAL NULL, \
+            parent_path TEXT NOT NULL, \
+            path TEXT NOT NULL, \
+            state TEXT NOT NULL, \
+            changestamp INTEGER NULL, \
+            last_update REAL NOT NULL \
+         ); \
+         CREATE INDEX IF NOT EXISTS path_index ON resource (path); \
+         CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path); \
+         CREATE INDEX IF NOT EXISTS resource_id_index ON resource (resource_id); \
+         CREATE TABLE IF NOT EXISTS metadata ( \
+            id INTEGER PRIMARY KEY, \
+            largest_changestamp INTEGER NOT NULL, \
+            remaining_changestamps INTEGER NOT NULL, \
+            quota_bytes_total INTEGER NOT NULL, \
+            quota_bytes_used INTEGER NOT NULL, \
+            last_update REAL NOT NULL \
+         );" |> ignore)
 (* END Setup *)
-
-(* Teardown *)
-let close_db cache =
-  try
-    Sqlite3.finalize cache.begin_tran_stmt |> ignore;
-    Sqlite3.finalize cache.commit_tran_stmt |> ignore;
-    ResourceStmts.finalize cache.resource_stmts;
-    MetadataStmts.finalize cache.metadata_stmts;
-    (* TODO: handle busy db (close_db returns false) *)
-    Sqlite3.db_close cache.db
-  with _ -> false
-(* END Teardown *)
 
