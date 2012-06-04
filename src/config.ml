@@ -75,7 +75,7 @@ let to_table data =
     add "debug" (data.debug |> string_of_bool);
     add "metadata_cache_time" (data.metadata_cache_time |> string_of_int);
     add "read_only" (data.read_only |> string_of_bool);
-    add "umask" (data.umask |> string_of_int);
+    add "umask" (data.umask |> Printf.sprintf "0o%03o");
     add "sqlite3_busy_timeout" (data.sqlite3_busy_timeout |> string_of_int);
     table
 
