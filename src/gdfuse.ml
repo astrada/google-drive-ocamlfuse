@@ -211,6 +211,31 @@ let readdir path hnd =
   in
     Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
 
+let fopen path flags =
+  log_message "fopen %s %s\n%!" path (Utils.flags_to_string flags);
+  try
+    Docs.fopen path flags
+  with Docs.File_not_found ->
+        log_message "File not found %s\n%!" path;
+        raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
+    | Docs.Permission_denied ->
+        log_message "Permission denied: fopen %s\n%!" path;
+        raise (Unix.Unix_error (Unix.EACCES, "fopen", path))
+    | e ->
+        Utils.log_exception e;
+        raise (Unix.Unix_error (Unix.EBUSY, "fopen", path))
+
+let read path buf offset file_descr =
+  log_message "read %s buf %Ld %d\n%!" path offset file_descr;
+  try
+    Docs.read path buf offset file_descr
+  with Docs.File_not_found ->
+        log_message "File not found %s\n%!" path;
+        raise (Unix.Unix_error (Unix.ENOENT, "read", path))
+    | e ->
+        Utils.log_exception e;
+        raise (Unix.Unix_error (Unix.EBUSY, "read", path))
+
 let start_filesystem mountpoint fuse_args =
   log_message "Starting filesystem %s\n%!" mountpoint;
   let fuse_argv =
@@ -229,8 +254,10 @@ let start_filesystem mountpoint fuse_args =
           fsyncdir = (fun path ds hnd -> Printf.printf "sync dir\n%!");
           readlink = Unix.readlink;
           utime = Unix.utimes;
-          fopen = (fun path flags -> Some (store_descr (Unix.openfile path flags 0)));
-          read = xmp_read;
+           *)
+          fopen;
+          read;
+(*
           write = xmp_write;
           mknod = (fun path mode -> close (openfile path [O_CREAT;O_EXCL] mode));
           mkdir = Unix.mkdir;

@@ -6,6 +6,7 @@ open GdataDocumentsV3Model
 open GdataDocumentsV3Service
 
 exception File_not_found
+exception Permission_denied
 
 (* Gapi request wrapper *)
 let do_request interact =
@@ -131,23 +132,6 @@ let statfs () =
 (* END Metadata *)
 
 (* Resources *)
-let parse_xml_entry xml_path =
-  let ch = open_in xml_path in
-    try
-      let entry = GdataUtils.parse_xml
-                    (fun () -> input_byte ch)
-                    Document.parse_entry in
-        close_in ch;
-        entry
-    with e ->
-      close_in ch;
-      raise e
-
-let entry_to_xml_string entry =
-  entry
-    |> Document.entry_to_data_model
-    |> GdataUtils.data_to_xml_string
-
 let create_resource path =
   let metadata = get_metadata () in
   let changestamp = metadata |. Cache.Metadata.largest_changestamp in
@@ -255,8 +239,7 @@ let get_resource_from_server parent_folder_id title new_resource cache =
       Utils.log_message "Saving resource to db...%!";
       let inserted = Cache.Resource.insert_resource cache resource in
       Utils.log_message "done\nSaving resource entry...%!";
-      let xml_string = entry_to_xml_string entry in
-      Cache.save_xml_entry cache inserted.Cache.Resource.id xml_string;
+      Cache.save_xml_entry cache inserted entry;
       Utils.log_message "done\n%!";
       inserted
     end in
@@ -276,17 +259,14 @@ and get_resource path =
   let refresh_resource resource cache =
     Utils.log_message "Loading xml entry id=%Ld...%!"
       resource.Cache.Resource.id;
-    let entry =
-      Cache.get_xml_entry_path cache resource.Cache.Resource.id
-        |> parse_xml_entry in
+    let entry = Cache.load_xml_entry cache resource in
     Utils.log_message "done\nRefreshing entry...%!";
     refresh_document entry >>= fun refreshed_entry ->
     Utils.log_message "done\n%!";
     let updated_resource =
       update_resource_from_entry resource refreshed_entry in
     update_resource updated_resource;
-    let xml_string = entry_to_xml_string refreshed_entry in
-    Cache.save_xml_entry cache updated_resource.Cache.Resource.id xml_string;
+    Cache.save_xml_entry cache updated_resource refreshed_entry;
     Utils.log_message "done\n%!";
     SessionM.return (updated_resource)
   in
@@ -331,7 +311,7 @@ let check_resource_in_cache cache path =
           else false
 (* END Resources *)
 
-(* Stat *)
+(* stat *)
 let get_attr path =
   let context = Context.get_ctx () in
   if path = root_directory then
@@ -375,9 +355,9 @@ let get_attr path =
             st_size;
       }
   end
-(* END Stat *)
+(* END stat *)
 
-(* Folders *)
+(* readdir *)
 let read_dir path =
   let go =
     Utils.log_message "Getting folder content (path=%s)\n%!" path;
@@ -423,9 +403,9 @@ let read_dir path =
                  (fun e ->
                     e |. Document.Entry.resourceId =
                       Option.get resource.Cache.Resource.resource_id)
-                 feed.Document.Feed.entries in
-             let xml_string = entry_to_xml_string entry in
-               Cache.save_xml_entry cache resource.Cache.Resource.id xml_string)
+                 feed.Document.Feed.entries
+             in
+               Cache.save_xml_entry cache resource entry)
           inserted_resources;
         Utils.log_message "done\n%!";
         let metadata = Context.get_ctx ()
@@ -443,5 +423,58 @@ let read_dir path =
       (fun resource ->
          Filename.basename resource.Cache.Resource.path)
       resources
-(* END Folders *)
+(* END readdir *)
+
+(* fopen *)
+let fopen path flags =
+  let read_only =
+    Context.get_ctx () |. Context.config_lens |. Config.read_only
+  in
+    if read_only && not (List.mem Unix.O_RDONLY flags) then
+      raise Permission_denied
+    else begin
+      do_request (get_resource path) |> ignore
+    end;
+    None
+(* END fopen *)
+
+(* read *)
+let read path buf offset file_descr =
+  let cache = Context.get_cache () in
+  let go =
+    get_resource path >>= fun resource ->
+    let content_path = Cache.get_content_path cache resource in
+    begin match resource.Cache.Resource.state with
+        Cache.Resource.State.InSync ->
+          SessionM.return content_path
+      | Cache.Resource.State.ToDownload ->
+          let entry = Cache.load_xml_entry cache resource in
+          let download_link = entry
+            |. Document.Entry.content
+            |. GdataAtom.Content.src in
+          let media_destination = GapiMediaResource.TargetFile content_path in
+          partial_download
+            download_link
+            media_destination >>
+            (* TODO:
+             * update state resource
+             * handle documents/spreadsheets/... *)
+          SessionM.return content_path
+      | _ -> raise File_not_found
+    end
+  in
+
+  let content_path = do_request go |> fst in
+  let ch = open_in content_path in
+    (* TODO: refactor try/finally *)
+    try
+      let file_descr = Unix.descr_of_in_channel ch in
+        Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
+        let result = Unix_util.read file_descr buf in
+        close_in ch;
+        result
+    with e ->
+      close_in ch;
+      raise e
+(* END read *)
 
