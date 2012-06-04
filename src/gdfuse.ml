@@ -142,18 +142,19 @@ let setup_application debug fs_label mountpoint =
   log_message "Setting up %s filesystem...\n" fs_label;
   let app_dir = AppDir.create fs_label in
   let () = AppDir.create_directories app_dir in
-  log_message "Setting up cache db...";
-  let cache = Cache.open_db app_dir in
-  Cache.setup_db cache;
-  log_message "done\n";
   let config_store = get_config_store debug app_dir in
   let config_store = config_store
     |> Context.ConfigFileStore.data
     ^%= Config.debug ^= debug in
+  let config = config_store |. Context.ConfigFileStore.data in
   let gapi_config =
     Config.create_gapi_config
-      (config_store |. Context.ConfigFileStore.data)
+      config
       app_dir in
+  log_message "Setting up cache db...";
+  let cache = Cache.create_cache app_dir config in
+  Cache.setup_db cache;
+  log_message "done\n";
   let state_store = get_state_store app_dir in
   log_message "Setting up CURL...";
   let curl_state = GapiCurl.global_init () in
@@ -163,13 +164,12 @@ let setup_application debug fs_label mountpoint =
     config_store;
     gapi_config;
     state_store;
-    cache_table = Hashtbl.create 16;
+    cache;
     curl_state;
     mountpoint_stats = Unix.LargeFile.stat mountpoint;
     metadata = None;
   } in
   Context.set_ctx context;
-  Context.set_cache cache;
   let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
       get_auth_tokens_from_server ()
@@ -324,8 +324,6 @@ let () =
            let context = Context.get_ctx () in
            log_message "CURL cleanup...";
            ignore (GapiCurl.global_cleanup context.Context.curl_state);
-           log_message "done\nClosing cache db...\n";
-           Context.close_cache ();
            log_message "done\nClearing context...";
            Context.clear_ctx ();
            log_message "done\n%!");
