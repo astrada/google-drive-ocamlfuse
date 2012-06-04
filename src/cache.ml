@@ -583,21 +583,45 @@ struct
 end
 
 (* Resource XML entry *)
-let get_xml_entry_path cache id =
-  let filename = Printf.sprintf "%Ld.xml" id in
+let get_xml_entry_path cache resource =
+  let filename = Printf.sprintf "%Ld.xml" resource.Resource.id in
     Filename.concat cache.cache_dir filename
 
-let save_xml_entry cache id xml_string =
-  let path = get_xml_entry_path cache id in
+let save_xml_entry cache resource entry =
+  let to_xml_string () =
+    entry
+      |> GdataDocumentsV3Model.Document.entry_to_data_model
+      |> GdataUtils.data_to_xml_string
+  in
+
+  let path = get_xml_entry_path cache resource in
   let ch = open_out path in
     try
-      output_string ch xml_string;
-      close_out ch
+      let xml_string = to_xml_string () in
+        output_string ch xml_string;
+        close_out ch
     with e ->
       close_out ch;
       raise e
 
+let load_xml_entry cache resource =
+  let path = get_xml_entry_path cache resource in
+  let ch = open_in path in
+    try
+      let entry = GdataUtils.parse_xml
+                    (fun () -> input_byte ch)
+                    GdataDocumentsV3Model.Document.parse_entry in
+        close_in ch;
+        entry
+    with e ->
+      close_in ch;
+      raise e
 (* END Resource XML entry *)
+
+(* Resource content *)
+let get_content_path cache resource =
+  Filename.concat cache.cache_dir (Option.get resource.Resource.resource_id)
+(* END Resource content *)
 
 (* Setup *)
 let setup_db cache =
