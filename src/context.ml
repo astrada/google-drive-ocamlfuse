@@ -15,7 +15,7 @@ type t = {
   (* Gapi configuration *)
   gapi_config : GapiConfig.t;
   (* Sqlite3 cache *)
-  cache_table : (int, Cache.t) Hashtbl.t;
+  cache : Cache.t;
   (* CURL global state *)
   curl_state : [`Initialized] GapiCurl.t;
   (* Mountpoint current stats *)
@@ -40,9 +40,9 @@ let gapi_config = {
   GapiLens.get = (fun x -> x.gapi_config);
   GapiLens.set = (fun v x -> { x with gapi_config = v })
 }
-let cache_table = {
-  GapiLens.get = (fun x -> x.cache_table);
-  GapiLens.set = (fun v x -> { x with cache_table = v })
+let cache = {
+  GapiLens.get = (fun x -> x.cache);
+  GapiLens.set = (fun v x -> { x with cache = v })
 }
 let curl_state = {
   GapiLens.get = (fun x -> x.curl_state);
@@ -98,32 +98,6 @@ let save_config_store config_store =
        ConfigFileStore.save config_store;
        Utils.log_message "done\n")
 
-let set_cache cache =
-  ConcurrentContext.with_lock
-    (fun () ->
-       let context = ConcurrentContext.get_no_lock () in
-       let key = Thread.self () |> Thread.id in
-         Hashtbl.add context.cache_table key cache)
-
 let get_cache () =
-  ConcurrentContext.with_lock
-    (fun () ->
-       let context = ConcurrentContext.get_no_lock () in
-       let key = Thread.self () |> Thread.id in
-         match Utils.safe_find context.cache_table key with
-             None ->
-               let cache = Cache.open_db context.app_dir in
-                 Hashtbl.add context.cache_table key cache;
-                 cache
-           | Some cache -> cache)
-
-let close_cache () =
-  ConcurrentContext.with_lock
-    (fun () ->
-       let context = ConcurrentContext.get_no_lock () in
-         Hashtbl.iter
-           (fun key cache ->
-              let res = Cache.close_db cache in
-              Utils.log_message "Thread id: %d Sqlite3.close_db: %b\n" key res)
-           context.cache_table)
+  get_ctx () |. cache
 
