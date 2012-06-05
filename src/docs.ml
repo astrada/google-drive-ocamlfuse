@@ -35,7 +35,6 @@ let do_request interact =
           else raise e
       | GapiRequest.RefreshTokenFailed _ ->
           GaeProxy.refresh_access_token ();
-          Utils.log_message "done.\n%!";
           (* Retry with refreshed token *)
           try_request ()
       | GapiService.ServiceError e ->
@@ -132,25 +131,23 @@ let statfs () =
 (* END Metadata *)
 
 (* Resources *)
-let create_resource path =
-  let metadata = get_metadata () in
-  let changestamp = metadata |. Cache.Metadata.largest_changestamp in
-    { Cache.Resource.id = 0L;
-      resource_id = None;
-      kind = None;
-      md5_checksum = None;
-      size = None;
-      last_viewed = None;
-      last_modified = None;
-      parent_path = Filename.dirname path;
-      path;
-      state = Cache.Resource.State.ToDownload;
-      changestamp;
-      last_update = Unix.gettimeofday ();
-    }
+let create_resource path changestamp =
+  { Cache.Resource.id = 0L;
+    resource_id = None;
+    kind = None;
+    md5_checksum = None;
+    size = None;
+    last_viewed = None;
+    last_modified = None;
+    parent_path = Filename.dirname path;
+    path;
+    state = Cache.Resource.State.ToDownload;
+    changestamp;
+    last_update = Unix.gettimeofday ();
+  }
 
-let create_root_resource () =
-  let resource = create_resource root_directory in
+let create_root_resource changestamp =
+  let resource = create_resource root_directory changestamp in
     { resource with
           Cache.Resource.resource_id = Some root_folder_id;
           kind = Some "folder";
@@ -196,10 +193,12 @@ let lookup_resource path =
     resource
 
 let get_root_resource () =
-  let cache = Context.get_cache () in
+  let context = Context.get_ctx () in
+  let cache = context.Context.cache in
+  let changestamp = context |. Context.changestamp_lens in
     match lookup_resource root_directory with
         None ->
-          let root_resource = create_root_resource () in
+          let root_resource = create_root_resource changestamp in
             Utils.log_message "Saving root resource to db...%!";
             let inserted = Cache.Resource.insert_resource cache root_resource in
             Utils.log_message "done\n%!";
@@ -245,6 +244,17 @@ let get_resource_from_server parent_folder_id title new_resource cache =
     end in
     SessionM.return result
 
+let check_resource_in_cache cache path =
+  let changestamp = Context.get_ctx () |. Context.changestamp_lens in
+    match lookup_resource path with
+        None -> false
+      | Some resource ->
+          if Cache.Resource.is_valid resource changestamp then
+            if Cache.Resource.is_folder resource then
+              resource.Cache.Resource.state = Cache.Resource.State.InSync
+            else true
+          else false
+
 let rec get_folder_id path =
   if path = root_directory then
     SessionM.return root_folder_id
@@ -253,8 +263,7 @@ let rec get_folder_id path =
     let resource_id = resource |. Cache.Resource.resource_id |> Option.get in
     SessionM.return resource_id
 and get_resource path =
-  let metadata = get_metadata () in
-  let changestamp = metadata |. Cache.Metadata.largest_changestamp in
+  let changestamp = get_metadata () |. Cache.Metadata.largest_changestamp in
 
   let refresh_resource resource cache =
     Utils.log_message "Loading xml entry id=%Ld...%!"
@@ -278,13 +287,18 @@ and get_resource path =
     let cache = Context.get_cache () in
     begin match lookup_resource path with
         None ->
-          let new_resource = create_resource path in
-          let title = Filename.basename path in
-          get_folder_id
-            new_resource.Cache.Resource.parent_path >>= fun parent_folder_id ->
-          get_resource_from_server
-            parent_folder_id title new_resource cache >>= fun resource ->
-          SessionM.return resource
+          let parent_path = Filename.dirname path in
+            if check_resource_in_cache cache parent_path then begin
+              raise File_not_found
+            end else begin
+              let new_resource = create_resource path changestamp in
+              let title = Filename.basename path in
+              get_folder_id
+                new_resource.Cache.Resource.parent_path >>= fun parent_folder_id ->
+              get_resource_from_server
+                parent_folder_id title new_resource cache >>= fun resource ->
+              SessionM.return resource
+            end
       | Some resource ->
           if Cache.Resource.is_valid resource changestamp then
             SessionM.return resource
@@ -297,18 +311,6 @@ and get_resource path =
       | _ ->
           SessionM.return resource
     end
-
-let check_resource_in_cache cache path =
-  let metadata = get_metadata () in
-  let changestamp = metadata |. Cache.Metadata.largest_changestamp in
-    match lookup_resource path with
-        None -> false
-      | Some resource ->
-          if Cache.Resource.is_valid resource changestamp then
-            if Cache.Resource.is_folder resource then
-              resource.Cache.Resource.state = Cache.Resource.State.InSync
-            else true
-          else false
 (* END Resources *)
 
 (* stat *)
@@ -317,12 +319,7 @@ let get_attr path =
   if path = root_directory then
     context.Context.mountpoint_stats
   else begin
-    let go =
-      get_resource path >>= fun resource ->
-        SessionM.return resource
-    in
-
-    let resource = do_request go |> fst in
+    let resource = do_request (get_resource path) |> fst in
     let st_nlink =
       if Cache.Resource.is_folder resource then 2
       else 1 in
@@ -381,6 +378,7 @@ let read_dir path =
       resources
     end else begin
       let (feed, folder_resource) = do_request go |> fst in
+      let changestamp = folder_resource.Cache.Resource.changestamp in
       let resources =
         List.map
           (fun entry ->
@@ -388,13 +386,13 @@ let read_dir path =
                entry |. Document.Entry.title |. GdataAtom.Title.value in
              let resource_path =
                Filename.concat path filename in
-             let resource = create_resource resource_path in
+             let resource = create_resource resource_path changestamp in
                update_resource_from_entry resource entry)
           feed.Document.Feed.entries
       in
         Utils.log_message "Inserting folder resources into db...%!";
         let inserted_resources =
-          Cache.Resource.insert_resources cache resources path in
+          Cache.Resource.insert_resources cache resources path changestamp in
         Utils.log_message "done\nSaving resource entries...%!";
         List.iter
           (fun resource ->
@@ -408,9 +406,7 @@ let read_dir path =
                Cache.save_xml_entry cache resource entry)
           inserted_resources;
         Utils.log_message "done\n%!";
-        let metadata = Context.get_ctx ()
-          |. Context.metadata |. GapiLens.option_get in
-        let changestamp = metadata |. Cache.Metadata.largest_changestamp in
+        let changestamp = Context.get_ctx () |. Context.changestamp_lens in
         let updated_resource = folder_resource
           |> Cache.Resource.changestamp ^= changestamp
           |> Cache.Resource.state ^= Cache.Resource.State.InSync
@@ -456,8 +452,10 @@ let read path buf offset file_descr =
           partial_download
             download_link
             media_destination >>
+          let updated_resource = resource
+            |> Cache.Resource.state ^= Cache.Resource.State.InSync in
+          Cache.Resource.update_resource cache updated_resource;
             (* TODO:
-             * update state resource
              * handle documents/spreadsheets/... *)
           SessionM.return content_path
       | _ -> raise File_not_found
@@ -465,16 +463,10 @@ let read path buf offset file_descr =
   in
 
   let content_path = do_request go |> fst in
-  let ch = open_in content_path in
-    (* TODO: refactor try/finally *)
-    try
-      let file_descr = Unix.descr_of_in_channel ch in
-        Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
-        let result = Unix_util.read file_descr buf in
-        close_in ch;
-        result
-    with e ->
-      close_in ch;
-      raise e
+    Utils.with_in_channel content_path
+      (fun ch ->
+         let file_descr = Unix.descr_of_in_channel ch in
+           Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
+           Unix_util.read file_descr buf)
 (* END read *)
 
