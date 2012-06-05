@@ -168,7 +168,9 @@ struct
     let sql =
       "DELETE \
        FROM resource \
-       WHERE parent_path = :parent_path;"
+       WHERE parent_path = :parent_path \
+         AND (changestamp < :changestamp \
+           OR state <> 'NotFound');"
     in
       Sqlite3.prepare db sql
 
@@ -276,20 +278,34 @@ let open_db cache =
     db
 
 let close_db db =
-  try
-    (* TODO: handle busy db (close_db returns false) *)
-    Sqlite3.db_close db
-  with _ -> false
+  let rec try_close n =
+    if n > 4 then
+      let thread_id = Utils.get_thread_id () in
+        Utils.log_message "Thread id=%d: Error: cannot close db\n%!" thread_id
+    else if not (Sqlite3.db_close db) then begin
+      Unix.sleep 1;
+      try_close (succ n)
+    end
+  in
+    try_close 0
 
 let with_db cache f =
   let db = open_db cache in
-    try
-      let result = f db in
-        close_db db |> ignore;
-        result
-    with e ->
-      close_db db |> ignore;
-      raise e
+    Utils.try_finally
+      (fun () -> f db)
+      (fun () -> close_db db)
+
+let with_transaction cache f =
+  with_db cache
+    (fun db ->
+       let begin_tran_stmt = prepare_begin_tran_stmt db in
+       let commit_tran_stmt = prepare_commit_tran_stmt db in
+       final_step begin_tran_stmt;
+       let result = f db in
+       final_step commit_tran_stmt;
+       finalize_stmt commit_tran_stmt;
+       finalize_stmt begin_tran_stmt;
+       result)
 (* END Open/close db *)
 
 module Resource =
@@ -432,29 +448,27 @@ struct
            final_step stmt;
            finalize_stmt stmt)
 
-  let delete_resources cache parent_path =
-    with_db cache
-      (fun db ->
-         let stmt = ResourceStmts.prepare_delete_with_parent_path_stmt db in
-           bind_text stmt ":parent_path" (Some parent_path);
-           final_step stmt;
-           finalize_stmt stmt)
+  let _delete_resources db parent_path changestamp =
+    let stmt = ResourceStmts.prepare_delete_with_parent_path_stmt db in
+      bind_text stmt ":parent_path" (Some parent_path);
+      bind_int stmt ":changestamp" (Some changestamp);
+      final_step stmt;
+      finalize_stmt stmt
 
-  let insert_resources cache resources parent_path =
+  let delete_resources cache parent_path changestamp =
     with_db cache
       (fun db ->
-         let begin_tran_stmt = prepare_begin_tran_stmt db in
-         let commit_tran_stmt = prepare_commit_tran_stmt db in
+         _delete_resources db parent_path changestamp)
+
+  let insert_resources cache resources parent_path changestamp =
+    with_transaction cache
+      (fun db ->
          let stmt = ResourceStmts.prepare_insert_stmt db in
-         final_step begin_tran_stmt;
-         delete_resources cache parent_path;
+         _delete_resources db parent_path changestamp;
          let results =
            List.map
              (step_insert_resource db stmt)
              resources in
-         final_step commit_tran_stmt;
-         finalize_stmt begin_tran_stmt;
-         finalize_stmt commit_tran_stmt;
          finalize_stmt stmt;
          results)
 
@@ -643,7 +657,7 @@ let setup_db cache =
             last_update REAL NOT NULL \
          ); \
          CREATE INDEX IF NOT EXISTS path_index ON resource (path); \
-         CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path); \
+         CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path, changestamp); \
          CREATE INDEX IF NOT EXISTS resource_id_index ON resource (resource_id); \
          CREATE TABLE IF NOT EXISTS metadata ( \
             id INTEGER PRIMARY KEY, \
