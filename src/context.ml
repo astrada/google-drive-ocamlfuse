@@ -69,6 +69,9 @@ let request_id_lens =
 let refresh_token_lens =
   state_lens |-- State.refresh_token
 
+let changestamp_lens =
+  metadata |-- GapiLens.option_get |-- Cache.Metadata.largest_changestamp
+
 module ConcurrentContext =
   ConcurrentGlobal.Make(struct type u = t let label = "context" end)
 
