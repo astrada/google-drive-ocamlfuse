@@ -1,8 +1,26 @@
 open GapiUtils.Infix
 
-let verbose = ref false
+let try_finally f finally =
+  try
+    let result = f () in
+      finally ();
+      result
+  with e ->
+    finally ();
+    raise e
+
+let with_in_channel path f =
+  let ch = open_in path in
+    try_finally
+      (fun () -> f ch)
+      (fun () -> close_in ch)
+
+let get_thread_id () =
+  Thread.self () |> Thread.id
 
 (* Logging *)
+let verbose = ref false
+
 let log_message format =
   if !verbose then
     Printf.printf format
