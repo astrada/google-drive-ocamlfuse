@@ -517,8 +517,26 @@ struct
         Some "folder" -> true
       | _ -> false
 
+  let is_document resource =
+    match resource.kind with
+        Some "document"
+      | Some "drawing"
+      | Some "form"
+      | Some "presentation"
+      | Some "spreadsheet" -> true
+      | _ -> false
+
   let is_valid resource largest_changestamp =
     resource.changestamp >= largest_changestamp
+
+  let get_format resource config =
+    match resource.kind with
+        Some "document" -> config.Config.document_format
+      | Some "drawing" -> config.Config.drawing_format
+      | Some "form" -> config.Config.form_format
+      | Some "presentation" -> config.Config.presentation_format
+      | Some "spreadsheet" -> config.Config.spreadsheet_format
+      | _ -> "html"
 
 end
 
@@ -555,7 +573,6 @@ struct
 
   (* Queries *)
   let save_metadata stmt metadata =
-    reset_stmt stmt;
     bind_int stmt ":largest_changestamp" (Some metadata.largest_changestamp);
     bind_int stmt ":remaining_changestamps"
       (Some metadata.remaining_changestamps);
@@ -598,7 +615,13 @@ end
 
 (* Resource XML entry *)
 let get_xml_entry_path cache resource =
-  let filename = Printf.sprintf "%Ld.xml" resource.Resource.id in
+  let md5_hash = Cryptokit.Hash.md5 () in
+  md5_hash#add_string resource.Resource.path;
+  let path_hash = md5_hash#result in
+  let hexa = Cryptokit.Hexa.encode () in
+  hexa#put_string path_hash;
+  hexa#finish;
+  let filename = hexa#get_string ^ ".xml" in
     Filename.concat cache.cache_dir filename
 
 let save_xml_entry cache resource entry =
@@ -657,7 +680,7 @@ let setup_db cache =
             last_update REAL NOT NULL \
          ); \
          CREATE INDEX IF NOT EXISTS path_index ON resource (path); \
-         CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path, changestamp); \
+         CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path); \
          CREATE INDEX IF NOT EXISTS resource_id_index ON resource (resource_id); \
          CREATE TABLE IF NOT EXISTS metadata ( \
             id INTEGER PRIMARY KEY, \
