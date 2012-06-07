@@ -74,7 +74,7 @@ let get_metadata () =
   let refresh_metadata () =
     Utils.log_message "Refreshing metadata...%!";
     let metadata = do_request go |> fst in
-    Utils.log_message "done\nUpdating db...%!";
+    Utils.log_message "done\nUpdating metadata in db...%!";
     Cache.Metadata.insert_metadata context.Context.cache metadata;
     Utils.log_message "done\nUpdating context...%!";
     context |> Context.metadata ^= Some metadata |> Context.set_ctx;
@@ -311,6 +311,38 @@ and get_resource path =
       | _ ->
           SessionM.return resource
     end
+
+let download_resource resource =
+  let context = Context.get_ctx () in
+  let cache = context.Context.cache in
+  let content_path = Cache.get_content_path cache resource in
+    match resource.Cache.Resource.state with
+        Cache.Resource.State.InSync ->
+          SessionM.return content_path
+      | Cache.Resource.State.ToDownload ->
+          let entry = Cache.load_xml_entry cache resource in
+          let download_link = entry
+            |. Document.Entry.content
+            |. GdataAtom.Content.src in
+          if download_link = "" then raise File_not_found;
+          let media_destination = GapiMediaResource.TargetFile content_path in
+          begin if Cache.Resource.is_document resource then
+            let config = context |. Context.config_lens in
+            let format = Cache.Resource.get_format resource config in
+              download_document
+                ~format
+                entry
+                media_destination
+          else
+            partial_download
+              download_link
+              media_destination
+          end >>
+          let updated_resource = resource
+            |> Cache.Resource.state ^= Cache.Resource.State.InSync in
+          Cache.Resource.update_resource cache updated_resource;
+          SessionM.return content_path
+      | _ -> raise File_not_found
 (* END Resources *)
 
 (* stat *)
@@ -324,15 +356,10 @@ let get_attr path =
       if Cache.Resource.is_folder resource then 2
       else 1 in
     let st_kind =
-        (* TODO?
-        | Some "document"
-        | Some "drawing"
-        | Some "form"
-        | Some "presentation"
-        | Some "spreadsheet" -> Unix.S_LNK *)
       if Cache.Resource.is_folder resource then Unix.S_DIR
       else Unix.S_REG in
     let config = context |. Context.config_lens in
+      (* TODO: check ACL to verify if the file is read-only *)
     let perm =
       if Cache.Resource.is_folder resource then 0o777
       else 0o666 in
@@ -342,6 +369,12 @@ let get_attr path =
     let st_perm = perm land mask in
     let st_size =
       if Cache.Resource.is_folder resource then f_bsize
+      else if Cache.Resource.is_document resource &&
+              config.Config.download_docs then
+        (* TODO: merge with get_resource? *)
+        let content_path = do_request (download_resource resource) |> fst in
+        let stat = Unix.LargeFile.stat content_path in
+          stat.Unix.LargeFile.st_size
       else resource |. Cache.Resource.size |. GapiLens.option_get
     in
       (* TODO: atime, ctime, mtime *)
@@ -436,30 +469,9 @@ let fopen path flags =
 
 (* read *)
 let read path buf offset file_descr =
-  let cache = Context.get_cache () in
   let go =
     get_resource path >>= fun resource ->
-    let content_path = Cache.get_content_path cache resource in
-    begin match resource.Cache.Resource.state with
-        Cache.Resource.State.InSync ->
-          SessionM.return content_path
-      | Cache.Resource.State.ToDownload ->
-          let entry = Cache.load_xml_entry cache resource in
-          let download_link = entry
-            |. Document.Entry.content
-            |. GdataAtom.Content.src in
-          let media_destination = GapiMediaResource.TargetFile content_path in
-          partial_download
-            download_link
-            media_destination >>
-          let updated_resource = resource
-            |> Cache.Resource.state ^= Cache.Resource.State.InSync in
-          Cache.Resource.update_resource cache updated_resource;
-            (* TODO:
-             * handle documents/spreadsheets/... *)
-          SessionM.return content_path
-      | _ -> raise File_not_found
-    end
+    download_resource resource
   in
 
   let content_path = do_request go |> fst in
