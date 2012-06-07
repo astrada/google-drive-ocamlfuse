@@ -14,6 +14,18 @@ type t = {
   umask : int;
   (* Sqlite3 busy handler timeout in milliseconds *)
   sqlite3_busy_timeout : int;
+  (* Specifies whether to download also Google Docs *)
+  download_docs : bool;
+  (* Text documents export format *)
+  document_format : string;
+  (* Drawings export format *)
+  drawing_format : string;
+  (* Forms export format *)
+  form_format : string;
+  (* Presentations export format *)
+  presentation_format : string;
+  (* Spreadsheets export format *)
+  spreadsheet_format : string;
 }
 
 let debug = {
@@ -36,6 +48,30 @@ let sqlite3_busy_timeout = {
   GapiLens.get = (fun x -> x.sqlite3_busy_timeout);
   GapiLens.set = (fun v x -> { x with sqlite3_busy_timeout = v })
 }
+let download_docs = {
+  GapiLens.get = (fun x -> x.download_docs);
+  GapiLens.set = (fun v x -> { x with download_docs = v })
+}
+let document_format = {
+  GapiLens.get = (fun x -> x.document_format);
+  GapiLens.set = (fun v x -> { x with document_format = v })
+}
+let drawing_format = {
+  GapiLens.get = (fun x -> x.drawing_format);
+  GapiLens.set = (fun v x -> { x with drawing_format = v })
+}
+let form_format = {
+  GapiLens.get = (fun x -> x.form_format);
+  GapiLens.set = (fun v x -> { x with form_format = v })
+}
+let presentation_format = {
+  GapiLens.get = (fun x -> x.presentation_format);
+  GapiLens.set = (fun v x -> { x with presentation_format = v })
+}
+let spreadsheet_format = {
+  GapiLens.get = (fun x -> x.spreadsheet_format);
+  GapiLens.set = (fun v x -> { x with spreadsheet_format = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -48,6 +84,12 @@ let default = {
   read_only = true;
   umask;
   sqlite3_busy_timeout = 500;
+  download_docs = false;
+  document_format = "odt";
+  drawing_format = "png";
+  form_format = "ods";
+  presentation_format = "pdf";
+  spreadsheet_format = "ods";
 }
 
 let default_debug = {
@@ -56,6 +98,12 @@ let default_debug = {
   read_only = true;
   umask;
   sqlite3_busy_timeout = 500;
+  download_docs = true;
+  document_format = "odt";
+  drawing_format = "png";
+  form_format = "ods";
+  presentation_format = "pdf";
+  spreadsheet_format = "ods";
 }
 
 let of_table table =
@@ -67,6 +115,17 @@ let of_table table =
       umask = get "umask" int_of_string default.umask;
       sqlite3_busy_timeout =
         get "sqlite3_busy_timeout" int_of_string default.sqlite3_busy_timeout;
+      download_docs =
+        get "download_docs" bool_of_string default.download_docs;
+      document_format =
+        get "document_format" Std.identity default.document_format;
+      drawing_format =
+        get "drawing_format" Std.identity default.drawing_format;
+      form_format = get "form_format" Std.identity default.form_format;
+      presentation_format =
+        get "presentation_format" Std.identity default.presentation_format;
+      spreadsheet_format =
+        get "spreadsheet_format" Std.identity default.spreadsheet_format;
     }
 
 let to_table data =
@@ -77,6 +136,12 @@ let to_table data =
     add "read_only" (data.read_only |> string_of_bool);
     add "umask" (data.umask |> Printf.sprintf "0o%03o");
     add "sqlite3_busy_timeout" (data.sqlite3_busy_timeout |> string_of_int);
+    add "download_docs" (data.download_docs |> string_of_bool);
+    add "document_format" data.document_format;
+    add "drawing_format" data.drawing_format;
+    add "form_format" data.form_format;
+    add "presentation_format" data.presentation_format;
+    add "spreadsheet_format" data.spreadsheet_format;
     table
 
 let debug_print out_ch start_time curl info_type info =
