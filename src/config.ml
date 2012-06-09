@@ -20,8 +20,6 @@ type t = {
   document_format : string;
   (* Drawings export format *)
   drawing_format : string;
-  (* Forms export format *)
-  form_format : string;
   (* Presentations export format *)
   presentation_format : string;
   (* Spreadsheets export format *)
@@ -60,10 +58,6 @@ let drawing_format = {
   GapiLens.get = (fun x -> x.drawing_format);
   GapiLens.set = (fun v x -> { x with drawing_format = v })
 }
-let form_format = {
-  GapiLens.get = (fun x -> x.form_format);
-  GapiLens.set = (fun v x -> { x with form_format = v })
-}
 let presentation_format = {
   GapiLens.get = (fun x -> x.presentation_format);
   GapiLens.set = (fun v x -> { x with presentation_format = v })
@@ -87,7 +81,6 @@ let default = {
   download_docs = false;
   document_format = "odt";
   drawing_format = "png";
-  form_format = "ods";
   presentation_format = "pdf";
   spreadsheet_format = "ods";
 }
@@ -101,7 +94,6 @@ let default_debug = {
   download_docs = true;
   document_format = "odt";
   drawing_format = "png";
-  form_format = "ods";
   presentation_format = "pdf";
   spreadsheet_format = "ods";
 }
@@ -121,7 +113,6 @@ let of_table table =
         get "document_format" Std.identity default.document_format;
       drawing_format =
         get "drawing_format" Std.identity default.drawing_format;
-      form_format = get "form_format" Std.identity default.form_format;
       presentation_format =
         get "presentation_format" Std.identity default.presentation_format;
       spreadsheet_format =
@@ -139,7 +130,6 @@ let to_table data =
     add "download_docs" (data.download_docs |> string_of_bool);
     add "document_format" data.document_format;
     add "drawing_format" data.drawing_format;
-    add "form_format" data.form_format;
     add "presentation_format" data.presentation_format;
     add "spreadsheet_format" data.spreadsheet_format;
     table
