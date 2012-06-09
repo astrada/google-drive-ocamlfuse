@@ -178,6 +178,18 @@ let setup_application debug fs_label mountpoint =
 (* END setup *)
 
 (* FUSE bindings *)
+let handle_exception e label param =
+  match e with
+      Docs.File_not_found ->
+        log_message "File not found: %s %s\n%!" label param;
+        raise (Unix.Unix_error (Unix.ENOENT, label, param))
+    | Docs.Permission_denied ->
+        log_message "Permission denied: %s %s\n%!" label param;
+        raise (Unix.Unix_error (Unix.EACCES, label, param))
+    | e ->
+        Utils.log_exception e;
+        raise (Unix.Unix_error (Unix.EBUSY, label, param))
+
 let init_filesystem () =
   log_message "init_filesystem\n%!"
 
@@ -193,21 +205,14 @@ let getattr path =
   log_message "getattr %s\n%!" path;
   try
     Docs.get_attr path
-  with Docs.File_not_found ->
-        log_message "File not found %s\n%!" path;
-        raise (Unix.Unix_error (Unix.ENOENT, "stat", path))
-    | e ->
-        Utils.log_exception e;
-        raise (Unix.Unix_error (Unix.EBUSY, "stat", path))
+  with e -> handle_exception e "stat" path
 
 let readdir path hnd =
   log_message "readdir %s %d\n%!" path hnd;
   let dir_list =
     try
       Docs.read_dir path
-    with e ->
-      Utils.log_exception e;
-      raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
+    with e -> handle_exception e "readdir" path
   in
     Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
 
@@ -215,26 +220,13 @@ let fopen path flags =
   log_message "fopen %s %s\n%!" path (Utils.flags_to_string flags);
   try
     Docs.fopen path flags
-  with Docs.File_not_found ->
-        log_message "File not found %s\n%!" path;
-        raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
-    | Docs.Permission_denied ->
-        log_message "Permission denied: fopen %s\n%!" path;
-        raise (Unix.Unix_error (Unix.EACCES, "fopen", path))
-    | e ->
-        Utils.log_exception e;
-        raise (Unix.Unix_error (Unix.EBUSY, "fopen", path))
+  with e -> handle_exception e "fopen" path
 
 let read path buf offset file_descr =
   log_message "read %s buf %Ld %d\n%!" path offset file_descr;
   try
     Docs.read path buf offset file_descr
-  with Docs.File_not_found ->
-        log_message "File not found %s\n%!" path;
-        raise (Unix.Unix_error (Unix.ENOENT, "read", path))
-    | e ->
-        Utils.log_exception e;
-        raise (Unix.Unix_error (Unix.EBUSY, "read", path))
+  with e -> handle_exception e "read" path
 
 let start_filesystem mountpoint fuse_args =
   log_message "Starting filesystem %s\n%!" mountpoint;
