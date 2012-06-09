@@ -140,19 +140,39 @@ struct
   let prepare_update_stmt db =
     let sql =
       "UPDATE resource \
-        SET \
-          resource_id = :resource_id, \
-          kind = :kind, \
-          md5_checksum = :md5_checksum, \
-          size = :size, \
-          last_viewed = :last_viewed, \
-          last_modified = :last_modified, \
-          parent_path = :parent_path, \
-          path = :path, \
-          state = :state, \
-          changestamp = :changestamp, \
-          last_update = :last_update \
-        WHERE id = :id;"
+       SET \
+         resource_id = :resource_id, \
+         kind = :kind, \
+         md5_checksum = :md5_checksum, \
+         size = :size, \
+         last_viewed = :last_viewed, \
+         last_modified = :last_modified, \
+         parent_path = :parent_path, \
+         path = :path, \
+         state = :state, \
+         changestamp = :changestamp, \
+         last_update = :last_update \
+       WHERE id = :id;"
+    in
+      Sqlite3.prepare db sql
+
+  let prepare_update_all_changestamps db =
+    let sql =
+      "UPDATE resource \
+       SET changestamp = :changestamp, \
+         last_update = :last_update
+       WHERE state <> 'NotFound'"
+    in
+      Sqlite3.prepare db sql
+
+  let prepare_invalidate_stmt db =
+    let sql =
+      "UPDATE resource \
+       SET \
+         state = 'ToDownload', \
+         changestamp = :changestamp, \
+         last_update = :last_update \
+       WHERE id = :id;"
     in
       Sqlite3.prepare db sql
 
@@ -191,6 +211,26 @@ struct
          last_update \
        FROM resource \
        WHERE path = :path;"
+    in
+      Sqlite3.prepare db sql
+
+  let prepare_select_with_resource_id_stmt db =
+    let sql =
+      "SELECT \
+         id, \
+         resource_id, \
+         kind, \
+         md5_checksum, \
+         size, \
+         last_viewed, \
+         last_modified, \
+         parent_path, \
+         path, \
+         state, \
+         changestamp, \
+         last_update \
+       FROM resource \
+       WHERE resource_id = :resource_id;"
     in
       Sqlite3.prepare db sql
 
@@ -472,6 +512,25 @@ struct
          finalize_stmt stmt;
          results)
 
+  let invalidate_resources cache ids changestamp =
+    with_transaction cache
+      (fun db ->
+         let all_stmt = ResourceStmts.prepare_update_all_changestamps db in
+         let stmt = ResourceStmts.prepare_invalidate_stmt db in
+         bind_int all_stmt ":changestamp" (Some changestamp);
+         bind_float all_stmt ":last_update" (Some (Unix.gettimeofday ()));
+         final_step all_stmt;
+         List.iter
+           (fun id ->
+              reset_stmt stmt;
+              bind_int stmt ":changestamp" (Some changestamp);
+              bind_float stmt ":last_update" (Some (Unix.gettimeofday ()));
+              bind_int stmt ":id" (Some id);
+              final_step stmt)
+           ids;
+         finalize_stmt all_stmt;
+         finalize_stmt stmt)
+
   let row_to_resource row_data =
     { id = row_data.(0) |> data_to_int64 |> Option.get;
       resource_id = row_data.(1) |> data_to_string;
@@ -487,17 +546,25 @@ struct
       last_update = row_data.(11) |> data_to_float |> Option.get;
     }
 
-  let select_resource_with_path cache path =
+  let select_resource cache prepare bind =
     with_db cache
       (fun db ->
-         let stmt = ResourceStmts.prepare_select_with_path_stmt db in
+         let stmt = prepare db in
          let result =
-           select_first_row stmt
-             (fun stmt -> bind_text stmt ":path" (Some path))
-             row_to_resource
+           select_first_row stmt bind row_to_resource
          in
            finalize_stmt stmt;
            result)
+
+  let select_resource_with_path cache path =
+    select_resource cache
+      ResourceStmts.prepare_select_with_path_stmt
+      (fun stmt -> bind_text stmt ":path" (Some path))
+
+  let select_resource_with_resource_id cache resource_id =
+    select_resource cache
+      ResourceStmts.prepare_select_with_resource_id_stmt
+      (fun stmt -> bind_text stmt ":resource_id" (Some resource_id))
 
   let select_resources_with_parent_path cache parent_path =
     with_db cache
@@ -521,7 +588,6 @@ struct
     match resource.kind with
         Some "document"
       | Some "drawing"
-      | Some "form"
       | Some "presentation"
       | Some "spreadsheet" -> true
       | _ -> false
@@ -533,7 +599,6 @@ struct
     match resource.kind with
         Some "document" -> config.Config.document_format
       | Some "drawing" -> config.Config.drawing_format
-      | Some "form" -> config.Config.form_format
       | Some "presentation" -> config.Config.presentation_format
       | Some "spreadsheet" -> config.Config.spreadsheet_format
       | _ -> "html"
@@ -641,18 +706,17 @@ let save_xml_entry cache resource entry =
       close_out ch;
       raise e
 
+let xml_entry_exists cache resource =
+  let path = get_xml_entry_path cache resource in
+    Sys.file_exists path
+
 let load_xml_entry cache resource =
   let path = get_xml_entry_path cache resource in
-  let ch = open_in path in
-    try
-      let entry = GdataUtils.parse_xml
-                    (fun () -> input_byte ch)
-                    GdataDocumentsV3Model.Document.parse_entry in
-        close_in ch;
-        entry
-    with e ->
-      close_in ch;
-      raise e
+    Utils.with_in_channel path
+      (fun ch ->
+         GdataUtils.parse_xml
+           (fun () -> input_byte ch)
+           GdataDocumentsV3Model.Document.parse_entry)
 (* END Resource XML entry *)
 
 (* Resource content *)
