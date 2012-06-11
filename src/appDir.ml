@@ -4,7 +4,8 @@ type t = {
   app_dir : string;
   config_path : string;
   state_path : string;
-  log_path : string;
+  app_log_path : string;
+  curl_log_path : string;
   cache_dir : string;
 }
 
@@ -28,9 +29,13 @@ let state_path = {
   GapiLens.get = (fun x -> x.state_path);
   GapiLens.set = (fun v x -> { x with state_path = v })
 }
-let log_path = {
-  GapiLens.get = (fun x -> x.log_path);
-  GapiLens.set = (fun v x -> { x with log_path = v })
+let app_log_path = {
+  GapiLens.get = (fun x -> x.app_log_path);
+  GapiLens.set = (fun v x -> { x with app_log_path = v })
+}
+let curl_log_path = {
+  GapiLens.get = (fun x -> x.curl_log_path);
+  GapiLens.set = (fun v x -> { x with curl_log_path = v })
 }
 let cache_dir = {
   GapiLens.get = (fun x -> x.cache_dir);
@@ -45,7 +50,8 @@ let create fs_label =
       app_dir;
       config_path = Filename.concat app_dir "config";
       state_path = Filename.concat app_dir "state";
-      log_path = Filename.concat app_dir "curl.log";
+      app_log_path = Filename.concat app_dir "gdfuse.log";
+      curl_log_path = Filename.concat app_dir "curl.log";
       cache_dir = Filename.concat app_dir "cache";
     }
 

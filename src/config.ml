@@ -151,7 +151,7 @@ let debug_print out_ch start_time curl info_type info =
 let create_gapi_config config app_dir =
   let gapi_config =
     if config.debug then
-      let out_ch = open_out (app_dir |. AppDir.log_path) in
+      let out_ch = open_out (app_dir |. AppDir.curl_log_path) in
       let debug_function = debug_print out_ch (Unix.gettimeofday ()) in
         GapiConfig.default_debug
         |> GapiConfig.debug ^= Some (GapiConfig.Custom debug_function)
