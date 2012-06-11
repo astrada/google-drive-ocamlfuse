@@ -8,9 +8,6 @@ let client_id = "564921029129.apps.googleusercontent.com"
 let redirect_uri = GaeProxy.gae_proxy_url ^ "/oauth2callback"
 let scope = [GdataDocumentsV3Service.all_scopes]
 
-(* Logging *)
-let log_message = Utils.log_message
-
 (* Authorization *)
 let get_authorization_url request_id =
   GapiOAuth2.authorization_code_url
@@ -23,14 +20,15 @@ let get_authorization_url request_id =
 let start_browser request_id =
   let start_process browser url =
     let command = Printf.sprintf "%s \"%s\"" browser url in
-    let () = log_message "Starting web browser with command: %s..." command in
+    let () = Utils.log_message "Starting web browser with command: %s..."
+               command in
     let ch = Unix.open_process_in command in
     let status = Unix.close_process_in ch in
       if status = (Unix.WEXITED 0) then begin
-        log_message "done\n%!";
+        Utils.log_message "done\n%!";
         true
       end else begin
-        log_message "fail\n%!";
+        Utils.log_message "fail\n%!";
         false
       end
   in
@@ -73,12 +71,12 @@ let create_default_config_store debug app_dir =
 let get_config_store debug app_dir =
   let config_path = app_dir |. AppDir.config_path in
     try
-      log_message "Loading configuration from %s..." config_path;
+      Utils.log_with_header "Loading configuration from %s..." config_path;
       let config_store = Context.ConfigFileStore.load config_path in
-        log_message "done\n";
+        Utils.log_message "done\n";
         config_store
     with KeyValueStore.File_not_found ->
-      log_message "not found.\n";
+      Utils.log_message "not found.\n";
       create_default_config_store debug app_dir
 (* END Application configuration *)
 
@@ -100,18 +98,16 @@ let create_empty_state_store app_dir =
 let get_state_store app_dir =
   let state_path = app_dir |. AppDir.state_path in
     try
-      log_message "Loading application state from %s..." state_path;
+      Utils.log_with_header "Loading application state from %s..." state_path;
       let state_store = Context.StateFileStore.load state_path in
-        log_message "done\n";
+        Utils.log_message "done\n";
         state_store
     with KeyValueStore.File_not_found ->
-      log_message "not found.\n";
+      Utils.log_message "not found.\n";
       create_empty_state_store app_dir
 (* END Application state *)
 
 let setup_application debug fs_label mountpoint =
-  if not (Sys.file_exists mountpoint && Sys.is_directory mountpoint) then
-    failwith ("Mountpoint " ^ mountpoint ^ " should be an existing directory.");
   let get_auth_tokens_from_server () =
     let context = Context.get_ctx () in
     let request_id =
@@ -127,7 +123,8 @@ let setup_application debug fs_label mountpoint =
         GaeProxy.start_server_polling ()
       with
           GaeProxy.ServerError e ->
-            log_message "Removing invalid request_id=%s\n%!" request_id;
+            Utils.log_with_header "Removing invalid request_id=%s\n%!"
+              request_id;
             context
               |> Context.request_id_lens ^= ""
               |> Context.save_state_from_context;
@@ -139,9 +136,14 @@ let setup_application debug fs_label mountpoint =
             exit 1
   in
 
-  log_message "Setting up %s filesystem...\n" fs_label;
+  Utils.log_message "Starting application setup (label=%s).\n%!" fs_label;
   let app_dir = AppDir.create fs_label in
   let () = AppDir.create_directories app_dir in
+  let app_log_path = app_dir |. AppDir.app_log_path in
+  Utils.log_message "Opening log file: %s\n%!" app_log_path;
+  let log_channel = open_out app_log_path in
+  Utils.log_channel := log_channel;
+  Utils.log_with_header "Setting up %s filesystem...\n" fs_label;
   let config_store = get_config_store debug app_dir in
   let config_store = config_store
     |> Context.ConfigFileStore.data
@@ -151,14 +153,14 @@ let setup_application debug fs_label mountpoint =
     Config.create_gapi_config
       config
       app_dir in
-  log_message "Setting up cache db...";
+  Utils.log_message "Setting up cache db...";
   let cache = Cache.create_cache app_dir config in
   Cache.setup_db cache;
-  log_message "done\n";
+  Utils.log_message "done\n";
   let state_store = get_state_store app_dir in
-  log_message "Setting up CURL...";
+  Utils.log_message "Setting up CURL...";
   let curl_state = GapiCurl.global_init () in
-  log_message "done\n";
+  Utils.log_message "done\n";
   let context = {
     Context.app_dir;
     config_store;
@@ -174,27 +176,27 @@ let setup_application debug fs_label mountpoint =
     if refresh_token = "" then
       get_auth_tokens_from_server ()
     else
-      log_message "Refresh token already present.\n%!"
+      Utils.log_message "Refresh token already present.\n%!"
 (* END setup *)
 
 (* FUSE bindings *)
 let handle_exception e label param =
   match e with
       Docs.File_not_found ->
-        log_message "File not found: %s %s\n%!" label param;
+        Utils.log_message "File not found: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.ENOENT, label, param))
     | Docs.Permission_denied ->
-        log_message "Permission denied: %s %s\n%!" label param;
+        Utils.log_message "Permission denied: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.EACCES, label, param))
     | e ->
         Utils.log_exception e;
         raise (Unix.Unix_error (Unix.EBUSY, label, param))
 
 let init_filesystem () =
-  log_message "init_filesystem\n%!"
+  Utils.log_with_header "init_filesystem\n%!"
 
 let statfs path =
-  log_message "statfs %s\n%!" path;
+  Utils.log_with_header "statfs %s\n%!" path;
   try
     Docs.statfs ()
   with e ->
@@ -202,13 +204,13 @@ let statfs path =
     raise (Unix.Unix_error (Unix.EBUSY, "statfs", path))
 
 let getattr path =
-  log_message "getattr %s\n%!" path;
+  Utils.log_with_header "getattr %s\n%!" path;
   try
     Docs.get_attr path
   with e -> handle_exception e "stat" path
 
 let readdir path hnd =
-  log_message "readdir %s %d\n%!" path hnd;
+  Utils.log_with_header "readdir %s %d\n%!" path hnd;
   let dir_list =
     try
       Docs.read_dir path
@@ -217,19 +219,21 @@ let readdir path hnd =
     Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
 
 let fopen path flags =
-  log_message "fopen %s %s\n%!" path (Utils.flags_to_string flags);
+  Utils.log_with_header "fopen %s %s\n%!" path (Utils.flags_to_string flags);
   try
     Docs.fopen path flags
   with e -> handle_exception e "fopen" path
 
 let read path buf offset file_descr =
-  log_message "read %s buf %Ld %d\n%!" path offset file_descr;
+  Utils.log_with_header "read %s buf %Ld %d\n%!" path offset file_descr;
   try
     Docs.read path buf offset file_descr
   with e -> handle_exception e "read" path
 
 let start_filesystem mountpoint fuse_args =
-  log_message "Starting filesystem %s\n%!" mountpoint;
+  if not (Sys.file_exists mountpoint && Sys.is_directory mountpoint) then
+    failwith ("Mountpoint " ^ mountpoint ^ " should be an existing directory.");
+  Utils.log_with_header "Starting filesystem %s\n%!" mountpoint;
   let fuse_argv =
     Sys.argv.(0) :: (fuse_args @ [mountpoint])
     |> Array.of_list
@@ -324,29 +328,27 @@ let () =
       arg_specs
       (fun s -> mountpoint := s)
       usage in
-  let () =
-    if !mountpoint = "" then begin
-      prerr_endline "You must specify a mountpoint.";
-      prerr_endline usage;
-      exit 1
-    end in
   let quit error_message =
     Printf.eprintf "Error: %s\n" error_message;
     exit 1
   in
 
     try
-      setup_application !debug !fs_label !mountpoint;
-      at_exit
-        (fun () ->
-           log_message "Exiting.\n";
-           let context = Context.get_ctx () in
-           log_message "CURL cleanup...";
-           ignore (GapiCurl.global_cleanup context.Context.curl_state);
-           log_message "done\nClearing context...";
-           Context.clear_ctx ();
-           log_message "done\n%!");
-      start_filesystem !mountpoint !fuse_args
+      if !mountpoint = "" then begin
+        setup_application !debug !fs_label ".";
+      end else begin
+        setup_application !debug !fs_label !mountpoint;
+        at_exit
+          (fun () ->
+             Utils.log_with_header "Exiting.\n";
+             let context = Context.get_ctx () in
+             Utils.log_message "CURL cleanup...";
+             ignore (GapiCurl.global_cleanup context.Context.curl_state);
+             Utils.log_message "done\nClearing context...";
+             Context.clear_ctx ();
+             Utils.log_message "done\n%!");
+        start_filesystem !mountpoint !fuse_args
+      end
     with
         Failure error_message -> quit error_message
       | e ->
