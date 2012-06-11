@@ -3,7 +3,7 @@ open GapiLens.Infix
 
 exception ServerError of string
 
-let gae_proxy_url = "http://localhost:8080"
+let gae_proxy_url = "https://gd-ocaml-auth.appspot.com"
 
 let gae_proxy_request page query_string =
   let context = Context.get_ctx () in
