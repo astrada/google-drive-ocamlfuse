@@ -19,13 +19,24 @@ let get_thread_id () =
   Thread.self () |> Thread.id
 
 (* Logging *)
+let start_time = Unix.gettimeofday ()
 let verbose = ref false
+let log_channel = ref stdout
 
 let log_message format =
   if !verbose then
-    Printf.printf format
+    Printf.fprintf !log_channel format
   else
-    Printf.ifprintf stdout format
+    Printf.ifprintf !log_channel format
+
+let log_with_header format =
+  if !verbose then begin
+    let elapsed = Unix.gettimeofday () -. start_time in
+    let thread_id = Thread.id (Thread.self ()) in
+    Printf.fprintf !log_channel "[%f] TID=%d: " elapsed thread_id;
+    Printf.fprintf !log_channel format
+  end else
+    Printf.ifprintf !log_channel format
 
 let log_exception e =
   let message = Printexc.to_string e in
