@@ -503,6 +503,7 @@ let get_attr path =
       (* TODO: check ACL to verify if the file is read-only *)
       let perm =
         if Cache.Resource.is_folder resource then 0o777
+        else if Cache.Resource.is_document resource then 0o444
         else 0o666 in
       let mask =
         lnot config.Config.umask
