@@ -57,6 +57,7 @@ let changestamp_limit = 50L
 let create_resource path changestamp =
   { Cache.Resource.id = 0L;
     resource_id = None;
+    remote_id = None;
     kind = None;
     md5_checksum = None;
     size = None;
@@ -89,11 +90,13 @@ let update_resource_from_entry resource entry =
           (entry |. Document.Entry.categories)
       in
         Some (category |. GdataAtom.Category.label)
-    with Not_found -> None
-  in
+    with Not_found -> None in
+  let resource_id = entry |. Document.Entry.resourceId in
     { resource with
           Cache.Resource.resource_id =
-            Some (entry |. Document.Entry.resourceId);
+            Some resource_id;
+          Cache.Resource.remote_id =
+            Some (Cache.Resource.get_remote_id resource_id);
           kind;
           md5_checksum = Some (entry |. Document.Entry.md5Checksum);
           size = Some (entry |. Document.Entry.size);
@@ -109,16 +112,15 @@ let update_resource_from_entry resource entry =
 let folder_regexp = Str.regexp (Str.quote "folder:")
 
 let get_parent_resource_id entry =
-  let href =
-    entry |. Document.Entry.links
-    |> find_url `Parent
-    |> Netencoding.Url.decode
-  in
-    try
-      let pos = Str.search_forward folder_regexp href 0 in
-      let resource_id = Str.string_after href pos in
-        Some resource_id
-    with Not_found -> None
+  try
+    let href =
+      entry |. Document.Entry.links
+      |> find_url `Parent
+      |> Netencoding.Url.decode in
+    let pos = Str.search_forward folder_regexp href 0 in
+    let resource_id = Str.string_after href pos in
+      Some resource_id
+  with Not_found -> None
 
 let insert_resource_into_cache cache resource entry =
   let resource = update_resource_from_entry resource entry in
@@ -209,7 +211,7 @@ let get_metadata () =
     in
 
     let get_id_to_update entry =
-      let rec get_resource_from_resource_id resource_id =
+      let rec get_id_from_resource_id resource_id =
         let selected_resource =
           Cache.Resource.select_resource_with_resource_id cache resource_id
         in
@@ -217,10 +219,23 @@ let get_metadata () =
               None ->
                 let parent_resource_id = get_parent_resource_id entry in
                 let rid = Option.default root_folder_id parent_resource_id in
-                  get_resource_from_resource_id rid
+                  get_id_from_resource_id rid
             | Some r -> r.Cache.Resource.id
       in
-        get_resource_from_resource_id entry.Document.Entry.resourceId
+
+      let id = get_id_from_resource_id entry.Document.Entry.resourceId in
+        Some id
+    in
+
+    let get_resource_to_remove entry =
+      let resource_id = entry.Document.Entry.resourceId in
+      let remote_id = Cache.Resource.get_remote_id resource_id in
+        Cache.Resource.select_resource_with_remote_id cache remote_id
+    in
+
+    let get_resource_to_delete entry =
+      Cache.Resource.select_resource_with_resource_id cache
+        entry.Document.Entry.resourceId
     in
 
     let remaining_changestamps =
@@ -237,19 +252,41 @@ let get_metadata () =
           let changestamp =
             new_metadata.Cache.Metadata.largest_changestamp in
           let changed_document_entries = do_request request_changes |> fst in
-          Utils.log_message "Updating resource cache...%!";
-          let ids =
-            List.fold_left
-              (fun ids entry ->
-                 let id = get_id_to_update entry in
-                   if not (List.mem id ids) then
-                     id :: ids
-                   else ids)
-              []
-              changed_document_entries
+          let update_resource_cache filter_entries map_entry update_cache =
+            let filtered_entries =
+              List.filter filter_entries changed_document_entries in
+            let xs =
+              List.fold_left
+                (fun xs entry ->
+                   match map_entry entry with
+                       None -> xs
+                     | Some x ->
+                         if not (List.mem x xs) then
+                           x :: xs
+                         else xs)
+                []
+                filtered_entries in
+            update_cache cache xs;
           in
-            Utils.log_message "done\n%!";
-            Cache.Resource.invalidate_resources cache ids changestamp
+
+          Utils.log_message "Updating resource cache...%!";
+          update_resource_cache
+            (fun entry -> not entry.Document.Entry.removed &&
+                          not entry.Document.Entry.deleted)
+            get_id_to_update
+            (fun cache ids ->
+               Cache.Resource.invalidate_resources cache ids changestamp);
+          Utils.log_message "done\nRemoving permanently deleted resources...%!";
+          update_resource_cache
+            (fun entry -> entry.Document.Entry.removed)
+            get_resource_to_remove
+            Cache.delete_resources;
+          Utils.log_message "done\nRemoving trashed resources...%!";
+          update_resource_cache
+            (fun entry -> entry.Document.Entry.deleted)
+            get_resource_to_delete
+            Cache.delete_resources;
+          Utils.log_message "done\n%!";
   in
 
   let refresh_metadata () =
@@ -374,21 +411,20 @@ and get_resource path =
   in
 
   let refresh_resource resource cache =
-    begin
-      if Cache.xml_entry_exists cache resource then begin
-        Utils.log_message "Loading xml entry id=%Ld...%!"
-          resource.Cache.Resource.id;
-        let entry = Cache.load_xml_entry cache resource in
-        Utils.log_message "done\nRefreshing entry from server...%!";
-        refresh_document entry >>= fun entry ->
-        SessionM.return (Some entry)
-      end else if Option.is_some resource.Cache.Resource.resource_id then begin
-        let resource_id = resource.Cache.Resource.resource_id |> Option.get in
-        Utils.log_message "Getting entry from server (id=%s)...%!" resource_id;
-        get_document resource_id >>= fun entry ->
-        SessionM.return (Some entry)
-      end else
-        SessionM.return None
+    begin if Cache.xml_entry_exists cache resource then begin
+      Utils.log_message "Loading xml entry id=%Ld...%!"
+        resource.Cache.Resource.id;
+      let entry = Cache.load_xml_entry cache resource in
+      Utils.log_message "done\nRefreshing entry from server...%!";
+      refresh_document entry >>= fun entry ->
+      SessionM.return (Some entry)
+    end else if Option.is_some resource.Cache.Resource.resource_id then begin
+      let resource_id = resource.Cache.Resource.resource_id |> Option.get in
+      Utils.log_message "Getting entry from server (id=%s)...%!" resource_id;
+      get_document resource_id >>= fun entry ->
+      SessionM.return (Some entry)
+    end else
+      SessionM.return None
     end >>= fun refreshed_entry ->
     Utils.log_message "done\n%!";
     match refreshed_entry with
@@ -425,9 +461,15 @@ and get_resource path =
     end
 
 let download_resource resource =
+  (* TODO: use md5_checksum to verify content when state=ToDownload *)
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
   let content_path = Cache.get_content_path cache resource in
+  let create_empty_file () =
+    Utils.log_message "Creating resource without content (path=%s)...\n%!"
+      content_path;
+    close_out (open_out content_path);
+    SessionM.return () in
   let do_download () =
     Utils.log_message "Downloading resource (id=%Ld)...%!"
       resource.Cache.Resource.id;
@@ -435,20 +477,25 @@ let download_resource resource =
     let download_link = entry
       |. Document.Entry.content
       |. GdataAtom.Content.src in
-    if download_link = "" then raise File_not_found;
-    let media_destination = GapiMediaResource.TargetFile content_path in
-    begin if Cache.Resource.is_document resource then
-      let config = context |. Context.config_lens in
-      let format = Cache.Resource.get_format resource config in
-      if format = "" then raise File_not_found;
-      download_document
-        ~format
-        entry
-        media_destination
+    begin if download_link <> "" then
+      let media_destination = GapiMediaResource.TargetFile content_path in
+      begin if Cache.Resource.is_document resource then
+        let config = context |. Context.config_lens in
+        let format = Cache.Resource.get_format resource config in
+        if format <> "" then
+          download_document
+            ~format
+            entry
+            media_destination
+        else
+          create_empty_file ()
+      else
+        partial_download
+          download_link
+          media_destination
+      end
     else
-      partial_download
-        download_link
-        media_destination
+      create_empty_file ()
     end >>
     let updated_resource = resource
       |> Cache.Resource.state ^= Cache.Resource.State.InSync in
@@ -475,7 +522,7 @@ let get_attr path =
   let request_resource =
     get_resource path >>= fun resource ->
     begin if Cache.Resource.is_document resource &&
-       config.Config.download_docs then
+             config.Config.download_docs then
       try
         download_resource resource
       with File_not_found ->

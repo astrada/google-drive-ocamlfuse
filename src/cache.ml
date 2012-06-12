@@ -110,6 +110,7 @@ struct
     let sql =
       "INSERT INTO resource ( \
          resource_id, \
+         remote_id, \
          kind, \
          md5_checksum, \
          size, \
@@ -123,6 +124,7 @@ struct
        ) \
        VALUES ( \
          :resource_id, \
+         :remote_id, \
          :kind, \
          :md5_checksum, \
          :size, \
@@ -142,6 +144,7 @@ struct
       "UPDATE resource \
        SET \
          resource_id = :resource_id, \
+         remote_id = :remote_id, \
          kind = :kind, \
          md5_checksum = :md5_checksum, \
          size = :size, \
@@ -159,8 +162,7 @@ struct
   let prepare_update_all_changestamps db =
     let sql =
       "UPDATE resource \
-       SET changestamp = :changestamp, \
-         last_update = :last_update
+       SET changestamp = :changestamp \
        WHERE state <> 'NotFound'"
     in
       Sqlite3.prepare db sql
@@ -170,8 +172,7 @@ struct
       "UPDATE resource \
        SET \
          state = 'ToDownload', \
-         changestamp = :changestamp, \
-         last_update = :last_update \
+         changestamp = :changestamp \
        WHERE id = :id;"
     in
       Sqlite3.prepare db sql
@@ -199,6 +200,7 @@ struct
       "SELECT \
          id, \
          resource_id, \
+         remote_id, \
          kind, \
          md5_checksum, \
          size, \
@@ -219,6 +221,7 @@ struct
       "SELECT \
          id, \
          resource_id, \
+         remote_id, \
          kind, \
          md5_checksum, \
          size, \
@@ -234,11 +237,33 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_select_with_remote_id_stmt db =
+    let sql =
+      "SELECT \
+         id, \
+         resource_id, \
+         remote_id, \
+         kind, \
+         md5_checksum, \
+         size, \
+         last_viewed, \
+         last_modified, \
+         parent_path, \
+         path, \
+         state, \
+         changestamp, \
+         last_update \
+       FROM resource \
+       WHERE remote_id = :remote_id;"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_select_with_parent_path_stmt db =
     let sql =
       "SELECT \
          id, \
          resource_id, \
+         remote_id, \
          kind, \
          md5_checksum, \
          size, \
@@ -381,6 +406,7 @@ struct
     id : int64;
     (* remote data *)
     resource_id : string option;
+    remote_id : string option;
     kind : string option;
     md5_checksum : string option;
     size : int64 option;
@@ -401,6 +427,10 @@ struct
   let resource_id = {
     GapiLens.get = (fun x -> x.resource_id);
     GapiLens.set = (fun v x -> { x with resource_id = v })
+  }
+  let remote_id = {
+    GapiLens.get = (fun x -> x.remote_id);
+    GapiLens.set = (fun v x -> { x with remote_id = v })
   }
   let kind = {
     GapiLens.get = (fun x -> x.kind);
@@ -443,9 +473,14 @@ struct
     GapiLens.set = (fun v x -> { x with last_update = v })
   }
 
+  let get_remote_id resource_id =
+    let pos = String.index resource_id ':' in
+      Str.string_after resource_id (pos + 1)
+
   (* Queries *)
   let bind_resource_parameters stmt resource =
     bind_text stmt ":resource_id" resource.resource_id;
+    bind_text stmt ":remote_id" resource.remote_id;
     bind_text stmt ":kind" resource.kind;
     bind_text stmt ":md5_checksum" resource.md5_checksum;
     bind_int stmt ":size" resource.size;
@@ -480,31 +515,40 @@ struct
            final_step stmt;
            finalize_stmt stmt)
 
+  let _delete_resource stmt id =
+    reset_stmt stmt;
+    bind_int stmt ":id" (Some id);
+    final_step stmt
+
   let delete_resource cache resource =
     with_db cache
       (fun db ->
          let stmt = ResourceStmts.prepare_delete_stmt db in
-           bind_int stmt ":id" (Some resource.id);
-           final_step stmt;
+           _delete_resource stmt resource.id;
            finalize_stmt stmt)
 
-  let _delete_resources db parent_path changestamp =
+  let _delete_resources_with_parent_path db parent_path changestamp =
     let stmt = ResourceStmts.prepare_delete_with_parent_path_stmt db in
       bind_text stmt ":parent_path" (Some parent_path);
       bind_int stmt ":changestamp" (Some changestamp);
       final_step stmt;
       finalize_stmt stmt
 
-  let delete_resources cache parent_path changestamp =
-    with_db cache
+  let delete_resources cache resources =
+    with_transaction cache
       (fun db ->
-         _delete_resources db parent_path changestamp)
+         let stmt = ResourceStmts.prepare_delete_stmt db in
+           List.iter
+             (fun resource ->
+                _delete_resource stmt resource.id)
+             resources;
+           finalize_stmt stmt)
 
   let insert_resources cache resources parent_path changestamp =
     with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_insert_stmt db in
-         _delete_resources db parent_path changestamp;
+         _delete_resources_with_parent_path db parent_path changestamp;
          let results =
            List.map
              (step_insert_resource db stmt)
@@ -518,13 +562,11 @@ struct
          let all_stmt = ResourceStmts.prepare_update_all_changestamps db in
          let stmt = ResourceStmts.prepare_invalidate_stmt db in
          bind_int all_stmt ":changestamp" (Some changestamp);
-         bind_float all_stmt ":last_update" (Some (Unix.gettimeofday ()));
          final_step all_stmt;
          List.iter
            (fun id ->
               reset_stmt stmt;
               bind_int stmt ":changestamp" (Some changestamp);
-              bind_float stmt ":last_update" (Some (Unix.gettimeofday ()));
               bind_int stmt ":id" (Some id);
               final_step stmt)
            ids;
@@ -534,16 +576,17 @@ struct
   let row_to_resource row_data =
     { id = row_data.(0) |> data_to_int64 |> Option.get;
       resource_id = row_data.(1) |> data_to_string;
-      kind = row_data.(2) |> data_to_string;
-      md5_checksum = row_data.(3) |> data_to_string;
-      size = row_data.(4) |> data_to_int64;
-      last_viewed = row_data.(5) |> data_to_float;
-      last_modified = row_data.(6) |> data_to_float;
-      parent_path = row_data.(7) |> data_to_string |> Option.get;
-      path = row_data.(8) |> data_to_string |> Option.get;
-      state = row_data.(9) |> data_to_string |> Option.get |> State.of_string;
-      changestamp = row_data.(10) |> data_to_int64 |> Option.get;
-      last_update = row_data.(11) |> data_to_float |> Option.get;
+      remote_id = row_data.(2) |> data_to_string;
+      kind = row_data.(3) |> data_to_string;
+      md5_checksum = row_data.(4) |> data_to_string;
+      size = row_data.(5) |> data_to_int64;
+      last_viewed = row_data.(6) |> data_to_float;
+      last_modified = row_data.(7) |> data_to_float;
+      parent_path = row_data.(8) |> data_to_string |> Option.get;
+      path = row_data.(9) |> data_to_string |> Option.get;
+      state = row_data.(10) |> data_to_string |> Option.get |> State.of_string;
+      changestamp = row_data.(11) |> data_to_int64 |> Option.get;
+      last_update = row_data.(12) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -565,6 +608,11 @@ struct
     select_resource cache
       ResourceStmts.prepare_select_with_resource_id_stmt
       (fun stmt -> bind_text stmt ":resource_id" (Some resource_id))
+
+  let select_resource_with_remote_id cache remote_id =
+    select_resource cache
+      ResourceStmts.prepare_select_with_remote_id_stmt
+      (fun stmt -> bind_text stmt ":remote_id" (Some remote_id))
 
   let select_resources_with_parent_path cache parent_path =
     with_db cache
@@ -724,14 +772,31 @@ let get_content_path cache resource =
   Filename.concat cache.cache_dir (Option.get resource.Resource.resource_id)
 (* END Resource content *)
 
+let delete_resources cache resources =
+  let remove_file path =
+    try
+      if Sys.file_exists path then Sys.remove path
+    with e -> Utils.log_exception e
+  in
+  Resource.delete_resources cache resources;
+  List.iter
+    (fun resource ->
+       let content_path = get_content_path cache resource in
+         remove_file content_path;
+       let xml_entry_path = get_xml_entry_path cache resource in
+         remove_file xml_entry_path)
+    resources
+
 (* Setup *)
 let setup_db cache =
   with_db cache
     (fun db ->
       wrap_exec_not_null_no_headers db
-        "CREATE TABLE IF NOT EXISTS resource ( \
+        "BEGIN TRANSACTION;
+         CREATE TABLE IF NOT EXISTS resource ( \
             id INTEGER PRIMARY KEY, \
             resource_id TEXT NULL, \
+            remote_id TEXT NULL, \
             kind TEXT NULL, \
             md5_checksum TEXT NULL, \
             size INTEGER NULL, \
@@ -746,6 +811,7 @@ let setup_db cache =
          CREATE INDEX IF NOT EXISTS path_index ON resource (path); \
          CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path); \
          CREATE INDEX IF NOT EXISTS resource_id_index ON resource (resource_id); \
+         CREATE INDEX IF NOT EXISTS remote_id_index ON resource (remote_id); \
          CREATE TABLE IF NOT EXISTS metadata ( \
             id INTEGER PRIMARY KEY, \
             largest_changestamp INTEGER NOT NULL, \
@@ -753,6 +819,7 @@ let setup_db cache =
             quota_bytes_total INTEGER NOT NULL, \
             quota_bytes_used INTEGER NOT NULL, \
             last_update REAL NOT NULL \
-         );" |> ignore)
+         );
+         COMMIT TRANSACTION;" |> ignore)
 (* END Setup *)
 
