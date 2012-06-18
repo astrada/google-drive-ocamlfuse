@@ -53,6 +53,9 @@ let root_directory = "/"
 let f_bsize = 4096L
 let changestamp_limit = 50L
 
+let chars_blacklist_regexp = Str.regexp ("[/\000]")
+let clean_filename title = Str.global_replace chars_blacklist_regexp "_" title
+
 (* Resource cache *)
 let create_resource path changestamp =
   { Cache.Resource.id = 0L;
@@ -68,6 +71,7 @@ let create_resource path changestamp =
     state = Cache.Resource.State.ToDownload;
     changestamp;
     last_update = Unix.gettimeofday ();
+    read_only = false;
   }
 
 let create_root_resource changestamp =
@@ -95,7 +99,7 @@ let update_resource_from_entry resource entry =
     { resource with
           Cache.Resource.resource_id =
             Some resource_id;
-          Cache.Resource.remote_id =
+          remote_id =
             Some (Cache.Resource.get_remote_id resource_id);
           kind;
           md5_checksum = Some (entry |. Document.Entry.md5Checksum);
@@ -107,6 +111,8 @@ let update_resource_from_entry resource entry =
                   |> Netdate.since_epoch);
           changestamp;
           last_update = Unix.gettimeofday ();
+          (* TODO: check ACL to verify if the file is read-only *)
+          read_only = false;
     }
 
 let folder_regexp = Str.regexp (Str.quote "folder:")
@@ -199,7 +205,6 @@ let get_metadata () =
     end in
 
   let update_resource_cache last_changestamp new_metadata =
-    (* TODO: handle deletes *)
     let request_changes =
       Utils.log_message "Getting changes from server...%!";
       let parameters = QueryParameters.default
@@ -211,20 +216,18 @@ let get_metadata () =
     in
 
     let get_id_to_update entry =
-      let rec get_id_from_resource_id resource_id =
-        let selected_resource =
-          Cache.Resource.select_resource_with_resource_id cache resource_id
-        in
-          match selected_resource with
-              None ->
-                let parent_resource_id = get_parent_resource_id entry in
-                let rid = Option.default root_folder_id parent_resource_id in
-                  get_id_from_resource_id rid
-            | Some r -> r.Cache.Resource.id
+      let selected_resource =
+        Cache.Resource.select_resource_with_resource_id cache
+          entry.Document.Entry.resourceId in
+      let resource =
+        match selected_resource with
+            None ->
+              let parent_resource_id = get_parent_resource_id entry in
+              let rid = Option.default root_folder_id parent_resource_id in
+                Cache.Resource.select_resource_with_resource_id cache rid
+          | _ -> selected_resource
       in
-
-      let id = get_id_from_resource_id entry.Document.Entry.resourceId in
-        Some id
+        Option.map (fun r -> r.Cache.Resource.id) resource
     in
 
     let get_resource_to_remove entry =
@@ -547,14 +550,15 @@ let get_attr path =
       if Cache.Resource.is_folder resource then Unix.S_DIR
       else Unix.S_REG in
     let st_perm =
-      (* TODO: check ACL to verify if the file is read-only *)
       let perm =
         if Cache.Resource.is_folder resource then 0o777
         else if Cache.Resource.is_document resource then 0o444
         else 0o666 in
       let mask =
-        lnot config.Config.umask
-        land (if config.Config.read_only then 0o555 else 0o777)
+        lnot config.Config.umask land (
+          if config.Config.read_only ||
+             resource.Cache.Resource.read_only then 0o555
+          else 0o777)
       in
         perm land mask in
     let st_size =
@@ -623,10 +627,10 @@ let read_dir path =
       let resources =
         List.map
           (fun entry ->
-             let filename =
+             let title =
                entry |. Document.Entry.title |. GdataAtom.Title.value in
-             let resource_path =
-               Filename.concat path filename in
+             let filename = clean_filename title in
+             let resource_path = Filename.concat path filename in
              let resource = create_resource resource_path changestamp in
                update_resource_from_entry resource entry)
           feed.Document.Feed.entries
