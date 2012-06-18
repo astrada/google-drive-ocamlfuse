@@ -55,11 +55,17 @@ let bind to_data stmt name value =
 let bind_text = bind (fun v -> Sqlite3.Data.TEXT v)
 let bind_int = bind (fun v -> Sqlite3.Data.INT v)
 let bind_float = bind (fun v -> Sqlite3.Data.FLOAT v)
+let bind_bool = bind (fun v -> Sqlite3.Data.INT (if v then 1L else 0L))
 
 let data_to_int64 = function
     Sqlite3.Data.NULL -> None
   | Sqlite3.Data.INT v -> Some v
   | _ -> failwith "data_to_int64: data does not contain an INT value"
+
+let data_to_bool = function
+    Sqlite3.Data.NULL -> None
+  | Sqlite3.Data.INT v -> Some (if v > 0L then true else false)
+  | _ -> failwith "data_to_bool: data does not contain an INT value"
 
 let data_to_string = function
     Sqlite3.Data.NULL -> None
@@ -106,22 +112,26 @@ let prepare_rollback_tran_stmt db =
 
 module ResourceStmts =
 struct
+  let fields_without_id =
+    "resource_id, \
+     remote_id, \
+     kind, \
+     md5_checksum, \
+     size, \
+     last_viewed, \
+     last_modified, \
+     parent_path, \
+     path, \
+     state, \
+     changestamp, \
+     last_update, \
+     read_only"
+
+  let fields = "id, " ^ fields_without_id
+
   let prepare_insert_stmt db =
     let sql =
-      "INSERT INTO resource ( \
-         resource_id, \
-         remote_id, \
-         kind, \
-         md5_checksum, \
-         size, \
-         last_viewed, \
-         last_modified, \
-         parent_path, \
-         path, \
-         state, \
-         changestamp, \
-         last_update \
-       ) \
+      "INSERT INTO resource (" ^ fields_without_id ^ ") \
        VALUES ( \
          :resource_id, \
          :remote_id, \
@@ -134,7 +144,8 @@ struct
          :path, \
          :state, \
          :changestamp, \
-         :last_update \
+         :last_update, \
+         :read_only \
        );"
     in
       Sqlite3.prepare db sql
@@ -154,7 +165,8 @@ struct
          path = :path, \
          state = :state, \
          changestamp = :changestamp, \
-         last_update = :last_update \
+         last_update = :last_update, \
+         read_only = :read_only \
        WHERE id = :id;"
     in
       Sqlite3.prepare db sql
@@ -197,20 +209,7 @@ struct
 
   let prepare_select_with_path_stmt db =
     let sql =
-      "SELECT \
-         id, \
-         resource_id, \
-         remote_id, \
-         kind, \
-         md5_checksum, \
-         size, \
-         last_viewed, \
-         last_modified, \
-         parent_path, \
-         path, \
-         state, \
-         changestamp, \
-         last_update \
+      "SELECT " ^ fields ^ " \
        FROM resource \
        WHERE path = :path;"
     in
@@ -218,20 +217,7 @@ struct
 
   let prepare_select_with_resource_id_stmt db =
     let sql =
-      "SELECT \
-         id, \
-         resource_id, \
-         remote_id, \
-         kind, \
-         md5_checksum, \
-         size, \
-         last_viewed, \
-         last_modified, \
-         parent_path, \
-         path, \
-         state, \
-         changestamp, \
-         last_update \
+      "SELECT " ^ fields ^ " \
        FROM resource \
        WHERE resource_id = :resource_id;"
     in
@@ -239,20 +225,7 @@ struct
 
   let prepare_select_with_remote_id_stmt db =
     let sql =
-      "SELECT \
-         id, \
-         resource_id, \
-         remote_id, \
-         kind, \
-         md5_checksum, \
-         size, \
-         last_viewed, \
-         last_modified, \
-         parent_path, \
-         path, \
-         state, \
-         changestamp, \
-         last_update \
+      "SELECT " ^ fields ^ " \
        FROM resource \
        WHERE remote_id = :remote_id;"
     in
@@ -260,20 +233,7 @@ struct
 
   let prepare_select_with_parent_path_stmt db =
     let sql =
-      "SELECT \
-         id, \
-         resource_id, \
-         remote_id, \
-         kind, \
-         md5_checksum, \
-         size, \
-         last_viewed, \
-         last_modified, \
-         parent_path, \
-         path, \
-         state, \
-         changestamp, \
-         last_update \
+      "SELECT " ^ fields ^ " \
        FROM resource \
        WHERE parent_path = :parent_path \
          AND state <> 'NotFound';"
@@ -284,16 +244,19 @@ end
 
 module MetadataStmts =
 struct
+  let fields_without_id =
+    "largest_changestamp, \
+     remaining_changestamps, \
+     quota_bytes_total, \
+     quota_bytes_used, \
+     last_update"
+
+  let fields =
+    "id, " ^ fields_without_id
+
   let prepare_insert_stmt db =
     let sql =
-      "INSERT OR REPLACE INTO metadata ( \
-         id, \
-         largest_changestamp, \
-         remaining_changestamps, \
-         quota_bytes_total, \
-         quota_bytes_used, \
-         last_update \
-       ) \
+      "INSERT OR REPLACE INTO metadata (" ^ fields ^ ") \
        VALUES ( \
          1, \
          :largest_changestamp, \
@@ -307,12 +270,7 @@ struct
 
   let prepare_select_stmt db =
     let sql =
-      "SELECT \
-         largest_changestamp, \
-         remaining_changestamps, \
-         quota_bytes_total, \
-         quota_bytes_used, \
-         last_update \
+      "SELECT " ^ fields_without_id ^ " \
        FROM metadata \
        WHERE id = 1;"
     in
@@ -418,6 +376,7 @@ struct
     state : State.t;
     changestamp : int64;
     last_update : float;
+    read_only : bool;
   }
 
   let id = {
@@ -472,6 +431,10 @@ struct
     GapiLens.get = (fun x -> x.last_update);
     GapiLens.set = (fun v x -> { x with last_update = v })
   }
+  let read_only = {
+    GapiLens.get = (fun x -> x.read_only);
+    GapiLens.set = (fun v x -> { x with read_only = v })
+  }
 
   let get_remote_id resource_id =
     let pos = String.index resource_id ':' in
@@ -490,7 +453,8 @@ struct
     bind_text stmt ":path" (Some resource.path);
     bind_text stmt ":state" (Some (State.to_string resource.state));
     bind_int stmt ":changestamp" (Some resource.changestamp);
-    bind_float stmt ":last_update" (Some resource.last_update)
+    bind_float stmt ":last_update" (Some resource.last_update);
+    bind_bool stmt ":read_only" (Some resource.read_only)
 
   let step_insert_resource db stmt resource =
     reset_stmt stmt;
@@ -547,8 +511,8 @@ struct
   let insert_resources cache resources parent_path changestamp =
     with_transaction cache
       (fun db ->
-         let stmt = ResourceStmts.prepare_insert_stmt db in
          _delete_resources_with_parent_path db parent_path changestamp;
+         let stmt = ResourceStmts.prepare_insert_stmt db in
          let results =
            List.map
              (step_insert_resource db stmt)
@@ -560,9 +524,10 @@ struct
     with_transaction cache
       (fun db ->
          let all_stmt = ResourceStmts.prepare_update_all_changestamps db in
-         let stmt = ResourceStmts.prepare_invalidate_stmt db in
          bind_int all_stmt ":changestamp" (Some changestamp);
          final_step all_stmt;
+         finalize_stmt all_stmt;
+         let stmt = ResourceStmts.prepare_invalidate_stmt db in
          List.iter
            (fun id ->
               reset_stmt stmt;
@@ -570,7 +535,6 @@ struct
               bind_int stmt ":id" (Some id);
               final_step stmt)
            ids;
-         finalize_stmt all_stmt;
          finalize_stmt stmt)
 
   let row_to_resource row_data =
@@ -587,6 +551,7 @@ struct
       state = row_data.(10) |> data_to_string |> Option.get |> State.of_string;
       changestamp = row_data.(11) |> data_to_int64 |> Option.get;
       last_update = row_data.(12) |> data_to_float |> Option.get;
+      read_only = row_data.(13) |> data_to_bool |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -806,7 +771,8 @@ let setup_db cache =
             path TEXT NOT NULL, \
             state TEXT NOT NULL, \
             changestamp INTEGER NULL, \
-            last_update REAL NOT NULL \
+            last_update REAL NOT NULL, \
+            read_only INTEGER NOT NULL \
          ); \
          CREATE INDEX IF NOT EXISTS path_index ON resource (path); \
          CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path); \
