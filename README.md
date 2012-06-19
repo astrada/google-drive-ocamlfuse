@@ -44,9 +44,9 @@ To uninstall anything that was previously installed, execute
 
 ### Usage
 
-The first time, you can run `gdfuse` without parameters:
+The first time, you can run `google-drive-ocamlfuse` without parameters:
 
-    $ gdfuse
+    $ google-drive-ocamlfuse
 
 This command will create the default application directory
 (`~/.gdfuse/default`), containing the configuration file `config`. And it will
@@ -55,14 +55,35 @@ will let you modify default configuration before mounting the filesystem.
 
 Then you can mount the filesystem:
 
-    $ gdfuse mountpoint
+    $ google-drive-ocamlfuse mountpoint
 
 If you have more than one account, you can run:
 
-    $ gdfuse -label label [mountpoint]
+    $ google-drive-ocamlfuse -label label [mountpoint]
 
 Using `label` to distinguish different accounts. The program will use the
 directory `~/.gdfuse/label` to host configuration, application state, and file
 cache. No file is shared among different accounts, so you can have different
 configuration for each one.
+
+### Troubleshooting
+
+This application is still in early stage of development, so there are probably
+many bugs to discover and fix. So far, the filesystem is read-only, so it is
+safe to use, because it won't try to write to your Google Drive. If you have
+problems, you can turn on debug logging:
+
+    $ google-drive-ocamlfuse -debug mountpoint
+
+In `~/.gdfuse/default` you can find `curl.log` that will track every request
+to the Google Docs API, and `gdfuse.log` that will log filesystem operations
+and cache management. If something goes wrong, you can clean the cache,
+removing all the files in `~/.gdfuse/default/cache`, to start from scratch (or
+you may remove everything in `~/.gdfuse/default` to restart with default
+configuration and reauthorize the application).
+
+Note that in order to reduce latency, the application will query the server
+and check for changes only every 60 seconds (configurable). So if you make a
+change to your documents, you won't see it immediately in the mounted
+filesystem.
 
