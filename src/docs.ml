@@ -107,8 +107,7 @@ let update_resource_from_entry resource entry =
           last_viewed =
             Some (entry |. Document.Entry.lastViewed |> Netdate.since_epoch);
           last_modified =
-            Some (entry |. Document.Entry.modifiedByMeDate
-                  |> Netdate.since_epoch);
+            Some (entry |. Document.Entry.edited |> Netdate.since_epoch);
           changestamp;
           last_update = Unix.gettimeofday ();
           (* TODO: check ACL to verify if the file is read-only *)
