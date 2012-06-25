@@ -10,7 +10,7 @@ exception Permission_denied
 
 (* Gapi request wrapper *)
 let do_request interact =
-  let rec try_request () =
+  let rec try_request n =
     try
       let context = Context.get_ctx () in
       let state = context |. Context.state_lens in
@@ -31,12 +31,14 @@ let do_request interact =
         Failure message as e ->
           if ExtString.String.exists message "CURLE_OPERATION_TIMEOUTED" then
             (* Retry on timeout *)
-            try_request ()
+            try_request (n + 1)
           else raise e
       | GapiRequest.RefreshTokenFailed _ ->
+          if n > 1 then failwith "Cannot access resource: \
+                                  Refreshing token was not enough";
           GaeProxy.refresh_access_token ();
           (* Retry with refreshed token *)
-          try_request ()
+          try_request (n + 1)
       | GapiService.ServiceError e ->
           Utils.log_message "ServiceError\n%!";
           let message =
@@ -46,7 +48,7 @@ let do_request interact =
           in
             failwith message
   in
-    try_request ()
+    try_request 0
 (* END Gapi request wrapper *)
 
 let root_directory = "/"
@@ -480,22 +482,26 @@ let download_resource resource =
       |. Document.Entry.content
       |. GdataAtom.Content.src in
     begin if download_link <> "" then
-      let media_destination = GapiMediaResource.TargetFile content_path in
-      begin if Cache.Resource.is_document resource then
-        let config = context |. Context.config_lens in
-        let format = Cache.Resource.get_format resource config in
-        if format <> "" then
-          download_document
-            ~format
-            entry
-            media_destination
+      try
+        let media_destination = GapiMediaResource.TargetFile content_path in
+        begin if Cache.Resource.is_document resource then
+          let config = context |. Context.config_lens in
+          let format = Cache.Resource.get_format resource config in
+          if format <> "" then
+            download_document
+              ~format
+              entry
+              media_destination
+          else
+            create_empty_file ()
         else
-          create_empty_file ()
-      else
-        partial_download
-          download_link
-          media_destination
-      end
+          partial_download
+            download_link
+            media_destination
+        end
+      with GapiRequest.PermissionDenied session ->
+        GapiMonad.SessionM.put session >>
+        create_empty_file ()
     else
       create_empty_file ()
     end >>
