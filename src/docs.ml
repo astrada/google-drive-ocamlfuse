@@ -34,7 +34,7 @@ let do_request interact =
             try_request (n + 1)
           else raise e
       | GapiRequest.RefreshTokenFailed _ ->
-          if n > 1 then failwith "Cannot access resource: \
+          if n > 0 then failwith "Cannot access resource: \
                                   Refreshing token was not enough";
           GaeProxy.refresh_access_token ();
           (* Retry with refreshed token *)
