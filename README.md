@@ -24,7 +24,7 @@ Getting started
 It's better to use the last [CVS
 snapshot](http://sourceforge.net/scm/?type=cvs&group_id=121959) of
 `ocamlfuse`, because it contains some bugfixes. I've uploaded the snapshot on
-[github](https://github.com/downloads/astrada/ocamlfuse/ocamlfuse-2.7.1+cvs~oasis3.tar.gz)
+[github](https://github.com/downloads/astrada/ocamlfuse/ocamlfuse-2.7.1-cvs~oasis1.tar.gz)
 and added OASIS support, to ease compilation and installation.
 
 ### Configuration and installation
