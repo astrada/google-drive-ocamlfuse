@@ -7,6 +7,7 @@ open GdataDocumentsV3Service
 
 exception File_not_found
 exception Permission_denied
+exception Resource_busy
 
 (* Gapi request wrapper *)
 let do_request interact =
@@ -499,9 +500,12 @@ let download_resource resource =
             download_link
             media_destination
         end
-      with GapiRequest.PermissionDenied session ->
-        GapiMonad.SessionM.put session >>
-        create_empty_file ()
+      with
+          GapiRequest.PermissionDenied session ->
+            GapiMonad.SessionM.put session >>
+            create_empty_file ()
+        | GapiRequest.Conflict session ->
+            raise Resource_busy
     else
       create_empty_file ()
     end >>

@@ -188,6 +188,9 @@ let handle_exception e label param =
     | Docs.Permission_denied ->
         Utils.log_message "Permission denied: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.EACCES, label, param))
+    | Docs.Resource_busy ->
+        Utils.log_message "Resource busy: %s %s\n%!" label param;
+        raise (Unix.Unix_error (Unix.EBUSY, label, param))
     | e ->
         Utils.log_exception e;
         raise (Unix.Unix_error (Unix.EBUSY, label, param))
