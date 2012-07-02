@@ -9,48 +9,7 @@ exception File_not_found
 exception Permission_denied
 exception Resource_busy
 
-(* Gapi request wrapper *)
-let do_request interact =
-  let rec try_request n =
-    try
-      let context = Context.get_ctx () in
-      let state = context |. Context.state_lens in
-      let config = context.Context.gapi_config in
-      let curl_state = context.Context.curl_state in
-      let auth_context =
-        GapiConversation.Session.OAuth2
-          { GapiConversation.Session.oauth2_token =
-              state.State.last_access_token;
-            refresh_token = state.State.refresh_token }
-      in
-        GapiConversation.with_session
-          ~auth_context
-          config
-          curl_state
-          interact
-    with
-        Failure message as e ->
-          if ExtString.String.exists message "CURLE_OPERATION_TIMEOUTED" then
-            (* Retry on timeout *)
-            try_request (n + 1)
-          else raise e
-      | GapiRequest.RefreshTokenFailed _ ->
-          if n > 0 then failwith "Cannot access resource: \
-                                  Refreshing token was not enough";
-          GaeProxy.refresh_access_token ();
-          (* Retry with refreshed token *)
-          try_request (n + 1)
-      | GapiService.ServiceError e ->
-          Utils.log_message "ServiceError\n%!";
-          let message =
-            e |> GapiError.RequestError.to_data_model
-              |> GapiJson.data_model_to_json
-              |> Json_io.string_of_json
-          in
-            failwith message
-  in
-    try_request 0
-(* END Gapi request wrapper *)
+let do_request = Oauth2.do_request
 
 let root_directory = "/"
 let f_bsize = 4096L
@@ -502,13 +461,15 @@ let download_resource resource =
         end
       with
           GapiRequest.PermissionDenied session ->
+            Utils.log_message "Server error: Permission denied.\n%!";
             GapiMonad.SessionM.put session >>
             create_empty_file ()
         | GapiRequest.Conflict session ->
+            Utils.log_message "Server error: Conflict.\n%!";
             raise Resource_busy
     else
       create_empty_file ()
-    end >>
+    end >>= fun () ->
     let updated_resource = resource
       |> Cache.Resource.state ^= Cache.Resource.State.InSync in
     Utils.log_message "done\n%!";

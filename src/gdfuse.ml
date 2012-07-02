@@ -2,6 +2,7 @@ open GapiUtils.Infix
 open GapiLens.Infix
 open GapiLens.StateInfix
 
+let version = "0.1"
 let default_fs_label = "default"
 
 let client_id = "564921029129.apps.googleusercontent.com"
@@ -16,36 +17,6 @@ let get_authorization_url request_id =
     ~state:request_id
     ~response_type:"code"
     client_id
-
-let start_browser request_id =
-  let start_process browser url =
-    let command = Printf.sprintf "%s \"%s\"" browser url in
-    let () = Utils.log_message "Starting web browser with command: %s..."
-               command in
-    let ch = Unix.open_process_in command in
-    let status = Unix.close_process_in ch in
-      if status = (Unix.WEXITED 0) then begin
-        Utils.log_message "done\n%!";
-        true
-      end else begin
-        Utils.log_message "fail\n%!";
-        false
-      end
-  in
-  let url = get_authorization_url request_id in
-  let browsers = ["xdg-open"; "firefox"; "google-chrome"] in
-  let status =
-    List.fold_left
-      (fun result browser ->
-         if result then
-           result
-         else
-           start_process browser url)
-      false
-      browsers
-  in
-    if not status then
-      failwith ("Error opening URL:" ^ url)
 (* END Authorization *)
 
 (* Setup *)
@@ -107,7 +78,7 @@ let get_state_store app_dir =
       create_empty_state_store app_dir
 (* END Application state *)
 
-let setup_application debug fs_label mountpoint =
+let setup_application debug fs_label client_id client_secret mountpoint =
   let get_auth_tokens_from_server () =
     let context = Context.get_ctx () in
     let request_id =
@@ -119,8 +90,9 @@ let setup_application debug fs_label mountpoint =
         |> Context.request_id_lens ^= request_id
         |> Context.save_state_from_context;
       try
-        start_browser request_id;
-        GaeProxy.start_server_polling ()
+        let url = get_authorization_url request_id in
+          Utils.start_browser url;
+          GaeProxy.start_server_polling ()
       with
           GaeProxy.ServerError e ->
             Utils.log_with_header "Removing invalid request_id=%s\n%!"
@@ -145,14 +117,17 @@ let setup_application debug fs_label mountpoint =
   Utils.log_channel := log_channel;
   Utils.log_with_header "Setting up %s filesystem...\n" fs_label;
   let config_store = get_config_store debug app_dir in
+  let current_config = config_store |. Context.ConfigFileStore.data in
+  let config =
+    { current_config with
+          Config.debug;
+          client_id;
+          client_secret;
+    } in
+  Context.save_config_store config_store;
   let config_store = config_store
-    |> Context.ConfigFileStore.data
-    ^%= Config.debug ^= debug in
-  let config = config_store |. Context.ConfigFileStore.data in
-  let gapi_config =
-    Config.create_gapi_config
-      config
-      app_dir in
+    |> Context.ConfigFileStore.data ^= config in
+  let gapi_config = Config.create_gapi_config config app_dir in
   Utils.log_message "Setting up cache db...";
   let cache = Cache.create_cache app_dir config in
   Cache.setup_db cache;
@@ -174,7 +149,10 @@ let setup_application debug fs_label mountpoint =
   Context.set_ctx context;
   let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
-      get_auth_tokens_from_server ()
+      if client_id = "" || client_secret = "" then
+        get_auth_tokens_from_server ()
+      else
+        Oauth2.get_access_token ()
     else
       Utils.log_message "Refresh token already present.\n%!"
 (* END setup *)
@@ -295,27 +273,39 @@ let () =
   let fs_label = ref "default" in
   let mountpoint = ref "" in
   let fuse_args = ref [] in
+  let show_version = ref false in
   let debug = ref false in
+  let client_id = ref "" in
+  let client_secret = ref "" in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
-      "Usage: %s [-verbose] [-debug] [-label fslabel] [-f] [-d] [-s] mountpoint"
+      "Usage: %s [options] [mountpoint]"
       program in
   let arg_specs =
     Arg.align (
-      ["-verbose",
+      ["-version",
+       Arg.Set show_version,
+       " show version and exit.";
+       "-verbose",
        Arg.Set Utils.verbose,
-       " Enable verbose logging on stdout. Default is false.";
+       " enable verbose logging on stdout. Default is false.";
        "-debug",
        Arg.Unit (fun () ->
                    debug := true;
                    Utils.verbose := true;
                    fuse_args := "-f" :: !fuse_args),
-       " Enable debug mode (implies -verbose, -f). Default is false.";
+       " enable debug mode (implies -verbose, -f). Default is false.";
        "-label",
        Arg.Set_string fs_label,
-       " Use a specific label to identify the filesystem. \
+       " use a specific label to identify the filesystem. \
         Default is \"default\".";
+       "-id",
+       Arg.Set_string client_id,
+       " provide OAuth2 client ID.";
+       "-secret",
+       Arg.Set_string client_secret,
+       " provide OAuth2 client secret.";
        "-f",
        Arg.Unit (fun _ -> fuse_args := "-f" :: !fuse_args),
        " keep the process in foreground.";
@@ -336,26 +326,35 @@ let () =
     exit 1
   in
 
-    try
-      if !mountpoint = "" then begin
-        setup_application !debug !fs_label ".";
-      end else begin
-        setup_application !debug !fs_label !mountpoint;
-        at_exit
-          (fun () ->
-             Utils.log_with_header "Exiting.\n";
-             let context = Context.get_ctx () in
-             Utils.log_message "CURL cleanup...";
-             ignore (GapiCurl.global_cleanup context.Context.curl_state);
-             Utils.log_message "done\nClearing context...";
-             Context.clear_ctx ();
-             Utils.log_message "done\n%!");
-        start_filesystem !mountpoint !fuse_args
-      end
-    with
-        Failure error_message -> quit error_message
-      | e ->
-          let error_message = Printexc.to_string e in
-            quit error_message
+    if !show_version then begin
+      Printf.printf "google-drive-ocamlfuse, version %s\n\
+                     Copyright (C) 2012 Alessandro Strada\n\
+                     License MIT\n"
+        version;
+    end else begin
+      try
+        if !mountpoint = "" then begin
+          setup_application
+            !debug !fs_label !client_id !client_secret ".";
+        end else begin
+          setup_application
+            !debug !fs_label !client_id !client_secret !mountpoint;
+          at_exit
+            (fun () ->
+               Utils.log_with_header "Exiting.\n";
+               let context = Context.get_ctx () in
+               Utils.log_message "CURL cleanup...";
+               ignore (GapiCurl.global_cleanup context.Context.curl_state);
+               Utils.log_message "done\nClearing context...";
+               Context.clear_ctx ();
+               Utils.log_message "done\n%!");
+          start_filesystem !mountpoint !fuse_args
+        end
+      with
+          Failure error_message -> quit error_message
+        | e ->
+            let error_message = Printexc.to_string e in
+              quit error_message
+    end
 (* END Main program *)
 

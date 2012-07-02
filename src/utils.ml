@@ -1,4 +1,5 @@
 open GapiUtils.Infix
+open GapiLens.Infix
 
 let try_finally f finally =
   try
@@ -74,4 +75,33 @@ let flags_to_string flags =
       flags
   in
     String.concat "," flag_descriptions
+
+(* Browser *)
+let start_browser url =
+  let start_process browser =
+    let command = Printf.sprintf "%s \"%s\"" browser url in
+    let () = log_message "Starting web browser with command: %s..." command in
+    let ch = Unix.open_process_in command in
+    let status = Unix.close_process_in ch in
+      if status = (Unix.WEXITED 0) then begin
+        log_message "done\n%!";
+        true
+      end else begin
+        log_message "fail\n%!";
+        false
+      end
+  in
+  let browsers = ["xdg-open"; "firefox"; "google-chrome"] in
+  let status =
+    List.fold_left
+      (fun result browser ->
+         if result then
+           result
+         else
+           start_process browser)
+      false
+      browsers
+  in
+    if not status then
+      failwith ("Error opening URL:" ^ url)
 

@@ -56,15 +56,14 @@ let get_tokens () =
   let open Json_type.Browse in
     context
     |> Context.state_lens ^=
-      { State.auth_request_id =
-          field table "request_id" |> string;
-        auth_request_date =
-          field table "refresh_date" |> string |> GapiDate.of_string;
-        refresh_token = field table "refresh_token" |> string;
-        last_access_token = field table "access_token" |> string;
-        access_token_date =
-          field table "refresh_date" |> string |> GapiDate.of_string;
-      }
+         { State.auth_request_id = field table "request_id" |> string;
+           auth_request_date =
+             field table "refresh_date" |> string |> GapiDate.of_string;
+           refresh_token = field table "refresh_token" |> string;
+           last_access_token = field table "access_token" |> string;
+           access_token_date =
+             field table "refresh_date" |> string |> GapiDate.of_string;
+         }
     |> Context.save_state_from_context
 
 let start_server_polling () =
