@@ -24,6 +24,10 @@ type t = {
   presentation_format : string;
   (* Spreadsheets export format *)
   spreadsheet_format : string;
+  (* OAuth2 Client ID *)
+  client_id : string;
+  (* OAuth2 Client secret *)
+  client_secret : string;
 }
 
 let debug = {
@@ -66,6 +70,14 @@ let spreadsheet_format = {
   GapiLens.get = (fun x -> x.spreadsheet_format);
   GapiLens.set = (fun v x -> { x with spreadsheet_format = v })
 }
+let client_id = {
+  GapiLens.get = (fun x -> x.client_id);
+  GapiLens.set = (fun v x -> { x with client_id = v })
+}
+let client_secret = {
+  GapiLens.get = (fun x -> x.client_secret);
+  GapiLens.set = (fun v x -> { x with client_secret = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -83,6 +95,8 @@ let default = {
   drawing_format = "png";
   presentation_format = "pdf";
   spreadsheet_format = "ods";
+  client_id = "";
+  client_secret = "";
 }
 
 let default_debug = {
@@ -96,6 +110,8 @@ let default_debug = {
   drawing_format = "png";
   presentation_format = "pdf";
   spreadsheet_format = "ods";
+  client_id = "";
+  client_secret = "";
 }
 
 let of_table table =
@@ -117,10 +133,12 @@ let of_table table =
         get "presentation_format" Std.identity default.presentation_format;
       spreadsheet_format =
         get "spreadsheet_format" Std.identity default.spreadsheet_format;
+      client_id = get "client_id" Std.identity default.client_id;
+      client_secret = get "client_secret" Std.identity default.client_secret;
     }
 
 let to_table data =
-  let table = Hashtbl.create 1 in
+  let table = Hashtbl.create 16 in
   let add = Hashtbl.add table in
     add "debug" (data.debug |> string_of_bool);
     add "metadata_cache_time" (data.metadata_cache_time |> string_of_int);
@@ -132,6 +150,8 @@ let to_table data =
     add "drawing_format" data.drawing_format;
     add "presentation_format" data.presentation_format;
     add "spreadsheet_format" data.spreadsheet_format;
+    add "client_id" data.client_id;
+    add "client_secret" data.client_secret;
     table
 
 let debug_print out_ch start_time curl info_type info =
@@ -160,8 +180,9 @@ let create_gapi_config config app_dir =
   in
     gapi_config
     |> GapiConfig.application_name ^= application_name
-    (* Do not set client_id and client_secret, because authorization is
-     * handled by the GAE proxy *)
-    |> GapiConfig.auth ^= GapiConfig.OAuth2 { GapiConfig.client_id = "";
-                                              client_secret = "" }
+    (* If client_id and client_secret are not set, the authorization will
+     * be handled by the GAE proxy *)
+    |> GapiConfig.auth ^= GapiConfig.OAuth2
+                            { GapiConfig.client_id = config.client_id;
+                              client_secret = config.client_secret }
 
