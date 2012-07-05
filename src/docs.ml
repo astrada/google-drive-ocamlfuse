@@ -462,9 +462,9 @@ let download_resource resource =
       with
           GapiRequest.PermissionDenied session ->
             Utils.log_message "Server error: Permission denied.\n%!";
-            GapiMonad.SessionM.put session >>
+            GapiMonad.SessionM.put session >>= fun () ->
             create_empty_file ()
-        | GapiRequest.Conflict session ->
+        | GapiRequest.Conflict _ ->
             Utils.log_message "Server error: Conflict.\n%!";
             raise Resource_busy
     else

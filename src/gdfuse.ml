@@ -2,7 +2,7 @@ open GapiUtils.Infix
 open GapiLens.Infix
 open GapiLens.StateInfix
 
-let version = "0.1"
+let version = "0.1pre2"
 let default_fs_label = "default"
 
 let client_id = "564921029129.apps.googleusercontent.com"
