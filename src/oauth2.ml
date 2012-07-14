@@ -3,6 +3,8 @@ open GapiLens.Infix
 open GapiMonad
 open GapiMonad.SessionM.Infix
 
+let scope = [GapiDriveV2Service.Scope.drive]
+
 (* Gapi request wrapper *)
 let do_request interact =
   let rec try_request n =
@@ -52,7 +54,7 @@ let get_access_token () =
   let redirect_uri = "urn:ietf:wg:oauth:2.0:oob" in
   let url = GapiOAuth2.authorization_code_url
               ~redirect_uri
-              ~scope:[GdataDocumentsV3Service.all_scopes]
+              ~scope
               ~response_type:"code"
               client_id in
   Utils.start_browser url;

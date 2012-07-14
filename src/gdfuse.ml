@@ -2,18 +2,16 @@ open GapiUtils.Infix
 open GapiLens.Infix
 open GapiLens.StateInfix
 
-let version = "0.1pre2"
 let default_fs_label = "default"
 
 let client_id = "564921029129.apps.googleusercontent.com"
 let redirect_uri = GaeProxy.gae_proxy_url ^ "/oauth2callback"
-let scope = [GdataDocumentsV3Service.all_scopes]
 
 (* Authorization *)
 let get_authorization_url request_id =
   GapiOAuth2.authorization_code_url
     ~redirect_uri
-    ~scope
+    ~scope:Oauth2.scope
     ~state:request_id
     ~response_type:"code"
     client_id
@@ -330,7 +328,7 @@ let () =
       Printf.printf "google-drive-ocamlfuse, version %s\n\
                      Copyright (C) 2012 Alessandro Strada\n\
                      License MIT\n"
-        version;
+        Config.version;
     end else begin
       try
         if !mountpoint = "" then begin

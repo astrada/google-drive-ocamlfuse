@@ -2,6 +2,7 @@ open GapiUtils.Infix
 open GapiLens.Infix
 
 let application_name = "google-drive-ocamlfuse"
+let version = "0.1pre3"
 
 type t = {
   (* Debug mode *)
@@ -20,6 +21,8 @@ type t = {
   document_format : string;
   (* Drawings export format *)
   drawing_format : string;
+  (* Forms export format *)
+  form_format : string;
   (* Presentations export format *)
   presentation_format : string;
   (* Spreadsheets export format *)
@@ -62,6 +65,10 @@ let drawing_format = {
   GapiLens.get = (fun x -> x.drawing_format);
   GapiLens.set = (fun v x -> { x with drawing_format = v })
 }
+let form_format = {
+  GapiLens.get = (fun x -> x.form_format);
+  GapiLens.set = (fun v x -> { x with form_format = v })
+}
 let presentation_format = {
   GapiLens.get = (fun x -> x.presentation_format);
   GapiLens.set = (fun v x -> { x with presentation_format = v })
@@ -93,6 +100,7 @@ let default = {
   download_docs = false;
   document_format = "odt";
   drawing_format = "png";
+  form_format = "ods";
   presentation_format = "pdf";
   spreadsheet_format = "ods";
   client_id = "";
@@ -108,6 +116,7 @@ let default_debug = {
   download_docs = true;
   document_format = "odt";
   drawing_format = "png";
+  form_format = "ods";
   presentation_format = "pdf";
   spreadsheet_format = "ods";
   client_id = "";
@@ -129,6 +138,8 @@ let of_table table =
         get "document_format" Std.identity default.document_format;
       drawing_format =
         get "drawing_format" Std.identity default.drawing_format;
+      form_format =
+        get "form_format" Std.identity default.form_format;
       presentation_format =
         get "presentation_format" Std.identity default.presentation_format;
       spreadsheet_format =
@@ -148,6 +159,7 @@ let to_table data =
     add "download_docs" (data.download_docs |> string_of_bool);
     add "document_format" data.document_format;
     add "drawing_format" data.drawing_format;
+    add "form_format" data.form_format;
     add "presentation_format" data.presentation_format;
     add "spreadsheet_format" data.spreadsheet_format;
     add "client_id" data.client_id;
@@ -179,7 +191,7 @@ let create_gapi_config config app_dir =
       GapiConfig.default
   in
     gapi_config
-    |> GapiConfig.application_name ^= application_name
+    |> GapiConfig.application_name ^= application_name ^ " (" ^ version ^ ")"
     (* If client_id and client_secret are not set, the authorization will
      * be handled by the GAE proxy *)
     |> GapiConfig.auth ^= GapiConfig.OAuth2
