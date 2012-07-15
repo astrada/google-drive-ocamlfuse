@@ -90,3 +90,14 @@ and check for changes only every 60 seconds (configurable). So if you make a
 change to your documents, you won't see it immediately in the mounted
 filesystem.
 
+### Upgrading from 0.1pre2
+
+Since version 0.1pre3, the application uses Drive API v2, instead of Google
+Documents List API v3, so if you are upgrading from previous versions, you
+should clean every file in `~/.gdfuse/default`:
+
+    $ rm -rf ~/.gdfuse/default
+
+because the access token requested previously is not compatible with the new
+API.
+
