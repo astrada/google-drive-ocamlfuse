@@ -429,8 +429,11 @@ and get_resource path =
             try
               refresh_resource resource cache
             with GapiRequest.NotModified session ->
-              SessionM.put session >>
-              SessionM.return resource
+              SessionM.put session >>= fun () ->
+              let updated_resource = resource
+                |> Cache.Resource.last_update ^= Unix.gettimeofday () in
+              update_cached_resource cache updated_resource;
+              SessionM.return updated_resource
     end >>= fun resource ->
     begin match resource.Cache.Resource.state with
         Cache.Resource.State.NotFound ->
