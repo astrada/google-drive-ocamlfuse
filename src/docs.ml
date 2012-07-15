@@ -165,14 +165,27 @@ let get_metadata () =
     end in
 
   let update_resource_cache last_change_id new_metadata =
+    let get_all_changes startChangeId =
+      let rec loop ?pageToken accu =
+        ChangesResource.list
+          ~includeDeleted:true
+          ~startChangeId
+          ?pageToken >>= fun change_list ->
+        let changes = change_list.ChangeList.items @ accu in
+        if change_list.ChangeList.nextPageToken = "" then
+          SessionM.return changes
+        else
+          loop ~pageToken:change_list.ChangeList.nextPageToken changes
+      in
+        loop []
+    in
+
     let request_changes =
       Utils.log_message "Getting changes from server...%!";
       let startChangeId = Int64.to_string (Int64.add last_change_id 1L) in
-      ChangesResource.list
-        ~includeDeleted:true
-        ~startChangeId >>= fun changes ->
+      get_all_changes startChangeId >>= fun changes ->
       Utils.log_message "done\n%!";
-      SessionM.return changes.ChangeList.items
+      SessionM.return changes
     in
 
     let get_ids_to_update change =
@@ -327,7 +340,9 @@ let get_file_from_server parent_folder_id title =
   let q = Printf.sprintf "title = '%s' and '%s' in parents"
             title parent_folder_id in
   try
-    FilesResource.list ~q ~maxResults:1 >>= fun file_list ->
+    FilesResource.list
+      ~q
+      ~maxResults:1 >>= fun file_list ->
     Utils.log_message "done\n%!";
     let files = file_list.FileList.items in
     if List.length files = 0 then
@@ -643,14 +658,28 @@ let get_attr path =
 
 (* readdir *)
 let read_dir path =
+  let get_all_files q =
+    let rec loop ?pageToken accu =
+      FilesResource.list
+        ~q
+        ?pageToken >>= fun file_list ->
+      let files = file_list.FileList.items @ accu in
+      if file_list.FileList.nextPageToken = "" then
+        SessionM.return files
+      else
+        loop ~pageToken:file_list.FileList.nextPageToken files
+    in
+      loop []
+  in
+
   let request_folder =
     Utils.log_message "Getting folder content (path=%s)\n%!" path;
     get_resource path >>= fun resource ->
     get_folder_id path >>= fun folder_id ->
     let q = Printf.sprintf "'%s' in parents" folder_id in
-    FilesResource.list ~q >>= fun file_list ->
+    get_all_files q >>= fun files ->
     Utils.log_message "Done getting folder content (path=%s)\n%!" path;
-    SessionM.return (file_list.FileList.items, resource)
+    SessionM.return (files, resource)
   in
 
   let cache = Context.get_cache () in
