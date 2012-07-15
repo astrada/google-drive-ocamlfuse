@@ -73,6 +73,10 @@ let update_resource_from_file resource file =
           editable = Some file.File.editable;
           change_id = largest_change_id;
           last_update = Unix.gettimeofday ();
+          state =
+            if file.File.labels.File.Labels.restricted then
+              Cache.Resource.State.Restricted
+            else resource.Cache.Resource.state;
     }
 
 let get_parent_resource_ids file =
@@ -195,7 +199,7 @@ let get_metadata () =
 
     let get_file_id_from_change change =
       [Cache.Resource.select_resource_with_remote_id cache
-         change.Change.file.File.id]
+         change.Change.fileId]
     in
 
     let remaining_change_ids =
@@ -438,29 +442,31 @@ and get_resource path =
 let check_md5_checksum resource =
   let path = resource.Cache.Resource.path in
   let md5_checksum = Option.default "" resource.Cache.Resource.md5_checksum in
-  Utils.log_message "Checking MD5 checksum (path=%s, hash=%s)...\n%!"
-    path md5_checksum;
-  if md5_checksum <> "" && Sys.file_exists path then begin
-    let md5 = Cryptokit.Hash.md5 () in
-    Utils.with_in_channel path
-      (fun ch ->
-         try
-           while true do
-             let byte = input_byte ch in
-               md5#add_byte byte;
-           done
-         with End_of_file -> ());
-    let md5_result = md5#result in
-    let hexa = Cryptokit.Hexa.encode () in
-    hexa#put_string md5_result;
-    hexa#finish;
-    let checksum = hexa#get_string in
-    Utils.log_message "Computed MD5 checksum: %s\n%!" checksum;
-    checksum = md5_checksum
-  end else begin
-    Utils.log_message "File does not exists.\n%!";
-    false
-  end
+  if md5_checksum <> "" then begin
+    Utils.log_message "Checking MD5 checksum (path=%s, hash=%s)...\n%!"
+      path md5_checksum;
+    if Sys.file_exists path then begin
+      let md5 = Cryptokit.Hash.md5 () in
+      Utils.with_in_channel path
+        (fun ch ->
+           try
+             while true do
+               let byte = input_byte ch in
+                 md5#add_byte byte;
+             done
+           with End_of_file -> ());
+      let md5_result = md5#result in
+      let hexa = Cryptokit.Hexa.encode () in
+      hexa#put_string md5_result;
+      hexa#finish;
+      let checksum = hexa#get_string in
+      Utils.log_message "Computed MD5 checksum: %s\n%!" checksum;
+      checksum = md5_checksum
+    end else begin
+      Utils.log_message "File does not exists.\n%!";
+      false
+    end;
+  end else false
 
 let download_resource resource =
   let get_export_link fmt =
@@ -533,7 +539,19 @@ let download_resource resource =
             SessionM.return content_path
           else
             do_download ()
-      | _ -> raise File_not_found
+      | Cache.Resource.State.NotFound
+      | Cache.Resource.State.ToDelete ->
+          raise File_not_found
+      | Cache.Resource.State.Restricted ->
+          begin if not (Sys.file_exists content_path) then
+            create_empty_file ()
+          else
+            SessionM.return ()
+          end >>
+          SessionM.return content_path
+      | Cache.Resource.State.Conflict ->
+          (* TODO: resolve conflict *)
+          raise Resource_busy
 (* END Resources *)
 
 (* stat *)
