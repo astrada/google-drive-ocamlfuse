@@ -676,7 +676,7 @@ let read_dir path =
     Utils.log_message "Getting folder content (path=%s)\n%!" path;
     get_resource path >>= fun resource ->
     get_folder_id path >>= fun folder_id ->
-    let q = Printf.sprintf "'%s' in parents" folder_id in
+    let q = Printf.sprintf "'%s' in parents and trashed = false" folder_id in
     get_all_files q >>= fun files ->
     Utils.log_message "Done getting folder content (path=%s)\n%!" path;
     SessionM.return (files, resource)
