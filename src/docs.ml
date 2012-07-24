@@ -19,7 +19,7 @@ let chars_blacklist_regexp = Str.regexp ("[/\000]")
 let clean_filename title = Str.global_replace chars_blacklist_regexp "_" title
 
 (* Resource cache *)
-let create_resource path change_id =
+let create_resource parent_id path change_id =
   { Cache.Resource.id = 0L;
     etag = None;
     remote_id = None;
@@ -34,20 +34,19 @@ let create_resource path change_id =
     md5_checksum = None;
     file_size = None;
     editable = None;
-    parent_path = Filename.dirname path;
+    parent_id;
     path;
     state = Cache.Resource.State.ToDownload;
     change_id;
     last_update = Unix.gettimeofday ();
   }
 
-let create_root_resource root_folder_id change_id =
-  let resource = create_resource root_directory change_id in
+let create_root_resource root_folder_remote_id change_id =
+  let resource = create_resource 0L root_directory change_id in
     { resource with
-          Cache.Resource.remote_id = Some root_folder_id;
+          Cache.Resource.remote_id = Some root_folder_remote_id;
           mime_type = Some "application/vnd.google-apps.folder";
           file_size = Some 0L;
-          parent_path = "";
     }
 
 let update_resource_from_file resource file =
@@ -97,27 +96,37 @@ let update_cached_resource cache resource =
   Cache.Resource.update_resource cache resource;
   Utils.log_message "done\n%!"
 
-let lookup_resource path =
-  Utils.log_message "Loading resource %s from db...%!" path;
+let lookup_resource select param_to_string param =
+  Utils.log_message "Loading resource %s from db...%!" (param_to_string param);
   let cache = Context.get_cache () in
-  let resource =
-    Cache.Resource.select_resource_with_path cache path
-  in
+  let resource = select cache param in
     if Option.is_none resource then
       Utils.log_message "not found\n%!"
     else
       Utils.log_message "found\n%!";
     resource
 
+let lookup_resource_with_path path =
+  lookup_resource
+    Cache.Resource.select_resource_with_path
+    Std.identity
+    path
+
+let lookup_resource_with_id id =
+  lookup_resource
+    Cache.Resource.select_resource_with_id
+    Int64.to_string
+    id
+
 let get_root_resource () =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
   let metadata = context.Context.metadata |> Option.get in
-    match lookup_resource root_directory with
+    match lookup_resource_with_path root_directory with
         None ->
           let root_resource =
             create_root_resource
-              metadata.Cache.Metadata.root_folder_id
+              metadata.Cache.Metadata.root_folder_remote_id
               metadata.Cache.Metadata.largest_change_id in
             Utils.log_message "Saving root resource to db...%!";
             let inserted =
@@ -144,7 +153,7 @@ let get_metadata () =
         Int64.add about.About.quotaBytesUsed about.About.quotaBytesUsedInTrash;
       largest_change_id = about.About.largestChangeId;
       remaining_change_ids = about.About.remainingChangeIds;
-      root_folder_id = about.About.rootFolderId;
+      root_folder_remote_id = about.About.rootFolderId;
       permission_id = about.About.permissionId;
       last_update = Unix.gettimeofday ();
     } in
@@ -197,7 +206,7 @@ let get_metadata () =
             None ->
               let remote_ids =
                 match get_parent_resource_ids file with
-                    [] -> [context |. Context.root_folder_id_lens]
+                    [] -> [context |. Context.root_folder_remote_id_lens]
                   | ids -> ids
               in
                 List.map
@@ -311,14 +320,15 @@ let get_metadata () =
               refresh_metadata ()
             end
 
-let statfs () =
+let statfs req inode =
   let metadata = get_metadata () in
   let f_blocks = Int64.div metadata.Cache.Metadata.quota_bytes_total f_bsize in
   let free_bytes = Int64.sub
                      metadata.Cache.Metadata.quota_bytes_total
                      metadata.Cache.Metadata.quota_bytes_used in
   let f_bfree = Int64.div free_bytes f_bsize in
-    { Unix_util.f_bsize;
+    Fuse.reply_statfs req (`Statfs {
+      Fuse.f_bsize;
       f_blocks;
       f_bfree;
       f_bavail = f_bfree;
@@ -330,15 +340,15 @@ let statfs () =
       f_favail = 0L;
       f_fsid = 0L;
       f_flag = 0L;
-    }
+    })
 (* END Metadata *)
 
 (* Resources *)
-let get_file_from_server parent_folder_id title =
+let get_file_from_server parent_remote_id title =
   Utils.log_message "Getting resource %s (in folder %s) from server...%!"
-    title parent_folder_id;
+    title parent_remote_id;
   let q = Printf.sprintf "title = '%s' and '%s' in parents"
-            title parent_folder_id in
+            title parent_remote_id in
   try
     FilesResource.list
       ~q
@@ -354,8 +364,8 @@ let get_file_from_server parent_folder_id title =
     SessionM.put session >>
     SessionM.return None
 
-let get_resource_from_server parent_folder_id title new_resource cache =
-  get_file_from_server parent_folder_id title >>= fun file ->
+let get_resource_from_server parent_remote_id title new_resource cache =
+  get_file_from_server parent_remote_id title >>= fun file ->
   match file with
       None ->
         Utils.log_message "Saving not found resource to db...%!";
@@ -368,9 +378,9 @@ let get_resource_from_server parent_folder_id title new_resource cache =
         let inserted = insert_resource_into_cache cache new_resource entry in
         SessionM.return inserted
 
-let check_resource_in_cache cache path =
+let check_resource_in_cache cache id =
   let change_id = Context.get_ctx () |. Context.largest_change_id_lens in
-    match lookup_resource path with
+    match lookup_resource_with_id id with
         None -> false
       | Some resource ->
           if Cache.Resource.is_valid resource change_id then
@@ -379,33 +389,18 @@ let check_resource_in_cache cache path =
             else true
           else false
 
-let rec get_folder_id path =
-  if path = root_directory then
-    let root_folder_id =
-      get_metadata () |. Cache.Metadata.root_folder_id in
-    SessionM.return root_folder_id
+let rec get_folder_remote_id inode =
+  if inode = Fuse.root_inode then
+    let root_folder_remote_id =
+      get_metadata () |. Cache.Metadata.root_folder_remote_id in
+    SessionM.return root_folder_remote_id
   else
-    get_resource path >>= fun resource ->
+    get_resource inode >>= fun resource ->
     let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
     SessionM.return remote_id
-and get_resource path =
+and get_resource inode =
   let change_id =
     get_metadata () |. Cache.Metadata.largest_change_id in
-
-  let get_new_resource cache =
-    let parent_path = Filename.dirname path in
-      if check_resource_in_cache cache parent_path then begin
-        raise File_not_found
-      end else begin
-        let new_resource = create_resource path change_id in
-        let title = Filename.basename path in
-        get_folder_id
-          new_resource.Cache.Resource.parent_path >>= fun parent_folder_id ->
-        get_resource_from_server
-          parent_folder_id title new_resource cache >>= fun resource ->
-        SessionM.return resource
-      end
-  in
 
   let refresh_resource resource cache =
     begin if Option.is_some resource.Cache.Resource.remote_id then begin
@@ -420,8 +415,7 @@ and get_resource path =
     Utils.log_message "done\n%!";
     match refreshed_file with
         None ->
-          Cache.Resource.delete_resource cache resource;
-          get_new_resource cache
+          raise File_not_found
       | Some file ->
           let updated_resource = update_resource_from_file resource file in
           update_cached_resource cache updated_resource;
@@ -429,14 +423,14 @@ and get_resource path =
           SessionM.return updated_resource
   in
 
-  if path = root_directory then
+  if inode = Fuse.root_inode then
     let root_resource = get_root_resource () in
     SessionM.return root_resource
   else
     let cache = Context.get_cache () in
-    begin match lookup_resource path with
+    begin match lookup_resource_with_id inode with
         None ->
-          get_new_resource cache
+          raise File_not_found
       | Some resource ->
           if Cache.Resource.is_valid resource change_id then
             SessionM.return resource
@@ -456,6 +450,35 @@ and get_resource path =
       | _ ->
           SessionM.return resource
     end
+
+let lookup_resource_in_directory inode name =
+  let change_id =
+    get_metadata () |. Cache.Metadata.largest_change_id in
+  get_resource inode >>= fun parent_resource ->
+  let parent_path = parent_resource.Cache.Resource.path in
+  let path = Filename.concat parent_path name in
+
+  let get_new_resource cache =
+    let new_resource = create_resource inode path change_id in
+    get_folder_remote_id inode >>= fun parent_remote_id ->
+    get_resource_from_server
+      parent_remote_id name new_resource cache >>= fun resource ->
+    SessionM.return resource
+  in
+
+  let cache = Context.get_cache () in
+  begin match lookup_resource_with_path path with
+      None ->
+        get_new_resource cache
+    | Some resource ->
+        get_resource resource.Cache.Resource.id
+  end >>= fun resource ->
+  begin match resource.Cache.Resource.state with
+      Cache.Resource.State.NotFound ->
+        raise File_not_found 
+    | _ ->
+        SessionM.return resource
+  end
 
 let check_md5_checksum resource =
   let path = resource.Cache.Resource.path in
@@ -572,13 +595,29 @@ let download_resource resource =
           raise Resource_busy
 (* END Resources *)
 
-(* stat *)
-let get_attr path =
+let handle_exception e label inode reply req =
+  match e with
+      File_not_found ->
+        Utils.log_message "File not found: %s %Ld\n%!" label inode;
+        reply req (`Err Fuse.ENOENT)
+    | Permission_denied ->
+        Utils.log_message "Permission denied: %s %Ld\n%!" label inode;
+        reply req (`Err Fuse.EPERM)
+    | Resource_busy ->
+        Utils.log_message "Resource busy: %s %Ld\n%!" label inode;
+        reply req (`Err Fuse.EIO)
+    | e ->
+        Utils.log_message "Exception: %s %Ld\n%!" label inode;
+        Utils.log_exception e;
+        reply req (`Err Fuse.EIO)
+
+(* stats *)
+let stats inode =
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
 
   let request_resource =
-    get_resource path >>= fun resource ->
+    get_resource inode >>= fun resource ->
     begin if Cache.Resource.is_document resource &&
              config.Config.download_docs then
       try
@@ -591,73 +630,126 @@ let get_attr path =
     SessionM.return (resource, content_path)
   in
 
-  if path = root_directory then
-    context.Context.mountpoint_stats
-  else begin
-    let (resource, content_path) = do_request request_resource |> fst in
-    let stat =
-      if content_path <> "" then Some (Unix.LargeFile.stat content_path)
-      else None in
-    let st_nlink =
-      if Cache.Resource.is_folder resource then 2
-      else 1 in
-    let st_kind =
-      if Cache.Resource.is_folder resource then Unix.S_DIR
-      else Unix.S_REG in
-    let st_perm =
-      let perm =
-        if Cache.Resource.is_folder resource then 0o777
-        else if Cache.Resource.is_document resource then 0o444
-        else 0o666 in
-      let mask =
-        lnot config.Config.umask land (
-          if config.Config.read_only ||
-             not (Option.default
-                    true
-                    resource.Cache.Resource.editable) then 0o555
-          else 0o777)
+  let (inode, unix_stats) =
+    if inode = Fuse.root_inode then
+      (Fuse.root_inode, context.Context.mountpoint_stats)
+    else begin
+      let (resource, content_path) = do_request request_resource |> fst in
+      let stat =
+        if content_path <> "" then Some (Unix.LargeFile.stat content_path)
+        else None in
+      let st_nlink =
+        if Cache.Resource.is_folder resource then 2
+        else 1 in
+      let st_kind =
+        if Cache.Resource.is_folder resource then Unix.S_DIR
+        else Unix.S_REG in
+      let st_perm =
+        let perm =
+          if Cache.Resource.is_folder resource then 0o777
+          else if Cache.Resource.is_document resource then 0o444
+          else 0o666 in
+        let mask =
+          lnot config.Config.umask land (
+            if config.Config.read_only ||
+               not (Option.default
+                      true
+                      resource.Cache.Resource.editable) then 0o555
+            else 0o777)
+        in
+          perm land mask in
+      let st_size =
+        match stat with
+            None ->
+              if Cache.Resource.is_folder resource then f_bsize
+              else resource |. Cache.Resource.file_size |. GapiLens.option_get
+          | Some st ->
+              st.Unix.LargeFile.st_size in
+      let st_atime =
+        match stat with
+            None ->
+              resource
+                |. Cache.Resource.last_viewed_by_me_date |. GapiLens.option_get
+          | Some st ->
+              st.Unix.LargeFile.st_atime in
+      let st_mtime =
+        match stat with
+            None ->
+              resource |. Cache.Resource.modified_date |. GapiLens.option_get
+          | Some st ->
+              st.Unix.LargeFile.st_mtime in
+      let st_ctime =
+        match stat with
+            None ->
+              st_mtime
+          | Some st ->
+              st.Unix.LargeFile.st_ctime
       in
-        perm land mask in
-    let st_size =
-      match stat with
-          None ->
-            if Cache.Resource.is_folder resource then f_bsize
-            else resource |. Cache.Resource.file_size |. GapiLens.option_get
-        | Some st ->
-            st.Unix.LargeFile.st_size in
-    let st_atime =
-      match stat with
-          None ->
-            resource |. Cache.Resource.last_viewed_by_me_date |. GapiLens.option_get
-        | Some st ->
-            st.Unix.LargeFile.st_atime in
-    let st_mtime =
-      match stat with
-          None ->
-            resource |. Cache.Resource.modified_date |. GapiLens.option_get
-        | Some st ->
-            st.Unix.LargeFile.st_mtime in
-    let st_ctime =
-      match stat with
-          None ->
-            st_mtime
-        | Some st ->
-            st.Unix.LargeFile.st_ctime
+        (resource.Cache.Resource.id,
+         { context.Context.mountpoint_stats with 
+               Unix.LargeFile.st_nlink;
+               st_kind;
+               st_perm;
+               st_size;
+               st_atime;
+               st_mtime;
+               st_ctime;
+         })
+    end in
+  let st_mode = unix_stats.Unix.LargeFile.st_perm +
+    match unix_stats.Unix.LargeFile.st_kind with
+        Unix.S_DIR -> Fuse.s_IFDIR
+      | _ -> Fuse.s_IFREG in
+  let st_blocks = Int64.div unix_stats.Unix.LargeFile.st_size f_bsize in
+  let st_blocks =
+    if Int64.rem unix_stats.Unix.LargeFile.st_size f_bsize > 0L then
+      Int64.succ st_blocks
+    else st_blocks
+  in
+    { Fuse.st_dev = unix_stats.Unix.LargeFile.st_dev;
+      st_ino = inode;
+      st_mode;
+      st_nlink = unix_stats.Unix.LargeFile.st_nlink;
+      st_uid = unix_stats.Unix.LargeFile.st_uid;
+      st_gid = unix_stats.Unix.LargeFile.st_gid;
+      st_rdev = unix_stats.Unix.LargeFile.st_rdev;
+      st_size = unix_stats.Unix.LargeFile.st_size;
+      st_blksize = f_bsize;
+      st_blocks;
+      st_atime = unix_stats.Unix.LargeFile.st_atime;
+      st_mtime = unix_stats.Unix.LargeFile.st_mtime;
+      st_ctime = unix_stats.Unix.LargeFile.st_ctime;
+    }
+
+(* END stats *)
+
+(* getattr *)
+let getattr req inode =
+  try
+    let attr = `Attr (stats inode, 1.0) in
+      Fuse.reply_getattr req attr
+  with e ->
+    handle_exception e "getattr" inode Fuse.reply_getattr req
+
+(* lookup *)
+let lookup req inode name =
+  try
+    let resource =
+      do_request (lookup_resource_in_directory inode name) |> fst in
+    let entry = `Entry {
+      Fuse.e_inode = resource.Cache.Resource.id;
+      Fuse.e_generation = Int64.one;
+      Fuse.e_stats = stats resource.Cache.Resource.id;
+      Fuse.e_stats_timeout = 1.0;
+      Fuse.e_entry_timeout = 1.0;
+    }
     in
-      { context.Context.mountpoint_stats with 
-            Unix.LargeFile.st_nlink;
-            st_kind;
-            st_perm;
-            st_size;
-            st_atime;
-            st_mtime;
-            st_ctime;
-      }
-  end
-(* END stat *)
+      Fuse.reply_lookup req entry
+  with e ->
+    handle_exception e ("lookup " ^ name) inode Fuse.reply_getattr req
 
 (* readdir *)
-let read_dir path =
+let get_dir_buffer req inode size offset file_info =
   let get_all_files q =
     let rec loop ?pageToken accu =
       FilesResource.list
@@ -673,40 +765,42 @@ let read_dir path =
   in
 
   let request_folder =
-    Utils.log_message "Getting folder content (path=%s)\n%!" path;
-    get_resource path >>= fun resource ->
-    get_folder_id path >>= fun folder_id ->
-    let q = Printf.sprintf "'%s' in parents and trashed = false" folder_id in
+    Utils.log_message "Getting folder content (id=%Ld)\n%!" inode;
+    get_resource inode >>= fun resource ->
+    let folder_remote_id = Option.get resource.Cache.Resource.remote_id in
+    let q = Printf.sprintf "'%s' in parents and trashed = false"
+              folder_remote_id in
     get_all_files q >>= fun files ->
-    Utils.log_message "Done getting folder content (path=%s)\n%!" path;
+    Utils.log_message "Done getting folder content (id=%Ld)\n%!" inode;
     SessionM.return (files, resource)
   in
 
   let cache = Context.get_cache () in
   let resources =
-    if check_resource_in_cache cache path then begin
-      Utils.log_message "Getting resources from db (parent path=%s)...%!"
-        path;
+    if check_resource_in_cache cache inode then begin
+      Utils.log_message "Getting resources from db (parent id=%Ld)...%!"
+        inode;
       let resources =
-        Cache.Resource.select_resources_with_parent_path cache path in
+        Cache.Resource.select_resources_with_parent_id cache inode in
       Utils.log_message "done\n%!";
       resources
     end else begin
       let (files, folder_resource) = do_request request_folder |> fst in
       let change_id = folder_resource.Cache.Resource.change_id in
+      let parent_path = folder_resource.Cache.Resource.path in
       let resources =
         List.map
           (fun file ->
              let title = file.File.title in
              let filename = clean_filename title in
-             let resource_path = Filename.concat path filename in
-             let resource = create_resource resource_path change_id in
+             let resource_path = Filename.concat parent_path filename in
+             let resource = create_resource inode resource_path change_id in
                update_resource_from_file resource file)
           files
       in
         Utils.log_message "Inserting folder resources into db...%!";
         let inserted_resources =
-          Cache.Resource.insert_resources cache resources path change_id in
+          Cache.Resource.insert_resources cache resources inode change_id in
         Utils.log_message "done\n%!";
         let change_id =
           Context.get_ctx () |. Context.largest_change_id_lens in
@@ -716,19 +810,44 @@ let read_dir path =
         in
           update_cached_resource cache updated_resource;
         inserted_resources
-    end
+    end in
+  let buffer = String.create size in
+  let buffer_len =
+    let rec loop buffer_pos off = function 
+        [] -> buffer_pos
+      | resource :: xs ->
+          if off < offset then
+            loop buffer_pos (Int64.succ off) xs
+          else
+            let entry = (Filename.basename resource.Cache.Resource.path,
+                         stats resource.Cache.Resource.id,
+                         Int64.succ off) in
+            let new_pos =
+              Fuse.add_direntry req buffer buffer_pos entry
+            in
+              if new_pos < size then
+                loop new_pos (Int64.succ off) xs
+              else buffer_pos
+    in
+      loop 0 0L resources
   in
-    List.map
-      (fun resource ->
-         Filename.basename resource.Cache.Resource.path)
-      resources
+    String.sub buffer 0 buffer_len
+
+let readdir req inode size offset file_info =
+  try
+    let string_buffer =
+      `StrBuf (get_dir_buffer req inode size offset file_info)
+    in
+      Fuse.reply_readdir req string_buffer
+  with e ->
+    handle_exception e "readdir" inode Fuse.reply_readdir req
 (* END readdir *)
 
-(* fopen *)
-let fopen path flags =
-  let is_read_only_request = List.mem Unix.O_RDONLY flags in
+(* openfile *)
+let fopen inode file_info =
+  let is_read_only_request = (file_info.Fuse.fi_flags land 0xff) = 0 in
   let check_editable =
-    get_resource path >>= fun resource ->
+    get_resource inode >>= fun resource ->
     if not (Option.default true resource.Cache.Resource.editable) &&
        not is_read_only_request then
       raise Permission_denied
@@ -743,22 +862,41 @@ let fopen path flags =
       raise Permission_denied
     else begin
       do_request check_editable |> ignore
-    end;
-    None
-(* END fopen *)
+    end
+
+let openfile req inode file_info =
+  try
+    let () = fopen inode file_info in
+      Fuse.reply_open req (`Open file_info)
+  with e ->
+    handle_exception e "openfile" inode Fuse.reply_open req
+(* END openfile *)
 
 (* read *)
-let read path buf offset file_descr =
+let read req inode size offset file_info =
   let request_resource =
-    get_resource path >>= fun resource ->
+    get_resource inode >>= fun resource ->
     download_resource resource
   in
 
-  let content_path = do_request request_resource |> fst in
-    Utils.with_in_channel content_path
-      (fun ch ->
-         let file_descr = Unix.descr_of_in_channel ch in
-           Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
-           Unix_util.read file_descr buf)
-(* END read *)
+  try
+    let buffer = String.create size in
+    let content_path = do_request request_resource |> fst in
+    let bytes =
+      Utils.with_in_channel content_path
+        (fun ch ->
+           try
+             seek_in ch (Int64.to_int offset);
+             input ch buffer 0 size
+           with End_of_file -> 0) in
+    let buf =
+      if bytes = 0 then
+        ""
+      else if bytes < size then
+        String.sub buffer 0 bytes
+      else buffer
+    in
+      Fuse.reply_read req (`StrBuf buf)
+  with e ->
+    handle_exception e "read" inode Fuse.reply_read req
 

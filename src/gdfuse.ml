@@ -156,114 +156,70 @@ let setup_application debug fs_label client_id client_secret mountpoint =
 (* END setup *)
 
 (* FUSE bindings *)
-let handle_exception e label param =
-  match e with
-      Docs.File_not_found ->
-        Utils.log_message "File not found: %s %s\n%!" label param;
-        raise (Unix.Unix_error (Unix.ENOENT, label, param))
-    | Docs.Permission_denied ->
-        Utils.log_message "Permission denied: %s %s\n%!" label param;
-        raise (Unix.Unix_error (Unix.EACCES, label, param))
-    | Docs.Resource_busy ->
-        Utils.log_message "Resource busy: %s %s\n%!" label param;
-        raise (Unix.Unix_error (Unix.EBUSY, label, param))
-    | e ->
-        Utils.log_exception e;
-        raise (Unix.Unix_error (Unix.EBUSY, label, param))
+let init () =
+  Utils.log_with_header "init\n%!"
 
-let init_filesystem () =
-  Utils.log_with_header "init_filesystem\n%!"
+let destroy () =
+  Utils.log_with_header "destroy\n%!"
 
-let statfs path =
-  Utils.log_with_header "statfs %s\n%!" path;
-  try
-    Docs.statfs ()
-  with e ->
-    Utils.log_exception e;
-    raise (Unix.Unix_error (Unix.EBUSY, "statfs", path))
+let lookup req inode name =
+  Utils.log_with_header "lookup %Ld %s\n%!" inode name;
+  Docs.lookup req inode name
 
-let getattr path =
-  Utils.log_with_header "getattr %s\n%!" path;
-  try
-    Docs.get_attr path
-  with e -> handle_exception e "stat" path
+let getattr req inode =
+  Utils.log_with_header "getattr %Ld\n%!" inode;
+  Docs.getattr req inode
 
-let readdir path hnd =
-  Utils.log_with_header "readdir %s %d\n%!" path hnd;
-  let dir_list =
-    try
-      Docs.read_dir path
-    with e -> handle_exception e "readdir" path
-  in
-    Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
+let openfile req inode file_info =
+  Utils.log_with_header "openfile %Ld %d\n%!" inode file_info.Fuse.fi_flags;
+  Docs.openfile req inode file_info
 
-let fopen path flags =
-  Utils.log_with_header "fopen %s %s\n%!" path (Utils.flags_to_string flags);
-  try
-    Docs.fopen path flags
-  with e -> handle_exception e "fopen" path
+let read req inode size offset file_info =
+  Utils.log_with_header "read %Ld %d %Ld %d\n%!"
+    inode size offset file_info.Fuse.fi_flags;
+  Docs.read req inode size offset file_info
 
-let read path buf offset file_descr =
-  Utils.log_with_header "read %s buf %Ld %d\n%!" path offset file_descr;
-  try
-    Docs.read path buf offset file_descr
-  with e -> handle_exception e "read" path
+let readdir req inode size offset file_info =
+  Utils.log_with_header "readdir %Ld %d %Ld %d\n%!"
+    inode size offset file_info.Fuse.fi_flags;
+  Docs.readdir req inode size offset file_info
+
+let statfs req inode =
+  Utils.log_with_header "statfs %Ld\n%!" inode;
+  Docs.statfs req inode
 
 let start_filesystem mountpoint fuse_args =
   if not (Sys.file_exists mountpoint && Sys.is_directory mountpoint) then
     failwith ("Mountpoint " ^ mountpoint ^ " should be an existing directory.");
   Utils.log_with_header "Starting filesystem %s\n%!" mountpoint;
-  let fuse_argv =
-    Sys.argv.(0) :: (fuse_args @ [mountpoint])
-    |> Array.of_list
+  let fs_ops =
+    let default_ops = Fuse.default_ops () in
+      { default_ops with
+            Fuse.init;
+            destroy;
+            lookup;
+            getattr;
+            (* Commented out: causes Segmentation fault
+             openfile;
+             *)
+            read;
+            (*
+            write = fs_write;
+             *)
+            readdir;
+            (*
+            mknod = fs_mknod;
+             *)
+            statfs;
+      } in
+  let filesystem =
+    Fuse.make mountpoint fuse_args fs_ops in
+  let rec loop () =
+    Fuse.process filesystem;
+    if not (Fuse.session_exited filesystem)
+    then loop ()
   in
-    Fuse.main fuse_argv {
-      Fuse.default_operations with
-          Fuse.init = init_filesystem;
-          statfs;
-          getattr;
-          readdir;
-          (*
-          opendir = (fun path flags -> Unix.close (Unix.openfile path flags 0);None);
-          releasedir = (fun path mode hnd -> ());
-          fsyncdir = (fun path ds hnd -> Printf.printf "sync dir\n%!");
-          readlink = Unix.readlink;
-          utime = Unix.utimes;
-           *)
-          fopen;
-          read;
-(*
-          write = xmp_write;
-          mknod = (fun path mode -> close (openfile path [O_CREAT;O_EXCL] mode));
-          mkdir = Unix.mkdir;
-          unlink = Unix.unlink;
-          rmdir = Unix.rmdir;
-          symlink = Unix.symlink;
-          rename = Unix.rename;
-          link = Unix.link;
-          chmod = Unix.chmod;
-          chown = Unix.chown;
-          truncate = Unix.LargeFile.truncate;
-          release = (fun path mode hnd -> Unix.close (retrieve_descr hnd));
-          flush = (fun path hnd -> ());
-          fsync = (fun path ds hnd -> Printf.printf "sync\n%!");
-          listxattr = (fun path -> init_attr xattr path;lskeys (Hashtbl.find xattr path));
-          getxattr = (fun path attr ->
-                        with_xattr_lock (fun () ->
-                                           init_attr xattr path;
-                                           try
-                                             Hashtbl.find (Hashtbl.find xattr path) attr
-                                           with Not_found -> raise (Unix.Unix_error (EUNKNOWNERR 61 (* TODO: this is system-dependent *),"getxattr",path)))());
-          setxattr = (fun path attr value flag -> (* TODO: This currently ignores flags *)
-                        with_xattr_lock (fun () ->
-                                           init_attr xattr path;
-                                           Hashtbl.replace (Hashtbl.find xattr path) attr value) ());
-          removexattr = (fun path attr ->
-                           with_xattr_lock (fun () ->
-                                              init_attr xattr path;
-                                              Hashtbl.remove (Hashtbl.find xattr path) attr) ());
-           *)
-    }
+    loop ()
 (* END FUSE bindings *)
 
 (* Main program *)
@@ -292,8 +248,8 @@ let () =
        Arg.Unit (fun () ->
                    debug := true;
                    Utils.verbose := true;
-                   fuse_args := "-f" :: !fuse_args),
-       " enable debug mode (implies -verbose, -f). Default is false.";
+                   fuse_args := "-d" :: !fuse_args),
+       " enable debug mode (implies -verbose, -d). Default is false.";
        "-label",
        Arg.Set_string fs_label,
        " use a specific label to identify the filesystem. \
@@ -304,15 +260,9 @@ let () =
        "-secret",
        Arg.Set_string client_secret,
        " provide OAuth2 client secret.";
-       "-f",
-       Arg.Unit (fun _ -> fuse_args := "-f" :: !fuse_args),
-       " keep the process in foreground.";
        "-d",
        Arg.Unit (fun _ -> fuse_args := "-d" :: !fuse_args),
-       " enable FUSE debug output (implies -f).";
-       "-s",
-       Arg.Unit (fun _ -> fuse_args := "-s" :: !fuse_args),
-       " disable multi-threaded operation.";
+       " enable FUSE debug output.";
       ]) in
   let () =
     Arg.parse

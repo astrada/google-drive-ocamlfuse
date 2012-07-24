@@ -72,8 +72,8 @@ let refresh_token_lens =
 let largest_change_id_lens =
   metadata |-- GapiLens.option_get |-- Cache.Metadata.largest_change_id
 
-let root_folder_id_lens =
-  metadata |-- GapiLens.option_get |-- Cache.Metadata.root_folder_id
+let root_folder_remote_id_lens =
+  metadata |-- GapiLens.option_get |-- Cache.Metadata.root_folder_remote_id
 
 module ConcurrentContext =
   ConcurrentGlobal.Make(struct type u = t let label = "context" end)

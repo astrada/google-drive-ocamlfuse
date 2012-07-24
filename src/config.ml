@@ -2,7 +2,7 @@ open GapiUtils.Infix
 open GapiLens.Infix
 
 let application_name = "google-drive-ocamlfuse"
-let version = "0.1pre3"
+let version = "0.1pre3-libfuse"
 
 type t = {
   (* Debug mode *)

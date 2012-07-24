@@ -126,7 +126,7 @@ struct
      md5_checksum, \
      file_size, \
      editable, \
-     parent_path, \
+     parent_id, \
      path, \
      state, \
      change_id, \
@@ -151,7 +151,7 @@ struct
          :md5_checksum, \
          :file_size, \
          :editable, \
-         :parent_path, \
+         :parent_id, \
          :path, \
          :state, \
          :change_id, \
@@ -177,7 +177,7 @@ struct
          md5_checksum = :md5_checksum, \
          file_size = :file_size, \
          editable = :editable, \
-         parent_path = :parent_path, \
+         parent_id = :parent_id, \
          path = :path, \
          state = :state, \
          change_id = :change_id, \
@@ -212,13 +212,21 @@ struct
     in
       Sqlite3.prepare db sql
 
-  let prepare_delete_with_parent_path_stmt db =
+  let prepare_delete_with_parent_id_stmt db =
     let sql =
       "DELETE \
        FROM resource \
-       WHERE parent_path = :parent_path \
+       WHERE parent_id = :parent_id \
          AND (change_id < :change_id \
            OR state <> 'NotFound');"
+    in
+      Sqlite3.prepare db sql
+
+  let prepare_select_with_id_stmt db =
+    let sql =
+      "SELECT " ^ fields ^ " \
+       FROM resource \
+       WHERE id = :id;"
     in
       Sqlite3.prepare db sql
 
@@ -238,11 +246,11 @@ struct
     in
       Sqlite3.prepare db sql
 
-  let prepare_select_with_parent_path_stmt db =
+  let prepare_select_with_parent_id_stmt db =
     let sql =
       "SELECT " ^ fields ^ " \
        FROM resource \
-       WHERE parent_path = :parent_path \
+       WHERE parent_id = :parent_id \
          AND state IN ('InSync', 'ToDownload');"
     in
       Sqlite3.prepare db sql
@@ -258,7 +266,7 @@ struct
      quota_bytes_used, \
      largest_change_id, \
      remaining_change_ids, \
-     root_folder_id, \
+     root_folder_remote_id, \
      permission_id, \
      last_update"
 
@@ -276,7 +284,7 @@ struct
          :quota_bytes_used, \
          :largest_change_id, \
          :remaining_change_ids, \
-         :root_folder_id, \
+         :root_folder_remote_id, \
          :permission_id, \
          :last_update \
        );"
@@ -395,7 +403,7 @@ struct
     file_size : int64 option;
     editable : bool option;
     (* local data *)
-    parent_path : string;
+    parent_id : int64;
     path : string;
     state : State.t;
     change_id : int64;
@@ -458,9 +466,9 @@ struct
 		GapiLens.get = (fun x -> x.editable);
 		GapiLens.set = (fun v x -> { x with editable = v })
 	}
-	let parent_path = {
-		GapiLens.get = (fun x -> x.parent_path);
-		GapiLens.set = (fun v x -> { x with parent_path = v })
+	let parent_id = {
+		GapiLens.get = (fun x -> x.parent_id);
+		GapiLens.set = (fun v x -> { x with parent_id = v })
 	}
 	let path = {
 		GapiLens.get = (fun x -> x.path);
@@ -533,7 +541,7 @@ struct
     bind_text stmt ":md5_checksum" resource.md5_checksum;
     bind_int stmt ":file_size" resource.file_size;
     bind_bool stmt ":editable" resource.editable;
-    bind_text stmt ":parent_path" (Some resource.parent_path);
+    bind_int stmt ":parent_id" (Some resource.parent_id);
     bind_text stmt ":path" (Some resource.path);
     bind_text stmt ":state" (Some (State.to_string resource.state));
     bind_int stmt ":change_id" (Some resource.change_id);
@@ -574,9 +582,9 @@ struct
            _delete_resource stmt resource.id;
            finalize_stmt stmt)
 
-  let _delete_resources_with_parent_path db parent_path change_id =
-    let stmt = ResourceStmts.prepare_delete_with_parent_path_stmt db in
-      bind_text stmt ":parent_path" (Some parent_path);
+  let _delete_resources_with_parent_id db parent_id change_id =
+    let stmt = ResourceStmts.prepare_delete_with_parent_id_stmt db in
+      bind_int stmt ":parent_id" (Some parent_id);
       bind_int stmt ":change_id" (Some change_id);
       final_step stmt;
       finalize_stmt stmt
@@ -591,10 +599,10 @@ struct
              resources;
            finalize_stmt stmt)
 
-  let insert_resources cache resources parent_path change_id =
+  let insert_resources cache resources parent_id change_id =
     with_transaction cache
       (fun db ->
-         _delete_resources_with_parent_path db parent_path change_id;
+         _delete_resources_with_parent_id db parent_id change_id;
          let stmt = ResourceStmts.prepare_insert_stmt db in
          let results =
            List.map
@@ -635,7 +643,7 @@ struct
       md5_checksum = row_data.(11) |> data_to_string;
       file_size = row_data.(12) |> data_to_int64;
       editable = row_data.(13) |> data_to_bool;
-      parent_path = row_data.(14) |> data_to_string |> Option.get;
+      parent_id = row_data.(14) |> data_to_int64 |> Option.get;
       path = row_data.(15) |> data_to_string |> Option.get;
       state = row_data.(16) |> data_to_string |> Option.get |> State.of_string;
       change_id = row_data.(17) |> data_to_int64 |> Option.get;
@@ -652,6 +660,11 @@ struct
            finalize_stmt stmt;
            result)
 
+  let select_resource_with_id cache id =
+    select_resource cache
+      ResourceStmts.prepare_select_with_id_stmt
+      (fun stmt -> bind_int stmt ":id" (Some id))
+
   let select_resource_with_path cache path =
     select_resource cache
       ResourceStmts.prepare_select_with_path_stmt
@@ -662,13 +675,13 @@ struct
       ResourceStmts.prepare_select_with_remote_id_stmt
       (fun stmt -> bind_text stmt ":remote_id" (Some remote_id))
 
-  let select_resources_with_parent_path cache parent_path =
+  let select_resources_with_parent_id cache parent_id =
     with_db cache
       (fun db ->
-         let stmt = ResourceStmts.prepare_select_with_parent_path_stmt db in
+         let stmt = ResourceStmts.prepare_select_with_parent_id_stmt db in
          let results =
            select_all_rows stmt
-             (fun stmt -> bind_text stmt ":parent_path" (Some parent_path))
+             (fun stmt -> bind_int stmt ":parent_id" (Some parent_id))
              row_to_resource
          in
            finalize_stmt stmt;
@@ -733,7 +746,7 @@ struct
     quota_bytes_used : int64;
     largest_change_id : int64;
     remaining_change_ids : int64;
-    root_folder_id : string;
+    root_folder_remote_id : string;
     permission_id : string;
     last_update : float;
   }
@@ -762,9 +775,9 @@ struct
 		GapiLens.get = (fun x -> x.remaining_change_ids);
 		GapiLens.set = (fun v x -> { x with remaining_change_ids = v })
 	}
-	let root_folder_id = {
-		GapiLens.get = (fun x -> x.root_folder_id);
-		GapiLens.set = (fun v x -> { x with root_folder_id = v })
+	let root_folder_remote_id = {
+		GapiLens.get = (fun x -> x.root_folder_remote_id);
+		GapiLens.set = (fun v x -> { x with root_folder_remote_id = v })
 	}
 	let permission_id = {
 		GapiLens.get = (fun x -> x.permission_id);
@@ -783,7 +796,7 @@ struct
     bind_int stmt ":quota_bytes_used" (Some metadata.quota_bytes_used);
     bind_int stmt ":largest_change_id" (Some metadata.largest_change_id);
     bind_int stmt ":remaining_change_ids" (Some metadata.remaining_change_ids);
-    bind_text stmt ":root_folder_id" (Some metadata.root_folder_id);
+    bind_text stmt ":root_folder_remote_id" (Some metadata.root_folder_remote_id);
     bind_text stmt ":permission_id" (Some metadata.permission_id);
     bind_float stmt ":last_update" (Some metadata.last_update);
     final_step stmt
@@ -802,7 +815,7 @@ struct
       quota_bytes_used = row_data.(3) |> data_to_int64 |> Option.get;
       largest_change_id = row_data.(4) |> data_to_int64 |> Option.get;
       remaining_change_ids = row_data.(5) |> data_to_int64 |> Option.get;
-      root_folder_id = row_data.(6) |> data_to_string |> Option.get;
+      root_folder_remote_id = row_data.(6) |> data_to_string |> Option.get;
       permission_id = row_data.(7) |> data_to_string |> Option.get;
       last_update = row_data.(8) |> data_to_float |> Option.get;
     }
@@ -863,14 +876,14 @@ let setup_db cache =
             md5_checksum TEXT NULL, \
             file_size INTEGER NULL, \
             editable INTEGER NULL, \
-            parent_path TEXT NOT NULL, \
+            parent_id INTEGER NOT NULL, \
             path TEXT NOT NULL, \
             state TEXT NOT NULL, \
             change_id INTEGER NOT NULL, \
             last_update REAL NOT NULL \
          ); \
          CREATE INDEX IF NOT EXISTS path_index ON resource (path); \
-         CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path); \
+         CREATE INDEX IF NOT EXISTS parent_id_index ON resource (parent_id); \
          CREATE INDEX IF NOT EXISTS remote_id_index ON resource (remote_id); \
          CREATE TABLE IF NOT EXISTS metadata ( \
             id INTEGER PRIMARY KEY, \
@@ -880,7 +893,7 @@ let setup_db cache =
             quota_bytes_used INTEGER NOT NULL, \
             largest_change_id INTEGER NOT NULL, \
             remaining_change_ids INTEGER NOT NULL, \
-            root_folder_id TEXT NOT NULL, \
+            root_folder_remote_id TEXT NOT NULL, \
             permission_id TEXT NOT NULL, \
             last_update REAL NOT NULL \
          );
