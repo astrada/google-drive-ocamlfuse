@@ -11,21 +11,15 @@ Getting started
 
 * [OCaml][] >= 3.12.0
 * [Findlib][] >= 1.2.7
-* [ocamlfuse][] >= 2.7.1
+* [libfuse-ocaml][] >= 0.4
 * [gapi-ocaml][] >= 0.1.14
 * [sqlite3-ocaml][] >= 1.6.1
 
 [OCaml]: http://caml.inria.fr/ocaml/release.en.html
 [Findlib]: http://projects.camlcity.org/projects/findlib.html/
-[ocamlfuse]: http://sourceforge.net/projects/ocamlfuse/
+[libfuse-ocaml]: http://anonscm.debian.org/gitweb/?p=pkg-ocaml-maint/packages/libfuse-ocaml.git;a=summary
 [gapi-ocaml]: http://forge.ocamlcore.org/projects/gapi-ocaml/
 [sqlite3-ocaml]: https://bitbucket.org/mmottl/sqlite3-ocaml
-
-It's better to use the last [CVS
-snapshot](http://sourceforge.net/scm/?type=cvs&group_id=121959) of
-`ocamlfuse`, because it contains some bugfixes. I've uploaded the snapshot on
-[github](https://github.com/downloads/astrada/ocamlfuse/ocamlfuse-2.7.1-cvs~oasis1.tar.gz)
-and added OASIS support, to ease compilation and installation.
 
 ### Configuration and installation
 
