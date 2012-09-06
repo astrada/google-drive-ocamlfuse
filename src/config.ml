@@ -2,7 +2,24 @@ open GapiUtils.Infix
 open GapiLens.Infix
 
 let application_name = "google-drive-ocamlfuse"
-let version = "0.1pre3"
+let version = "0.1"
+
+module ConflictResolutionStrategy =
+struct
+  type t =
+      Client
+    | Server
+
+  let to_string = function
+      Client -> "client"
+    | Server -> "server"
+
+  let of_string = function
+      "client" -> Client
+    | "server" -> Server
+    | s -> failwith ("Unsupported conflict resolution strategy: " ^ s)
+
+end
 
 type t = {
   (* Debug mode *)
@@ -31,6 +48,11 @@ type t = {
   client_id : string;
   (* OAuth2 Client secret *)
   client_secret : string;
+  (* Conflict resolution strategy:
+   * - client: (in case of conflict) always update server (client side wins)
+   * - server: (in case of conflict) always maintain server version (server side
+   * wins) *)
+  conflict_resolution : ConflictResolutionStrategy.t
 }
 
 let debug = {
@@ -85,6 +107,10 @@ let client_secret = {
   GapiLens.get = (fun x -> x.client_secret);
   GapiLens.set = (fun v x -> { x with client_secret = v })
 }
+let conflict_resolution = {
+  GapiLens.get = (fun x -> x.conflict_resolution);
+  GapiLens.set = (fun v x -> { x with conflict_resolution = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -105,6 +131,7 @@ let default = {
   spreadsheet_format = "ods";
   client_id = "";
   client_secret = "";
+  conflict_resolution = ConflictResolutionStrategy.Server;
 }
 
 let default_debug = {
@@ -121,6 +148,7 @@ let default_debug = {
   spreadsheet_format = "ods";
   client_id = "";
   client_secret = "";
+  conflict_resolution = ConflictResolutionStrategy.Server;
 }
 
 let of_table table =
@@ -146,6 +174,9 @@ let of_table table =
         get "spreadsheet_format" Std.identity default.spreadsheet_format;
       client_id = get "client_id" Std.identity default.client_id;
       client_secret = get "client_secret" Std.identity default.client_secret;
+      conflict_resolution =
+        get "conflict_resolution" ConflictResolutionStrategy.of_string
+          default.conflict_resolution;
     }
 
 let to_table data =
@@ -164,6 +195,8 @@ let to_table data =
     add "spreadsheet_format" data.spreadsheet_format;
     add "client_id" data.client_id;
     add "client_secret" data.client_secret;
+    add "conflict_resolution"
+      (data.conflict_resolution |> ConflictResolutionStrategy.to_string);
     table
 
 let debug_print out_ch start_time curl info_type info =
