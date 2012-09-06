@@ -130,12 +130,11 @@ let get_root_resource () =
 (* Metadata *)
 let get_metadata () =
   let request_metadata last_change_id etag =
-    let startChangeId =
-      Int64.to_string (Int64.add last_change_id 1L) in
+    let startChangeId = Int64.succ last_change_id in
     AboutResource.get
       ?etag
       ~startChangeId
-      ~maxChangeIdCount:"500" >>= fun about ->
+      ~maxChangeIdCount:500L >>= fun about ->
     let metadata = {
       Cache.Metadata.etag = about.About.etag;
       username = about.About.name;
@@ -182,7 +181,7 @@ let get_metadata () =
 
     let request_changes =
       Utils.log_message "Getting changes from server...%!";
-      let startChangeId = Int64.to_string (Int64.add last_change_id 1L) in
+      let startChangeId = Int64.succ last_change_id in
       get_all_changes startChangeId >>= fun changes ->
       Utils.log_message "done\n%!";
       SessionM.return changes
@@ -570,6 +569,13 @@ let download_resource resource =
       | Cache.Resource.State.Conflict ->
           (* TODO: resolve conflict *)
           raise Resource_busy
+
+let is_filesystem_read_only () =
+  Context.get_ctx () |. Context.config_lens |. Config.read_only
+
+let is_file_read_only resource =
+  not (Option.default true resource.Cache.Resource.editable) ||
+  Cache.Resource.is_document resource
 (* END Resources *)
 
 (* stat *)
@@ -612,9 +618,8 @@ let get_attr path =
       let mask =
         lnot config.Config.umask land (
           if config.Config.read_only ||
-             not (Option.default
-                    true
-                    resource.Cache.Resource.editable) then 0o555
+             not (Option.default true resource.Cache.Resource.editable)
+          then 0o555
           else 0o777)
       in
         perm land mask in
@@ -628,7 +633,9 @@ let get_attr path =
     let st_atime =
       match stat with
           None ->
-            resource |. Cache.Resource.last_viewed_by_me_date |. GapiLens.option_get
+            resource
+              |. Cache.Resource.last_viewed_by_me_date
+              |. GapiLens.option_get
         | Some st ->
             st.Unix.LargeFile.st_atime in
     let st_mtime =
@@ -729,23 +736,93 @@ let fopen path flags =
   let is_read_only_request = List.mem Unix.O_RDONLY flags in
   let check_editable =
     get_resource path >>= fun resource ->
-    if not (Option.default true resource.Cache.Resource.editable) &&
-       not is_read_only_request then
+    if not is_read_only_request && is_file_read_only resource then
       raise Permission_denied
     else
       SessionM.return ()
   in
 
-  let read_only =
-    Context.get_ctx () |. Context.config_lens |. Config.read_only
-  in
-    if read_only && not is_read_only_request then
-      raise Permission_denied
-    else begin
-      do_request check_editable |> ignore
-    end;
-    None
+  if not is_read_only_request && is_filesystem_read_only () then
+    raise Permission_denied
+  else begin
+    do_request check_editable |> ignore
+  end;
+  None
 (* END fopen *)
+
+(* opendir *)
+let opendir path flags =
+  do_request (get_resource path) |> ignore;
+  None
+(* END opendir *)
+
+let update_file_metadata path update_resource update_file_in_cache =
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  let cache = context.Context.cache in
+  let update_file =
+    get_resource path >>= fun resource ->
+    let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+    Utils.log_message "Updating file metadata (id=%s)...%!" remote_id;
+    let file_patch = update_resource resource in
+    let patch file =
+      FilesResource.patch
+        ~setModifiedDate:true
+        ~updateViewedDate:true
+        ~fileId:remote_id
+        file
+    in
+    begin try
+      patch file_patch
+    with GapiRequest.Conflict session -> 
+      Utils.log_message "Conflict detected\n%!";
+      GapiMonad.SessionM.put session >>
+      match config.Config.conflict_resolution with
+          Config.ConflictResolutionStrategy.Client ->
+            Utils.log_message "Forcing update...%!";
+            let file_without_etag = file_patch |> File.etag ^= "" in
+            patch file_without_etag >>= fun file ->
+            Utils.log_message "done\n%!";
+            SessionM.return file
+        | Config.ConflictResolutionStrategy.Server ->
+            Utils.log_message "Keeping server changes...%!";
+            FilesResource.get ~fileId:remote_id >>= fun file ->
+            Utils.log_message "done\n%!";
+            SessionM.return file
+    end >>= fun file ->
+    Utils.log_message "done\n%!";
+    if resource.Cache.Resource.state = Cache.Resource.State.InSync then begin
+      let content_path = Cache.get_content_path cache resource in
+      if Sys.file_exists content_path then
+        update_file_in_cache content_path
+    end;
+    let updated_resource = update_resource_from_file resource file in
+    update_cached_resource cache updated_resource;
+    SessionM.return ()
+  in
+
+  if is_filesystem_read_only () then
+    raise Permission_denied
+  else
+    update_file
+
+(* utime *)
+let utime path atime mtime =
+  let update =
+    update_file_metadata
+      path
+      (fun resource ->
+         let etag = Option.default "" resource.Cache.Resource.etag in
+         { File.empty with
+               File.etag;
+               modifiedDate = Netdate.create mtime;
+               lastViewedByMeDate = Netdate.create atime;
+         })
+      (fun content_path ->
+         Unix.utimes content_path atime mtime)
+  in
+    do_request update |> ignore
+(* END utime *)
 
 (* read *)
 let read path buf offset file_descr =

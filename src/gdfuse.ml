@@ -197,6 +197,25 @@ let readdir path hnd =
   in
     Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
 
+let opendir path flags =
+  Utils.log_with_header "opendir %s %s\n%!" path (Utils.flags_to_string flags);
+  try
+    Docs.opendir path flags
+  with e -> handle_exception e "opendir" path
+
+let releasedir path flags hnd =
+  Utils.log_with_header "releasedir %s %s\n%!"
+    path (Utils.flags_to_string flags)
+
+let fsyncdir path ds hnd =
+  Utils.log_with_header "fsyncdir %s %b\n%!" path ds
+
+let utime path atime mtime =
+  Utils.log_with_header "utime %s %f %f\n%!" path atime mtime;
+  try
+    Docs.utime path atime mtime
+  with e -> handle_exception e "utime" path
+
 let fopen path flags =
   Utils.log_with_header "fopen %s %s\n%!" path (Utils.flags_to_string flags);
   try
@@ -223,13 +242,11 @@ let start_filesystem mountpoint fuse_args =
           statfs;
           getattr;
           readdir;
-          (*
-          opendir = (fun path flags -> Unix.close (Unix.openfile path flags 0);None);
-          releasedir = (fun path mode hnd -> ());
-          fsyncdir = (fun path ds hnd -> Printf.printf "sync dir\n%!");
-          readlink = Unix.readlink;
-          utime = Unix.utimes;
-           *)
+          opendir;
+          releasedir;
+          fsyncdir;
+          (*readlink;*)
+          utime;
           fopen;
           read;
 (*
@@ -270,7 +287,7 @@ let start_filesystem mountpoint fuse_args =
 let () =
   let fs_label = ref "default" in
   let mountpoint = ref "" in
-  let fuse_args = ref [] in
+  let fuse_args = ref ["-s"] in
   let show_version = ref false in
   let debug = ref false in
   let client_id = ref "" in
@@ -310,9 +327,10 @@ let () =
        "-d",
        Arg.Unit (fun _ -> fuse_args := "-d" :: !fuse_args),
        " enable FUSE debug output (implies -f).";
-       "-s",
-       Arg.Unit (fun _ -> fuse_args := "-s" :: !fuse_args),
-       " disable multi-threaded operation.";
+       "-m",
+       Arg.Unit (fun _ -> fuse_args :=
+                          List.filter (fun a -> a <> "-s") !fuse_args),
+       " enable multi-threaded operation.";
       ]) in
   let () =
     Arg.parse
