@@ -46,11 +46,18 @@ Spreadsheets [export format](https://developers.google.com/google-apps/documents
 
     spreadsheet_format=ods
 
-OAuth2 client ID (optional)
+OAuth2 client ID (optional):
 
     client_id=
 
-OAuth2 client secret (optional)
+OAuth2 client secret (optional):
 
     client_secret=
+
+Conflict resolution strategy. In case of conflict (update on both sides), if
+we set the `client` value, the application will always update the server
+resource (client side wins). Otherwise, setting `server`, the application will
+always maintain the server version of the resource (server side wins):
+
+    conflict_resolution=server
 
