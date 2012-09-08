@@ -52,7 +52,12 @@ let create_root_resource root_folder_id change_id =
 
 let update_resource_from_file resource file =
   let largest_change_id =
-    Context.get_ctx () |. Context.largest_change_id_lens
+    Context.get_ctx () |. Context.largest_change_id_lens in
+  let path =
+    let filename = clean_filename file.File.title in
+    if Filename.basename resource.Cache.Resource.path <> filename
+    then Filename.concat resource.Cache.Resource.parent_path filename
+    else resource.Cache.Resource.path
   in
     { resource with
           Cache.Resource.etag = Some file.File.etag;
@@ -73,6 +78,7 @@ let update_resource_from_file resource file =
           editable = Some file.File.editable;
           change_id = largest_change_id;
           last_update = Unix.gettimeofday ();
+          path;
           state =
             if file.File.labels.File.Labels.restricted then
               Cache.Resource.State.Restricted
@@ -188,6 +194,7 @@ let get_metadata () =
     in
 
     let get_ids_to_update change =
+      let get_id = Option.map (fun r -> r.Cache.Resource.id) in
       let file = change.Change.file in
       let selected_resource =
         Cache.Resource.select_resource_with_remote_id cache file.File.id in
@@ -202,11 +209,14 @@ let get_metadata () =
                 List.map
                   (Cache.Resource.select_resource_with_remote_id cache)
                   remote_ids
-          | _ -> [selected_resource]
+          | Some r ->
+              let parent_resource =
+                Cache.Resource.select_resource_with_path cache
+                  r.Cache.Resource.parent_path
+              in
+                [parent_resource; selected_resource]
       in
-        List.map
-          (fun r -> Option.map (fun r' -> r'.Cache.Resource.id) r)
-          resources
+      List.map get_id resources
     in
 
     let get_file_id_from_change change =
@@ -566,9 +576,6 @@ let download_resource resource =
             SessionM.return ()
           end >>
           SessionM.return content_path
-      | Cache.Resource.State.Conflict ->
-          (* TODO: resolve conflict *)
-          raise Resource_busy
 
 let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only
@@ -756,70 +763,77 @@ let opendir path flags =
   None
 (* END opendir *)
 
-let update_file_metadata path update_resource update_file_in_cache =
+(* Update operations *)
+let default_save_resource_to_db cache resource file =
+  let updated_resource = update_resource_from_file resource file in
+  update_cached_resource cache updated_resource
+
+let update_remote_resource path
+      ?update_file_in_cache
+      ?(save_to_db = default_save_resource_to_db)
+      do_remote_update
+      retry_update =
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
   let cache = context.Context.cache in
   let update_file =
     get_resource path >>= fun resource ->
-    let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-    Utils.log_message "Updating file metadata (id=%s)...%!" remote_id;
-    let file_patch = update_resource resource in
-    let patch file =
-      FilesResource.patch
-        ~setModifiedDate:true
-        ~updateViewedDate:true
-        ~fileId:remote_id
-        file
-    in
     begin try
-      patch file_patch
+      do_remote_update resource
     with GapiRequest.Conflict session -> 
-      Utils.log_message "Conflict detected\n%!";
+      Utils.log_message "Conflict detected: %!";
       GapiMonad.SessionM.put session >>
       match config.Config.conflict_resolution with
           Config.ConflictResolutionStrategy.Client ->
-            Utils.log_message "Forcing update...%!";
-            let file_without_etag = file_patch |> File.etag ^= "" in
-            patch file_without_etag >>= fun file ->
+            Utils.log_message "Retrying...%!";
+            retry_update resource >>= fun file ->
             Utils.log_message "done\n%!";
             SessionM.return file
         | Config.ConflictResolutionStrategy.Server ->
-            Utils.log_message "Keeping server changes...%!";
-            FilesResource.get ~fileId:remote_id >>= fun file ->
-            Utils.log_message "done\n%!";
-            SessionM.return file
-    end >>= fun file ->
+            Utils.log_message "Keeping server changes\n%!";
+            SessionM.return None
+    end >>= fun file_option ->
     Utils.log_message "done\n%!";
-    if resource.Cache.Resource.state = Cache.Resource.State.InSync then begin
-      let content_path = Cache.get_content_path cache resource in
-      if Sys.file_exists content_path then
-        update_file_in_cache content_path
+    begin match file_option with
+        None -> ()
+      | Some file ->
+          begin match update_file_in_cache with
+              None -> ()
+            | Some go ->
+                if resource.Cache.Resource.state = Cache.Resource.State.InSync
+                then begin
+                  let content_path = Cache.get_content_path cache resource in
+                  if Sys.file_exists content_path then
+                    go content_path
+                end;
+          end;
+          save_to_db cache resource file
     end;
-    let updated_resource = update_resource_from_file resource file in
-    update_cached_resource cache updated_resource;
     SessionM.return ()
   in
-
   if is_filesystem_read_only () then
     raise Permission_denied
   else
     update_file
+(* Update operations *)
 
 (* utime *)
 let utime path atime mtime =
   let update =
-    update_file_metadata
+    let touch resource =
+      let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+      Utils.log_message "Touching file (id=%s)...%!" remote_id;
+      FilesResource.touch ~fileId:remote_id >>= fun touched_file ->
+      Utils.log_message "done\n%!";
+      SessionM.return (Some touched_file)
+    in
+    update_remote_resource
+      ~update_file_in_cache:(
+        fun content_path ->
+          Unix.utimes content_path atime mtime)
       path
-      (fun resource ->
-         let etag = Option.default "" resource.Cache.Resource.etag in
-         { File.empty with
-               File.etag;
-               modifiedDate = Netdate.create mtime;
-               lastViewedByMeDate = Netdate.create atime;
-         })
-      (fun content_path ->
-         Unix.utimes content_path atime mtime)
+      touch
+      touch
   in
     do_request update |> ignore
 (* END utime *)
@@ -838,4 +852,99 @@ let read path buf offset file_descr =
            Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
            Unix_util.read file_descr buf)
 (* END read *)
+
+(* rename *)
+let rename path new_path =
+  let cache = Context.get_cache () in
+  let old_parent_path = Filename.dirname path in
+  let new_parent_path = Filename.dirname new_path in
+  let update =
+    let rename_file use_etag resource =
+      let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+      let old_name = Filename.basename path in
+      let new_name = Filename.basename new_path in
+      if old_name <> new_name then begin
+        Utils.log_message "Renaming file (id=%s) from %s to %s...%!"
+          remote_id old_name new_name;
+        let etag = Option.default "" resource.Cache.Resource.etag in
+        let file_patch =
+          { File.empty with
+                File.etag = if use_etag then etag else "";
+                title = new_name;
+          }
+        in
+        FilesResource.patch
+          ~fileId:remote_id
+          file_patch >>= fun patched_file ->
+        Utils.log_message "done\n%!";
+        SessionM.return (Some patched_file)
+      end else begin
+        SessionM.return None
+      end
+    in
+    let move resource =
+      let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+      begin if old_parent_path <> new_parent_path then begin
+        Utils.log_message "Moving file (id=%s) from %s to %s...%!"
+          remote_id old_parent_path new_parent_path;
+        get_resource new_parent_path >>= fun new_parent_resource ->
+        let new_parent_id =
+          new_parent_resource |. Cache.Resource.remote_id |> Option.get
+        in
+        let parent_reference = ParentReference.empty
+          |> ParentReference.id ^= new_parent_id in
+        ParentsResource.insert
+          ~fileId:remote_id
+          parent_reference >>= fun _ ->
+        let updated_new_parent_resource = new_parent_resource
+          |> Cache.Resource.state ^= Cache.Resource.State.ToDownload
+        in
+        update_cached_resource cache updated_new_parent_resource;
+        get_resource old_parent_path >>= fun old_parent_resource ->
+        let old_parent_id =
+          old_parent_resource |. Cache.Resource.remote_id |> Option.get
+        in
+        ParentsResource.delete
+          ~fileId:remote_id
+          ~parentId:old_parent_id >>= fun () ->
+        let updated_old_parent_resource = old_parent_resource
+          |> Cache.Resource.state ^= Cache.Resource.State.ToDownload
+        in
+        update_cached_resource cache updated_old_parent_resource;
+        Utils.log_message "done\n%!";
+        SessionM.return None
+      end else
+        SessionM.return None
+      end >>= fun _ ->
+      rename_file true resource
+    in
+    update_remote_resource
+      path
+      move
+      (rename_file false)
+      ~save_to_db:(
+        fun cache resource file ->
+          let updated_resource = update_resource_from_file resource file in
+          let resource_to_save =
+            updated_resource
+              |> Cache.Resource.path ^= new_path
+              |> Cache.Resource.parent_path ^= new_parent_path
+              |> Cache.Resource.state ^=
+                (if Cache.Resource.is_folder resource
+                 then Cache.Resource.State.ToDownload
+                 else updated_resource.Cache.Resource.state)
+          in
+          Utils.log_message "Deleting resources (path=%s)...%!" new_path;
+          Cache.Resource.delete_resource_with_path cache new_path;
+          Utils.log_message "done\n%!";
+          update_cached_resource cache resource_to_save;
+          if Cache.Resource.is_folder resource then begin
+            Utils.log_message "Deleting folder old content (path=%s)...%!"
+              path;
+            Cache.Resource.delete_all_with_parent_path cache path;
+            Utils.log_message "done\n%!";
+          end)
+  in
+    do_request update |> ignore
+(* END rename *)
 

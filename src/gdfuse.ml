@@ -228,6 +228,21 @@ let read path buf offset file_descr =
     Docs.read path buf offset file_descr
   with e -> handle_exception e "read" path
 
+let rename path new_path =
+  Utils.log_with_header "rename %s %s\n%!" path new_path;
+  try
+    Docs.rename path new_path
+  with e -> handle_exception e "rename" path
+
+let release path flags hnd =
+  Utils.log_with_header "release %s %s\n%!" path (Utils.flags_to_string flags)
+
+let flush path file_descr =
+  Utils.log_with_header "flush %s %d\n%!" path file_descr
+
+let fsync path ds file_descr =
+  Utils.log_with_header "fsync %s %b %d\n%!" path ds file_descr
+
 let start_filesystem mountpoint fuse_args =
   if not (Sys.file_exists mountpoint && Sys.is_directory mountpoint) then
     failwith ("Mountpoint " ^ mountpoint ^ " should be an existing directory.");
@@ -245,7 +260,6 @@ let start_filesystem mountpoint fuse_args =
           opendir;
           releasedir;
           fsyncdir;
-          (*readlink;*)
           utime;
           fopen;
           read;
@@ -255,31 +269,15 @@ let start_filesystem mountpoint fuse_args =
           mkdir = Unix.mkdir;
           unlink = Unix.unlink;
           rmdir = Unix.rmdir;
-          symlink = Unix.symlink;
-          rename = Unix.rename;
-          link = Unix.link;
-          chmod = Unix.chmod;
-          chown = Unix.chown;
+ *)
+          rename;
+(*
+
           truncate = Unix.LargeFile.truncate;
-          release = (fun path mode hnd -> Unix.close (retrieve_descr hnd));
-          flush = (fun path hnd -> ());
-          fsync = (fun path ds hnd -> Printf.printf "sync\n%!");
-          listxattr = (fun path -> init_attr xattr path;lskeys (Hashtbl.find xattr path));
-          getxattr = (fun path attr ->
-                        with_xattr_lock (fun () ->
-                                           init_attr xattr path;
-                                           try
-                                             Hashtbl.find (Hashtbl.find xattr path) attr
-                                           with Not_found -> raise (Unix.Unix_error (EUNKNOWNERR 61 (* TODO: this is system-dependent *),"getxattr",path)))());
-          setxattr = (fun path attr value flag -> (* TODO: This currently ignores flags *)
-                        with_xattr_lock (fun () ->
-                                           init_attr xattr path;
-                                           Hashtbl.replace (Hashtbl.find xattr path) attr value) ());
-          removexattr = (fun path attr ->
-                           with_xattr_lock (fun () ->
-                                              init_attr xattr path;
-                                              Hashtbl.remove (Hashtbl.find xattr path) attr) ());
-           *)
+*)
+          release;
+          flush;
+          fsync;
     }
 (* END FUSE bindings *)
 
