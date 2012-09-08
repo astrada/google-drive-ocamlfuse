@@ -194,6 +194,14 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_delete_all_with_parent_path db =
+    let sql =
+      "DELETE \
+       FROM resource \
+       WHERE parent_path LIKE :parent_path"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_invalidate_stmt db =
     let sql =
       "UPDATE resource \
@@ -209,6 +217,14 @@ struct
       "DELETE \
        FROM resource \
        WHERE id = :id;"
+    in
+      Sqlite3.prepare db sql
+
+  let prepare_delete_with_path_stmt db =
+    let sql =
+      "DELETE \
+       FROM resource \
+       WHERE path = :path;"
     in
       Sqlite3.prepare db sql
 
@@ -354,7 +370,6 @@ struct
         InSync
       | ToDownload
       | ToDelete
-      | Conflict
       | NotFound
       | Restricted
 
@@ -362,7 +377,6 @@ struct
         InSync -> "InSync"
       | ToDownload -> "ToDownload"
       | ToDelete -> "ToDelete"
-      | Conflict -> "Conflict"
       | NotFound -> "NotFound"
       | Restricted -> "Restricted"
 
@@ -370,7 +384,6 @@ struct
         "InSync" -> InSync
       | "ToDownload" -> ToDownload
       | "ToDelete" -> ToDelete
-      | "Conflict" -> Conflict
       | "NotFound" -> NotFound
       | "Restricted" -> Restricted
       | s -> failwith ("Resource state unexpected: " ^ s)
@@ -574,6 +587,15 @@ struct
            _delete_resource stmt resource.id;
            finalize_stmt stmt)
 
+  let delete_resource_with_path cache path =
+    with_db cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_delete_with_path_stmt db in
+           reset_stmt stmt;
+           bind_text stmt ":path" (Some path);
+           final_step stmt;
+           finalize_stmt stmt)
+
   let _delete_resources_with_parent_path db parent_path change_id =
     let stmt = ResourceStmts.prepare_delete_with_parent_path_stmt db in
       bind_text stmt ":parent_path" (Some parent_path);
@@ -619,6 +641,15 @@ struct
               final_step stmt)
            ids;
          finalize_stmt stmt)
+
+  let delete_all_with_parent_path cache parent_path =
+    with_db cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_delete_all_with_parent_path db in
+           reset_stmt stmt;
+           bind_text stmt ":parent_path" (Some (parent_path ^ "%"));
+           final_step stmt;
+           finalize_stmt stmt)
 
   let row_to_resource row_data =
     { id = row_data.(0) |> data_to_int64 |> Option.get;
