@@ -228,6 +228,12 @@ let read path buf offset file_descr =
     Docs.read path buf offset file_descr
   with e -> handle_exception e "read" path
 
+let mknod path mode =
+  Utils.log_with_header "mknod %s %d\n%!" path mode;
+  try
+    Docs.mknod path mode
+  with e -> handle_exception e "mknod" path
+
 let rename path new_path =
   Utils.log_with_header "rename %s %s\n%!" path new_path;
   try
@@ -265,7 +271,9 @@ let start_filesystem mountpoint fuse_args =
           read;
 (*
           write = xmp_write;
-          mknod = (fun path mode -> close (openfile path [O_CREAT;O_EXCL] mode));
+ *)
+          mknod;
+(*
           mkdir = Unix.mkdir;
           unlink = Unix.unlink;
           rmdir = Unix.rmdir;

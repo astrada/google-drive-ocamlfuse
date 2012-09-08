@@ -793,7 +793,6 @@ let update_remote_resource path
             Utils.log_message "Keeping server changes\n%!";
             SessionM.return None
     end >>= fun file_option ->
-    Utils.log_message "done\n%!";
     begin match file_option with
         None -> ()
       | Some file ->
@@ -853,9 +852,40 @@ let read path buf offset file_descr =
            Unix_util.read file_descr buf)
 (* END read *)
 
+(* mknod *)
+let mknod path mode =
+  let context = Context.get_ctx () in
+  let largest_change_id = context |. Context.largest_change_id_lens in
+  let cache = context.Context.cache in
+  let parent_path = Filename.dirname path in
+  let create_file =
+    get_resource parent_path >>= fun parent_resource ->
+    let parent_id =
+      parent_resource |. Cache.Resource.remote_id |> Option.get
+    in
+    let parent_reference = ParentReference.empty
+      |> ParentReference.id ^= parent_id in
+    let file = {
+      File.empty with
+          File.title = Filename.basename path;
+          parents = [parent_reference];
+    } in
+    Utils.log_message "Creating file (path=%s) on server...%!" path;
+    FilesResource.insert
+      file >>= fun created_file ->
+    Utils.log_message "done\n%!";
+    let new_resource = create_resource path largest_change_id in
+    let inserted = insert_resource_into_cache cache new_resource created_file in
+    SessionM.return inserted
+  in
+  if is_filesystem_read_only () then
+    raise Permission_denied
+  else
+    do_request create_file |> ignore
+(* END mknod *)
+
 (* rename *)
 let rename path new_path =
-  let cache = Context.get_cache () in
   let old_parent_path = Filename.dirname path in
   let new_parent_path = Filename.dirname new_path in
   let update =
@@ -893,30 +923,20 @@ let rename path new_path =
         in
         let parent_reference = ParentReference.empty
           |> ParentReference.id ^= new_parent_id in
-        ParentsResource.insert
+        let file_patch = File.empty
+          |> File.parents ^= [parent_reference] in
+        FilesResource.patch
           ~fileId:remote_id
-          parent_reference >>= fun _ ->
-        let updated_new_parent_resource = new_parent_resource
-          |> Cache.Resource.state ^= Cache.Resource.State.ToDownload
-        in
-        update_cached_resource cache updated_new_parent_resource;
-        get_resource old_parent_path >>= fun old_parent_resource ->
-        let old_parent_id =
-          old_parent_resource |. Cache.Resource.remote_id |> Option.get
-        in
-        ParentsResource.delete
-          ~fileId:remote_id
-          ~parentId:old_parent_id >>= fun () ->
-        let updated_old_parent_resource = old_parent_resource
-          |> Cache.Resource.state ^= Cache.Resource.State.ToDownload
-        in
-        update_cached_resource cache updated_old_parent_resource;
+          file_patch >>= fun patched_file ->
         Utils.log_message "done\n%!";
-        SessionM.return None
+        SessionM.return (Some patched_file)
       end else
         SessionM.return None
-      end >>= fun _ ->
-      rename_file true resource
+      end >>= fun moved_file ->
+      rename_file true resource >>= fun renamed_file ->
+      if Option.is_some renamed_file
+      then SessionM.return renamed_file
+      else SessionM.return moved_file
     in
     update_remote_resource
       path
