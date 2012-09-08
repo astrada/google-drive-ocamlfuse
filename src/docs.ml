@@ -50,7 +50,7 @@ let create_root_resource root_folder_id change_id =
           parent_path = "";
     }
 
-let update_resource_from_file resource file =
+let update_resource_from_file ?state resource file =
   let largest_change_id =
     Context.get_ctx () |. Context.largest_change_id_lens in
   let path =
@@ -82,7 +82,7 @@ let update_resource_from_file resource file =
           state =
             if file.File.labels.File.Labels.restricted then
               Cache.Resource.State.Restricted
-            else resource.Cache.Resource.state;
+            else Option.default resource.Cache.Resource.state state;
     }
 
 let get_parent_resource_ids file =
@@ -90,8 +90,8 @@ let get_parent_resource_ids file =
     (fun parent -> parent.ParentReference.id)
     file.File.parents
 
-let insert_resource_into_cache cache resource file =
-  let resource = update_resource_from_file resource file in
+let insert_resource_into_cache ?state cache resource file =
+  let resource = update_resource_from_file ?state resource file in
   Utils.log_message "Saving resource to db...%!";
   let inserted = Cache.Resource.insert_resource cache resource in
   Utils.log_message "done\n%!";
@@ -852,6 +852,40 @@ let read path buf offset file_descr =
            Unix_util.read file_descr buf)
 (* END read *)
 
+(* write *)
+let write path buf offset file_descr =
+  let context = Context.get_ctx () in
+  let cache = context.Context.cache in
+  let upload_resource =
+    get_resource path >>= fun resource ->
+    let content_path = Cache.get_content_path cache resource in
+    Utils.log_message "Writing local file (path=%s)...%!" path;
+    let bytes =
+      Utils.with_out_channel content_path
+        (fun ch ->
+           let file_descr = Unix.descr_of_out_channel ch in
+             Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
+             Unix_util.write file_descr buf) in
+    Utils.log_message "done\n%!";
+    let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+    let media_source = GapiMediaResource.create_file_resource content_path in
+    Utils.log_message "Uploading file (cache path=%s)...%!" content_path;
+    FilesResource.get
+      ~fileId:remote_id >>= fun refreshed_file ->
+    FilesResource.update
+      ~media_source
+      ~fileId:remote_id
+      refreshed_file >>= fun file ->
+    Utils.log_message "done\n%!";
+    let updated_resource =
+      update_resource_from_file
+        ~state:Cache.Resource.State.InSync resource file in
+    update_cached_resource cache updated_resource;
+    SessionM.return bytes
+  in
+  do_request upload_resource |> fst
+(* END write *)
+
 (* Create resources *)
 let create_remote_resource is_folder path mode =
   let context = Context.get_ctx () in
@@ -881,7 +915,9 @@ let create_remote_resource is_folder path mode =
       file >>= fun created_file ->
     Utils.log_message "done\n%!";
     let new_resource = create_resource path largest_change_id in
-    let inserted = insert_resource_into_cache cache new_resource created_file in
+    let inserted =
+      insert_resource_into_cache
+        ~state:Cache.Resource.State.InSync cache new_resource created_file in
     SessionM.return inserted
   in
   if is_filesystem_read_only () then
@@ -1027,4 +1063,30 @@ let rename path new_path =
   in
     do_request update |> ignore
 (* END rename *)
+
+(* truncate *)
+let truncate path size =
+  let update =
+    let truncate_file resource =
+      let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+      let etag = Option.default "" resource.Cache.Resource.etag in
+      Utils.log_message "Truncating file (id=%s)...%!" remote_id;
+      FilesResource.patch
+        ~fileId:remote_id
+        { File.empty with
+              File.etag;
+              fileSize = size; } >>= fun file ->
+      Utils.log_message "done\n%!";
+      SessionM.return (Some file)
+    in
+    update_remote_resource
+      ~update_file_in_cache:(
+        fun content_path ->
+          Unix.LargeFile.truncate content_path size)
+      path
+      truncate_file
+      truncate_file
+  in
+    do_request update |> ignore
+(* END truncate *)
 

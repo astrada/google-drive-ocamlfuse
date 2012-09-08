@@ -228,6 +228,12 @@ let read path buf offset file_descr =
     Docs.read path buf offset file_descr
   with e -> handle_exception e "read" path
 
+let write path buf offset file_descr =
+  Utils.log_with_header "write %s buf %Ld %d\n%!" path offset file_descr;
+  try
+    Docs.write path buf offset file_descr
+  with e -> handle_exception e "write" path
+
 let mknod path mode =
   Utils.log_with_header "mknod %s %d\n%!" path mode;
   try
@@ -258,6 +264,12 @@ let rename path new_path =
     Docs.rename path new_path
   with e -> handle_exception e "rename" path
 
+let truncate path size =
+  Utils.log_with_header "truncate %s %Ld\n%!" path size;
+  try
+    Docs.truncate path size
+  with e -> handle_exception e "truncate" path
+
 let release path flags hnd =
   Utils.log_with_header "release %s %s\n%!" path (Utils.flags_to_string flags)
 
@@ -287,18 +299,13 @@ let start_filesystem mountpoint fuse_args =
           utime;
           fopen;
           read;
-(*
-          write = xmp_write;
- *)
+          write;
           mknod;
           mkdir;
           unlink;
           rmdir;
           rename;
-(*
-
-          truncate = Unix.LargeFile.truncate;
-*)
+          truncate;
           release;
           flush;
           fsync;
