@@ -852,8 +852,8 @@ let read path buf offset file_descr =
            Unix_util.read file_descr buf)
 (* END read *)
 
-(* mknod *)
-let mknod path mode =
+(* Create resources *)
+let create_remote_resource is_folder path mode =
   let context = Context.get_ctx () in
   let largest_change_id = context |. Context.largest_change_id_lens in
   let cache = context.Context.cache in
@@ -865,12 +865,18 @@ let mknod path mode =
     in
     let parent_reference = ParentReference.empty
       |> ParentReference.id ^= parent_id in
+    let mimeType =
+      if is_folder
+      then "application/vnd.google-apps.folder"
+      else "" in
     let file = {
       File.empty with
           File.title = Filename.basename path;
           parents = [parent_reference];
+          mimeType;
     } in
-    Utils.log_message "Creating file (path=%s) on server...%!" path;
+    Utils.log_message "Creating %s (path=%s) on server...%!"
+      (if is_folder then "folder" else "file") path;
     FilesResource.insert
       file >>= fun created_file ->
     Utils.log_message "done\n%!";
@@ -882,7 +888,17 @@ let mknod path mode =
     raise Permission_denied
   else
     do_request create_file |> ignore
+(* Create resources *)
+
+(* mknod *)
+let mknod path mode =
+  create_remote_resource false path mode
 (* END mknod *)
+
+(* mkdir *)
+let mkdir path mode =
+  create_remote_resource true path mode
+(* END mkdir *)
 
 (* rename *)
 let rename path new_path =

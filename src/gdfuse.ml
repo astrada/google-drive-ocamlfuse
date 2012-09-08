@@ -234,6 +234,12 @@ let mknod path mode =
     Docs.mknod path mode
   with e -> handle_exception e "mknod" path
 
+let mkdir path mode =
+  Utils.log_with_header "mkdir %s %d\n%!" path mode;
+  try
+    Docs.mkdir path mode
+  with e -> handle_exception e "mkdir" path
+
 let rename path new_path =
   Utils.log_with_header "rename %s %s\n%!" path new_path;
   try
@@ -273,8 +279,8 @@ let start_filesystem mountpoint fuse_args =
           write = xmp_write;
  *)
           mknod;
+          mkdir;
 (*
-          mkdir = Unix.mkdir;
           unlink = Unix.unlink;
           rmdir = Unix.rmdir;
  *)
