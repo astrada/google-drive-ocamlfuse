@@ -8,6 +8,7 @@ open GapiDriveV2Service
 exception File_not_found
 exception Permission_denied
 exception Resource_busy
+exception Directory_not_empty
 
 let do_request = Oauth2.do_request
 
@@ -888,7 +889,7 @@ let create_remote_resource is_folder path mode =
     raise Permission_denied
   else
     do_request create_file |> ignore
-(* Create resources *)
+(* END Create resources *)
 
 (* mknod *)
 let mknod path mode =
@@ -899,6 +900,58 @@ let mknod path mode =
 let mkdir path mode =
   create_remote_resource true path mode
 (* END mkdir *)
+
+(* Delete (trash) resources *)
+let delete_remote_resource is_folder path =
+  let trash_file =
+    let trash resource =
+      let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+      begin if is_folder then
+        ChildrenResource.list
+          ~folderId:remote_id >>= fun child_list ->
+        if List.length child_list.ChildList.items > 0
+        then raise Directory_not_empty
+        else SessionM.return ()
+      else SessionM.return ()
+      end >>= fun () ->
+      Utils.log_message "Trashing file (id=%s)...%!" remote_id;
+      FilesResource.trash
+        ~fileId:remote_id >>= fun trashed_file ->
+      Utils.log_message "done\n%!";
+      SessionM.return (Some trashed_file)
+    in
+    update_remote_resource
+      ~update_file_in_cache:(
+        fun content_path ->
+          if not is_folder
+          then Sys.remove content_path)
+      ~save_to_db:(
+        fun cache resource file ->
+          Utils.log_message "Deleting resource (path=%s)...%!" path;
+          Cache.Resource.delete_resource_with_path cache path;
+          Utils.log_message "done\n%!";
+          if is_folder then begin
+            Utils.log_message "Deleting folder old content (path=%s)...%!"
+              path;
+            Cache.Resource.delete_all_with_parent_path cache path;
+            Utils.log_message "done\n%!";
+          end)
+      path
+      trash
+      trash
+  in
+    do_request trash_file |> ignore
+(* END Delete (trash) resources *)
+
+(* unlink *)
+let unlink path =
+  delete_remote_resource false path
+(* END unlink *)
+
+(* rmdir *)
+let rmdir path =
+  delete_remote_resource true path
+(* END rmdir *)
 
 (* rename *)
 let rename path new_path =

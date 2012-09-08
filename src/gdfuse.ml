@@ -167,6 +167,9 @@ let handle_exception e label param =
     | Docs.Resource_busy ->
         Utils.log_message "Resource busy: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.EBUSY, label, param))
+    | Docs.Directory_not_empty ->
+        Utils.log_message "Directory not empty: %s %s\n%!" label param;
+        raise (Unix.Unix_error (Unix.ENOTEMPTY, label, param))
     | e ->
         Utils.log_exception e;
         raise (Unix.Unix_error (Unix.EBUSY, label, param))
@@ -240,6 +243,18 @@ let mkdir path mode =
     Docs.mkdir path mode
   with e -> handle_exception e "mkdir" path
 
+let unlink path =
+  Utils.log_with_header "unlink %s\n%!" path;
+  try
+    Docs.unlink path
+  with e -> handle_exception e "unlink" path
+
+let rmdir path =
+  Utils.log_with_header "rmdir %s\n%!" path;
+  try
+    Docs.rmdir path
+  with e -> handle_exception e "rmdir" path
+
 let rename path new_path =
   Utils.log_with_header "rename %s %s\n%!" path new_path;
   try
@@ -280,10 +295,8 @@ let start_filesystem mountpoint fuse_args =
  *)
           mknod;
           mkdir;
-(*
-          unlink = Unix.unlink;
-          rmdir = Unix.rmdir;
- *)
+          unlink;
+          rmdir;
           rename;
 (*
 
