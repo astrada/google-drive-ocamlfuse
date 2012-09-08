@@ -8,7 +8,6 @@ open GapiDriveV2Service
 exception File_not_found
 exception Permission_denied
 exception Resource_busy
-exception Directory_not_empty
 
 let do_request = Oauth2.do_request
 
@@ -906,14 +905,6 @@ let delete_remote_resource is_folder path =
   let trash_file =
     let trash resource =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-      begin if is_folder then
-        ChildrenResource.list
-          ~folderId:remote_id >>= fun child_list ->
-        if List.length child_list.ChildList.items > 0
-        then raise Directory_not_empty
-        else SessionM.return ()
-      else SessionM.return ()
-      end >>= fun () ->
       Utils.log_message "Trashing file (id=%s)...%!" remote_id;
       FilesResource.trash
         ~fileId:remote_id >>= fun trashed_file ->

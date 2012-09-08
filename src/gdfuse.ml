@@ -167,9 +167,6 @@ let handle_exception e label param =
     | Docs.Resource_busy ->
         Utils.log_message "Resource busy: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.EBUSY, label, param))
-    | Docs.Directory_not_empty ->
-        Utils.log_message "Directory not empty: %s %s\n%!" label param;
-        raise (Unix.Unix_error (Unix.ENOTEMPTY, label, param))
     | e ->
         Utils.log_exception e;
         raise (Unix.Unix_error (Unix.EBUSY, label, param))
