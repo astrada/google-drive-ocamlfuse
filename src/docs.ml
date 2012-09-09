@@ -915,6 +915,9 @@ let create_remote_resource is_folder path mode =
       file >>= fun created_file ->
     Utils.log_message "done\n%!";
     let new_resource = create_resource path largest_change_id in
+    Utils.log_message "Deleting resource (path=%s)...%!" path;
+    Cache.Resource.delete_resource_with_path cache path;
+    Utils.log_message "done\n%!";
     let inserted =
       insert_resource_into_cache
         ~state:Cache.Resource.State.InSync cache new_resource created_file in
