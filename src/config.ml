@@ -120,7 +120,7 @@ let umask =
 let default = {
   debug = false;
   metadata_cache_time = 60;
-  read_only = true;
+  read_only = false;
   umask;
   sqlite3_busy_timeout = 500;
   download_docs = false;
@@ -137,7 +137,7 @@ let default = {
 let default_debug = {
   debug = true;
   metadata_cache_time = 60;
-  read_only = true;
+  read_only = false;
   umask;
   sqlite3_busy_timeout = 500;
   download_docs = true;
