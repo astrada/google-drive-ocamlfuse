@@ -70,7 +70,8 @@ let start_server_polling () =
   let rec loop n =
     if n = 24 then failwith "Cannot retrieve auth tokens: Timeout expired";
     try
-      get_tokens ()
+      get_tokens ();
+      Printf.printf "Access token retrieved correctly.\n%!"
     with Not_found ->
       Unix.sleep 5;
       loop (succ n)
