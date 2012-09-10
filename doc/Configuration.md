@@ -10,9 +10,9 @@ Specifies the interval in seconds between queries to detect server-side changes:
 
     metadata_cache_time=60
 
-Specifies if the filesystem is to be mounted read-only (at this moment, write support is not yet implemented):
+Specifies if the filesystem is to be mounted read-only:
 
-    read_only=true
+    read_only=false
 
 Specifies the umask (i.e. the bitmask of  the  permissions  that  are  not present) mount option:
 

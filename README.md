@@ -24,8 +24,8 @@ Getting started
 It's better to use the last [CVS
 snapshot](http://sourceforge.net/scm/?type=cvs&group_id=121959) of
 `ocamlfuse`, because it contains some bugfixes. I've uploaded the snapshot on
-[github](https://github.com/downloads/astrada/ocamlfuse/ocamlfuse-2.7.1-cvs~oasis1.tar.gz)
-and added OASIS support, to ease compilation and installation.
+[OASIS DB](http://oasis.ocamlcore.org/dev/view/ocamlfuse/latest) and added
+OASIS support, to ease compilation and installation.
 
 ### Configuration and installation
 
@@ -49,7 +49,7 @@ The first time, you can run `google-drive-ocamlfuse` without parameters:
     $ google-drive-ocamlfuse
 
 This command will create the default application directory
-(`~/.gdfuse/default`), containing the configuration file `config` (See the
+(`~/.gdfuse/default`), containing the configuration file `config` (see the
 [wiki
 page](https://github.com/astrada/google-drive-ocamlfuse/wiki/Configuration)
 for more details about configuration). And it will start a web browser to
@@ -66,38 +66,50 @@ If you have more than one account, you can run:
 
 Using `label` to distinguish different accounts. The program will use the
 directory `~/.gdfuse/label` to host configuration, application state, and file
-cache. No file is shared among different accounts, so you can have different
+cache. No file is shared among different accounts, so you can have a different
 configuration for each one.
 
 ### Troubleshooting
 
-This application is still in early stage of development, so there are probably
-many bugs to discover and fix. So far, the filesystem is read-only, so it is
-safe to use, because it won't try to write to your Google Drive. If you have
-problems, you can turn on debug logging:
+This application is still to be tested thoroughly, so there are still probably
+bugs to discover and fix. To be extra sure, if you want, you can mount the
+filesystem in read-only mode, modifying the configuration (see the
+[documentation](https://github.com/astrada/google-drive-ocamlfuse/wiki/Configuration)),
+to avoid any write attempt to the server. Anyway, the `rm` command will simply
+trash your file, so you should always be able to rollback any changes. If you
+have problems, you can turn on debug logging:
 
     $ google-drive-ocamlfuse -debug mountpoint
 
 In `~/.gdfuse/default` you can find `curl.log` that will track every request
-to the Google Docs API, and `gdfuse.log` that will log filesystem operations
-and cache management. If something goes wrong, you can clean the cache,
+to the Google Drive API, and `gdfuse.log` that will log FUSE operations and
+cache management. If something goes wrong, you can try cleaning the cache,
 removing all the files in `~/.gdfuse/default/cache`, to start from scratch (or
 you may remove everything in `~/.gdfuse/default` to restart with default
 configuration and reauthorize the application).
 
 Note that in order to reduce latency, the application will query the server
-and check for changes only every 60 seconds (configurable). So if you make a
-change to your documents, you won't see it immediately in the mounted
-filesystem.
+and check for changes only every 60 seconds (configurable). So, if you make a
+change to your documents (server side), you won't see it immediately in the
+mounted filesystem.
 
-### Upgrading from 0.1pre2
+Note also that, at least for now, Google Documents will be exported read-only.
 
-Since version 0.1pre3, the application uses Drive API v2, instead of Google
-Documents List API v3, so if you are upgrading from previous versions, you
-should clean every file in `~/.gdfuse/default`:
+### Upgrading from previous versions
+
+If you are upgrading from previous versions, you should clean every file in
+`~/.gdfuse/default`:
 
     $ rm -rf ~/.gdfuse/default
 
-because the access token requested previously is not compatible with the new
-API.
+because previous versions used a different cache schema and/or a different
+Google API (the last version uses the new Drive API v2).
+
+### Support
+
+If you have questions, suggestions or want to report a problem, you can post
+to this [mailing
+list](https://lists.forge.ocamlcore.org/mailman/listinfo/gdfuse-devel). Or you
+may want to open an
+[issue](https://github.com/astrada/google-drive-ocamlfuse/issues) on github.
 
