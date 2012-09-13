@@ -9,6 +9,20 @@ exception File_not_found
 exception Permission_denied
 exception Resource_busy
 
+let file_fields =
+  "createdDate,downloadUrl,editable,etag,exportLinks,fileExtension,\
+   fileSize,id,labels,lastViewedByMeDate,md5Checksum,mimeType,\
+   modifiedDate,parents,title"
+let file_std_params =
+  { GapiService.StandardParameters.default with
+        GapiService.StandardParameters.fields = file_fields
+  }
+let file_list_std_params =
+  { GapiService.StandardParameters.default with
+        GapiService.StandardParameters.fields =
+          "items(" ^ file_fields ^ "),nextPageToken"
+  }
+
 let do_request = Oauth2.do_request
 
 let root_directory = "/"
@@ -136,8 +150,15 @@ let get_root_resource () =
 (* Metadata *)
 let get_metadata () =
   let request_metadata last_change_id etag =
+    let std_params =
+      { GapiService.StandardParameters.default with
+            GapiService.StandardParameters.fields =
+              "etag,largestChangeId,name,permissionId,quotaBytesTotal,\
+               quotaBytesUsed,remainingChangeIds,rootFolderId"
+      } in
     let startChangeId = Int64.succ last_change_id in
     AboutResource.get
+      ~std_params
       ?etag
       ~startChangeId
       ~maxChangeIdCount:500L >>= fun about ->
@@ -172,7 +193,13 @@ let get_metadata () =
   let update_resource_cache last_change_id new_metadata =
     let get_all_changes startChangeId =
       let rec loop ?pageToken accu =
+        let std_params =
+          { GapiService.StandardParameters.default with
+                GapiService.StandardParameters.fields =
+                  "items(deleted,file,fileId),nextPageToken"
+          } in
         ChangesResource.list
+          ~std_params
           ~includeDeleted:true
           ~startChangeId
           ?pageToken >>= fun change_list ->
@@ -350,6 +377,7 @@ let get_file_from_server parent_folder_id title =
             title parent_folder_id in
   try
     FilesResource.list
+      ~std_params:file_list_std_params
       ~q
       ~maxResults:1 >>= fun file_list ->
     Utils.log_message "done\n%!";
@@ -421,7 +449,10 @@ and get_resource path =
       let remote_id = resource.Cache.Resource.remote_id |> Option.get in
       let etag = resource.Cache.Resource.etag in
       Utils.log_message "Getting file from server (id=%s)...%!" remote_id;
-      FilesResource.get ?etag ~fileId:remote_id >>= fun file ->
+      FilesResource.get
+        ~std_params:file_std_params
+        ?etag
+        ~fileId:remote_id >>= fun file ->
       SessionM.return (Some file)
     end else
       SessionM.return None
@@ -675,6 +706,7 @@ let read_dir path =
   let get_all_files q =
     let rec loop ?pageToken accu =
       FilesResource.list
+        ~std_params:file_list_std_params
         ~q
         ?pageToken >>= fun file_list ->
       let files = file_list.FileList.items @ accu in
@@ -822,7 +854,9 @@ let utime path atime mtime =
     let touch resource =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       Utils.log_message "Touching file (id=%s)...%!" remote_id;
-      FilesResource.touch ~fileId:remote_id >>= fun touched_file ->
+      FilesResource.touch
+        ~std_params:file_std_params
+        ~fileId:remote_id >>= fun touched_file ->
       Utils.log_message "done\n%!";
       SessionM.return (Some touched_file)
     in
@@ -871,8 +905,10 @@ let write path buf offset file_descr =
     let media_source = GapiMediaResource.create_file_resource content_path in
     Utils.log_message "Uploading file (cache path=%s)...%!" content_path;
     FilesResource.get
+      ~std_params:file_std_params
       ~fileId:remote_id >>= fun refreshed_file ->
     FilesResource.update
+      ~std_params:file_std_params
       ~media_source
       ~fileId:remote_id
       refreshed_file >>= fun file ->
@@ -912,6 +948,7 @@ let create_remote_resource is_folder path mode =
     Utils.log_message "Creating %s (path=%s) on server...%!"
       (if is_folder then "folder" else "file") path;
     FilesResource.insert
+      ~std_params:file_std_params
       file >>= fun created_file ->
     Utils.log_message "done\n%!";
     let new_resource = create_resource path largest_change_id in
@@ -946,6 +983,7 @@ let delete_remote_resource is_folder path =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       Utils.log_message "Trashing file (id=%s)...%!" remote_id;
       FilesResource.trash
+        ~std_params:file_std_params
         ~fileId:remote_id >>= fun trashed_file ->
       Utils.log_message "done\n%!";
       SessionM.return (Some trashed_file)
@@ -1003,6 +1041,7 @@ let rename path new_path =
           }
         in
         FilesResource.patch
+          ~std_params:file_std_params
           ~fileId:remote_id
           file_patch >>= fun patched_file ->
         Utils.log_message "done\n%!";
@@ -1025,6 +1064,7 @@ let rename path new_path =
         let file_patch = File.empty
           |> File.parents ^= [parent_reference] in
         FilesResource.patch
+          ~std_params:file_std_params
           ~fileId:remote_id
           file_patch >>= fun patched_file ->
         Utils.log_message "done\n%!";
@@ -1075,6 +1115,7 @@ let truncate path size =
       let etag = Option.default "" resource.Cache.Resource.etag in
       Utils.log_message "Truncating file (id=%s)...%!" remote_id;
       FilesResource.patch
+        ~std_params:file_std_params
         ~fileId:remote_id
         { File.empty with
               File.etag;
