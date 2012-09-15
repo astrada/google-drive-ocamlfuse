@@ -326,7 +326,9 @@ let get_metadata () =
     Utils.log_message "done\nUpdating metadata in db...%!";
     Cache.Metadata.insert_metadata context.Context.cache updated_metadata;
     Utils.log_message "done\nUpdating context...%!";
-    context |> Context.metadata ^= Some updated_metadata |> Context.set_ctx;
+    Context.get_ctx ()
+      |> Context.metadata ^= Some updated_metadata
+      |> Context.set_ctx;
     Utils.log_message "done\n%!";
     update_resource_cache last_change_id updated_metadata;
     updated_metadata
