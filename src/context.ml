@@ -84,6 +84,9 @@ let set_ctx = ConcurrentContext.set
 
 let clear_ctx = ConcurrentContext.clear
 
+let update_ctx update =
+  get_ctx () |> update |> set_ctx
+
 let save_state_store state_store =
   Utils.log_message "Saving application state in %s..."
     state_store.StateFileStore.path;

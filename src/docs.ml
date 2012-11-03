@@ -183,7 +183,7 @@ let get_metadata () =
     if Option.is_none context.Context.metadata then begin
       Utils.log_message "Loading metadata from db...%!";
       let db_metadata = Cache.Metadata.select_metadata context.Context.cache in
-        context |> Context.metadata ^= db_metadata |> Context.set_ctx;
+        Context.update_ctx (Context.metadata ^= db_metadata);
         db_metadata
     end else begin
       Utils.log_message "Getting metadata from context...%!";
@@ -326,9 +326,7 @@ let get_metadata () =
     Utils.log_message "done\nUpdating metadata in db...%!";
     Cache.Metadata.insert_metadata context.Context.cache updated_metadata;
     Utils.log_message "done\nUpdating context...%!";
-    Context.get_ctx ()
-      |> Context.metadata ^= Some updated_metadata
-      |> Context.set_ctx;
+    Context.update_ctx (Context.metadata ^= Some updated_metadata);
     Utils.log_message "done\n%!";
     update_resource_cache last_change_id updated_metadata;
     updated_metadata
