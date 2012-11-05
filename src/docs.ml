@@ -32,11 +32,28 @@ let change_id_limit = 50L
 let chars_blacklist_regexp = Str.regexp ("[/\000]")
 let clean_filename title = Str.global_replace chars_blacklist_regexp "_" title
 
+let rec disambiguate_title title title_table  =
+  let clean_title = clean_filename title in
+  if Hashtbl.mem title_table clean_title then begin
+    let last_copy_number = Hashtbl.find title_table clean_title in
+    let copy_number = succ last_copy_number in
+    let new_candidate = Printf.sprintf "%s (%d)" clean_title copy_number in
+    let unique_title = disambiguate_title new_candidate title_table in
+    if new_candidate = unique_title then begin
+      Hashtbl.replace title_table clean_title copy_number;
+    end;
+    unique_title
+  end else begin
+    Hashtbl.add title_table clean_title 0;
+    clean_title
+  end
+
 (* Resource cache *)
 let create_resource path change_id =
   { Cache.Resource.id = 0L;
     etag = None;
     remote_id = None;
+    title = None;
     mime_type = None;
     created_date = None;
     modified_date = None;
@@ -68,14 +85,18 @@ let update_resource_from_file ?state resource file =
   let largest_change_id =
     Context.get_ctx () |. Context.largest_change_id_lens in
   let path =
-    let filename = clean_filename file.File.title in
-    if Filename.basename resource.Cache.Resource.path <> filename
-    then Filename.concat resource.Cache.Resource.parent_path filename
-    else resource.Cache.Resource.path
+    match resource.Cache.Resource.title with
+        Some cached_title ->
+          if cached_title <> file.File.title then
+            let filename = clean_filename file.File.title in
+            Filename.concat resource.Cache.Resource.parent_path filename
+          else resource.Cache.Resource.path
+      | None -> resource.Cache.Resource.path
   in
     { resource with
           Cache.Resource.etag = Some file.File.etag;
           remote_id = Some file.File.id;
+          title = Some file.File.title;
           mime_type = Some file.File.mimeType;
           created_date = Some (Netdate.since_epoch file.File.createdDate);
           modified_date = Some (Netdate.since_epoch file.File.modifiedDate);
@@ -373,8 +394,8 @@ let statfs () =
 let get_file_from_server parent_folder_id title =
   Utils.log_message "Getting resource %s (in folder %s) from server...%!"
     title parent_folder_id;
-  let q = Printf.sprintf "title = '%s' and '%s' in parents"
-            title parent_folder_id in
+  let q =
+    Printf.sprintf "title = '%s' and '%s' in parents" title parent_folder_id in
   try
     FilesResource.list
       ~std_params:file_list_std_params
@@ -740,14 +761,15 @@ let read_dir path =
     end else begin
       let (files, folder_resource) = do_request request_folder |> fst in
       let change_id = folder_resource.Cache.Resource.change_id in
+      let title_table = Hashtbl.create 64 in
       let resources =
         List.map
           (fun file ->
              let title = file.File.title in
-             let filename = clean_filename title in
+             let filename = disambiguate_title title title_table in
              let resource_path = Filename.concat path filename in
              let resource = create_resource resource_path change_id in
-               update_resource_from_file resource file)
+             update_resource_from_file resource file)
           files
       in
         Utils.log_message "Inserting folder resources into db...%!";
@@ -1083,7 +1105,8 @@ let rename path new_path =
       (rename_file false)
       ~save_to_db:(
         fun cache resource file ->
-          let updated_resource = update_resource_from_file resource file in
+          let updated_resource =
+            update_resource_from_file resource file in
           let resource_to_save =
             updated_resource
               |> Cache.Resource.path ^= new_path
