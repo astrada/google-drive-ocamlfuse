@@ -115,6 +115,7 @@ struct
   let fields_without_id =
     "etag, \
      remote_id, \
+     title, \
      mime_type, \
      created_date, \
      modified_date, \
@@ -140,6 +141,7 @@ struct
        VALUES ( \
          :etag, \
          :remote_id, \
+         :title, \
          :mime_type, \
          :created_date, \
          :modified_date, \
@@ -166,6 +168,7 @@ struct
        SET \
          etag = :etag, \
          remote_id = :remote_id, \
+         title = :title, \
          mime_type = :mime_type, \
          created_date = :created_date, \
          modified_date = :modified_date, \
@@ -396,6 +399,7 @@ struct
     (* remote data *)
     etag : string option;
     remote_id : string option;
+    title : string option;
     mime_type : string option;
     created_date : float option;
     modified_date : float option;
@@ -426,6 +430,10 @@ struct
 	let remote_id = {
 		GapiLens.get = (fun x -> x.remote_id);
 		GapiLens.set = (fun v x -> { x with remote_id = v })
+	}
+	let title = {
+		GapiLens.get = (fun x -> x.title);
+		GapiLens.set = (fun v x -> { x with title = v })
 	}
 	let mime_type = {
 		GapiLens.get = (fun x -> x.mime_type);
@@ -535,6 +543,7 @@ struct
   let bind_resource_parameters stmt resource =
     bind_text stmt ":etag" resource.etag;
     bind_text stmt ":remote_id" resource.remote_id;
+    bind_text stmt ":title" resource.title;
     bind_text stmt ":mime_type" resource.mime_type;
     bind_float stmt ":created_date" resource.created_date;
     bind_float stmt ":modified_date" resource.modified_date;
@@ -655,22 +664,23 @@ struct
     { id = row_data.(0) |> data_to_int64 |> Option.get;
       etag = row_data.(1) |> data_to_string;
       remote_id = row_data.(2) |> data_to_string;
-      mime_type = row_data.(3) |> data_to_string;
-      created_date = row_data.(4) |> data_to_float;
-      modified_date = row_data.(5) |> data_to_float;
-      last_viewed_by_me_date = row_data.(6) |> data_to_float;
-      parent_remote_ids = row_data.(7) |> data_to_string;
-      download_url = row_data.(8) |> data_to_string;
-      export_links = row_data.(9) |> data_to_string;
-      file_extension = row_data.(10) |> data_to_string;
-      md5_checksum = row_data.(11) |> data_to_string;
-      file_size = row_data.(12) |> data_to_int64;
-      editable = row_data.(13) |> data_to_bool;
-      parent_path = row_data.(14) |> data_to_string |> Option.get;
-      path = row_data.(15) |> data_to_string |> Option.get;
-      state = row_data.(16) |> data_to_string |> Option.get |> State.of_string;
-      change_id = row_data.(17) |> data_to_int64 |> Option.get;
-      last_update = row_data.(18) |> data_to_float |> Option.get;
+      title = row_data.(3) |> data_to_string;
+      mime_type = row_data.(4) |> data_to_string;
+      created_date = row_data.(5) |> data_to_float;
+      modified_date = row_data.(6) |> data_to_float;
+      last_viewed_by_me_date = row_data.(7) |> data_to_float;
+      parent_remote_ids = row_data.(8) |> data_to_string;
+      download_url = row_data.(9) |> data_to_string;
+      export_links = row_data.(10) |> data_to_string;
+      file_extension = row_data.(11) |> data_to_string;
+      md5_checksum = row_data.(12) |> data_to_string;
+      file_size = row_data.(13) |> data_to_int64;
+      editable = row_data.(14) |> data_to_bool;
+      parent_path = row_data.(15) |> data_to_string |> Option.get;
+      path = row_data.(16) |> data_to_string |> Option.get;
+      state = row_data.(17) |> data_to_string |> Option.get |> State.of_string;
+      change_id = row_data.(18) |> data_to_int64 |> Option.get;
+      last_update = row_data.(19) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -883,6 +893,7 @@ let setup_db cache =
             id INTEGER PRIMARY KEY, \
             etag TEXT NULL, \
             remote_id TEXT NULL, \
+            title TEXT NULL, \
             mime_type TEXT NULL, \
             created_date REAL NULL, \
             modified_date REAL NULL, \
