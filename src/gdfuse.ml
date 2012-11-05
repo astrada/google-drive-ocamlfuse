@@ -279,6 +279,10 @@ let flush path file_descr =
 let fsync path ds file_descr =
   Utils.log_with_header "fsync %s %b %d\n%!" path ds file_descr
 
+let setxattr path name value xflags =
+  Utils.log_with_header "setxattr %s %s %s %s\n%!"
+    path name value (Utils.xattr_flags_to_string xflags)
+
 let start_filesystem mountpoint fuse_args =
   if not (Sys.file_exists mountpoint && Sys.is_directory mountpoint) then
     failwith ("Mountpoint " ^ mountpoint ^ " should be an existing directory.");
@@ -309,6 +313,7 @@ let start_filesystem mountpoint fuse_args =
           release;
           flush;
           fsync;
+          setxattr;
     }
 (* END FUSE bindings *)
 

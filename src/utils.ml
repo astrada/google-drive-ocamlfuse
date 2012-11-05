@@ -82,6 +82,11 @@ let flags_to_string flags =
   in
     String.concat "," flag_descriptions
 
+let xattr_flags_to_string = function
+    Fuse.AUTO -> "AUTO"
+  | Fuse.CREATE -> "CREATE"
+  | Fuse.REPLACE -> "REPLACE"
+
 (* Browser *)
 let start_browser url =
   let start_process browser =
