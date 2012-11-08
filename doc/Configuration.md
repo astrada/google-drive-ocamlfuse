@@ -61,3 +61,10 @@ always maintain the server version of the resource (server side wins):
 
     conflict_resolution=server
 
+Google Drive supports multiple files with the same name. This flag specifies
+the behavior of `mv`: When set to `false`, `mv` behaves in the standard way,
+overwriting (trashing) the target file if it exists. When set to `true`, `mv`
+will always keep the target file:
+
+    keep_duplicates=false
+

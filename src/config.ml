@@ -52,7 +52,9 @@ type t = {
    * - client: (in case of conflict) always update server (client side wins)
    * - server: (in case of conflict) always maintain server version (server side
    * wins) *)
-  conflict_resolution : ConflictResolutionStrategy.t
+  conflict_resolution : ConflictResolutionStrategy.t;
+  (* Specifies whether to keep files with duplicated names (no overwrite) *)
+  keep_duplicates : bool;
 }
 
 let debug = {
@@ -111,6 +113,10 @@ let conflict_resolution = {
   GapiLens.get = (fun x -> x.conflict_resolution);
   GapiLens.set = (fun v x -> { x with conflict_resolution = v })
 }
+let keep_duplicates = {
+  GapiLens.get = (fun x -> x.keep_duplicates);
+  GapiLens.set = (fun v x -> { x with keep_duplicates = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -123,7 +129,7 @@ let default = {
   read_only = false;
   umask;
   sqlite3_busy_timeout = 500;
-  download_docs = false;
+  download_docs = true;
   document_format = "odt";
   drawing_format = "png";
   form_format = "ods";
@@ -132,6 +138,7 @@ let default = {
   client_id = "";
   client_secret = "";
   conflict_resolution = ConflictResolutionStrategy.Server;
+  keep_duplicates = false;
 }
 
 let default_debug = {
@@ -149,6 +156,7 @@ let default_debug = {
   client_id = "";
   client_secret = "";
   conflict_resolution = ConflictResolutionStrategy.Server;
+  keep_duplicates = false;
 }
 
 let of_table table =
@@ -177,6 +185,8 @@ let of_table table =
       conflict_resolution =
         get "conflict_resolution" ConflictResolutionStrategy.of_string
           default.conflict_resolution;
+      keep_duplicates =
+        get "keep_duplicates" bool_of_string default.keep_duplicates;
     }
 
 let to_table data =
@@ -197,6 +207,7 @@ let to_table data =
     add "client_secret" data.client_secret;
     add "conflict_resolution"
       (data.conflict_resolution |> ConflictResolutionStrategy.to_string);
+    add "keep_duplicates" (data.keep_duplicates |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =
