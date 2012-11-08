@@ -1136,9 +1136,9 @@ let rename path new_path =
   in
   let update =
     let rename_file use_etag resource =
-      delete_target_path () >>= fun () ->
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       if old_name <> new_name then begin
+        delete_target_path () >>= fun () ->
         Utils.log_message "Renaming file (id=%s) from %s to %s...%!"
           remote_id old_name new_name;
         let etag = Option.default "" resource.Cache.Resource.etag in
@@ -1159,9 +1159,9 @@ let rename path new_path =
       end
     in
     let move resource =
-      delete_target_path () >>= fun () ->
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       begin if old_parent_path <> new_parent_path then begin
+        delete_target_path () >>= fun () ->
         Utils.log_message "Moving file (id=%s) from %s to %s...%!"
           remote_id old_parent_path new_parent_path;
         get_resource new_parent_path >>= fun new_parent_resource ->
