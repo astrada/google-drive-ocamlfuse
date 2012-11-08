@@ -32,23 +32,52 @@ let change_id_limit = 50L
 let chars_blacklist_regexp = Str.regexp ("[/\000]")
 let clean_filename title = Str.global_replace chars_blacklist_regexp "_" title
 
-let rec disambiguate_title title title_table  =
-  let clean_title = clean_filename title in
-  if Hashtbl.mem title_table clean_title then begin
-    let last_copy_number = Hashtbl.find title_table clean_title in
+let disambiguate_title title filename_table  =
+  let rec find_first_unique_filename filename copy_number =
+    let new_candidate = Printf.sprintf "%s (%d)" filename copy_number in
+    if not (Hashtbl.mem filename_table new_candidate) then
+      new_candidate
+    else find_first_unique_filename filename (succ copy_number)
+  in
+  let filename = clean_filename title in
+  if Hashtbl.mem filename_table filename then begin
+    let last_copy_number = Hashtbl.find filename_table filename in
     let copy_number = succ last_copy_number in
-    let new_candidate = Printf.sprintf "%s (%d)" clean_title copy_number in
-    let unique_title = disambiguate_title new_candidate title_table in
-    if new_candidate = unique_title then begin
-      Hashtbl.replace title_table clean_title copy_number;
-    end;
-    unique_title
+    let unique_filename = find_first_unique_filename filename copy_number in
+    Hashtbl.replace filename_table filename copy_number;
+    unique_filename
   end else begin
-    Hashtbl.add title_table clean_title 0;
-    clean_title
+    Hashtbl.add filename_table filename 0;
+    filename
   end
 
 (* Resource cache *)
+let build_resource_tables parent_path =
+  let context = Context.get_ctx () in
+  let cache = context.Context.cache in
+  let resources =
+    Cache.Resource.select_resources_with_parent_path cache parent_path in
+  let filename_table = Hashtbl.create 64 in
+  let remote_id_table = Hashtbl.create (List.length resources) in
+  List.iter
+    (fun resource ->
+       let title = Option.get resource.Cache.Resource.title in
+       let clean_title = clean_filename title in
+       let filename = Filename.basename resource.Cache.Resource.path in
+       if clean_title <> filename then begin
+         let copy_number =
+           try
+             Hashtbl.find filename_table clean_title
+           with Not_found -> 0
+         in
+         Hashtbl.replace filename_table clean_title copy_number;
+       end;
+       Hashtbl.add filename_table filename 0;
+       Hashtbl.add remote_id_table
+         (Option.get resource.Cache.Resource.remote_id) resource)
+    resources;
+  (filename_table, remote_id_table)
+
 let create_resource path change_id =
   { Cache.Resource.id = 0L;
     etag = None;
@@ -81,6 +110,15 @@ let create_root_resource root_folder_id change_id =
           parent_path = "";
     }
 
+let recompute_path resource title =
+  (* TODO: make an optimized version of build_resource_tables that
+   * doesn't create resource table (useful for large directories). *)
+  let (filename_table, _) =
+    build_resource_tables resource.Cache.Resource.parent_path in
+  let clean_title = clean_filename title in
+  let filename = disambiguate_title clean_title filename_table in
+    Filename.concat resource.Cache.Resource.parent_path filename
+
 let update_resource_from_file ?state resource file =
   let largest_change_id =
     Context.get_ctx () |. Context.largest_change_id_lens in
@@ -88,8 +126,7 @@ let update_resource_from_file ?state resource file =
     match resource.Cache.Resource.title with
         Some cached_title ->
           if cached_title <> file.File.title then
-            let filename = clean_filename file.File.title in
-            Filename.concat resource.Cache.Resource.parent_path filename
+            recompute_path resource file.File.title
           else resource.Cache.Resource.path
       | None -> resource.Cache.Resource.path
   in
@@ -629,6 +666,22 @@ let download_resource resource =
           end >>
           SessionM.return content_path
 
+let download_resource_with_retry resource =
+  let rec loop n =
+    try
+      download_resource resource
+    with Resource_busy as e ->
+      if n > 4 then
+        raise e
+      else
+        GapiUtils.wait_exponential_backoff n;
+        let n' = succ n in
+        Utils.log_message "Retry (%d) downloading resource (id=%Ld)...%!"
+          n' resource.Cache.Resource.id;
+        loop n'
+  in
+    loop 0
+
 let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only
 
@@ -647,7 +700,7 @@ let get_attr path =
     begin if Cache.Resource.is_document resource &&
              config.Config.download_docs then
       try
-        download_resource resource
+        download_resource_with_retry resource
       with File_not_found ->
         SessionM.return ""
     else
@@ -761,16 +814,32 @@ let read_dir path =
     end else begin
       let (files, folder_resource) = do_request request_folder |> fst in
       let change_id = folder_resource.Cache.Resource.change_id in
-      let title_table = Hashtbl.create 64 in
-      let resources =
+      let (filename_table, remote_id_table) = build_resource_tables path in
+      let resources_and_files =
         List.map
           (fun file ->
-             let title = file.File.title in
-             let filename = disambiguate_title title title_table in
-             let resource_path = Filename.concat path filename in
-             let resource = create_resource resource_path change_id in
-             update_resource_from_file resource file)
+             try
+               let cached_resource =
+                 Hashtbl.find remote_id_table file.File.id in
+               let updated_resource =
+                 update_resource_from_file cached_resource file in
+               (Some updated_resource, file)
+             with Not_found ->
+               (None, file))
           files
+      in
+      let resources =
+        List.map
+          (fun (resource, file) ->
+             match resource with
+                 Some r -> r
+               | None ->
+                   let title = file.File.title in
+                   let filename = disambiguate_title title filename_table in
+                   let resource_path = Filename.concat path filename in
+                   let resource = create_resource resource_path change_id in
+                   update_resource_from_file resource file)
+          resources_and_files
       in
         Utils.log_message "Inserting folder resources into db...%!";
         let inserted_resources =
@@ -897,7 +966,7 @@ let utime path atime mtime =
 let read path buf offset file_descr =
   let request_resource =
     get_resource path >>= fun resource ->
-    download_resource resource
+    download_resource_with_retry resource
   in
 
   let content_path = do_request request_resource |> fst in
@@ -974,8 +1043,9 @@ let create_remote_resource is_folder path mode =
       file >>= fun created_file ->
     Utils.log_message "done\n%!";
     let new_resource = create_resource path largest_change_id in
-    Utils.log_message "Deleting resource (path=%s)...%!" path;
-    Cache.Resource.delete_resource_with_path cache path;
+    Utils.log_message "Deleting 'NotFound' resources (path=%s) from cache...%!"
+      path;
+    Cache.Resource.delete_not_found_resource_with_path cache path;
     Utils.log_message "done\n%!";
     let inserted =
       insert_resource_into_cache
@@ -999,38 +1069,39 @@ let mkdir path mode =
 (* END mkdir *)
 
 (* Delete (trash) resources *)
-let delete_remote_resource is_folder path =
-  let trash_file =
-    let trash resource =
-      let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-      Utils.log_message "Trashing file (id=%s)...%!" remote_id;
-      FilesResource.trash
-        ~std_params:file_std_params
-        ~fileId:remote_id >>= fun trashed_file ->
-      Utils.log_message "done\n%!";
-      SessionM.return (Some trashed_file)
-    in
-    update_remote_resource
-      ~update_file_in_cache:(
-        fun content_path ->
-          if not is_folder
-          then Sys.remove content_path)
-      ~save_to_db:(
-        fun cache resource file ->
-          Utils.log_message "Deleting resource (path=%s)...%!" path;
-          Cache.Resource.delete_resource_with_path cache path;
-          Utils.log_message "done\n%!";
-          if is_folder then begin
-            Utils.log_message "Deleting folder old content (path=%s)...%!"
-              path;
-            Cache.Resource.delete_all_with_parent_path cache path;
-            Utils.log_message "done\n%!";
-          end)
-      path
-      trash
-      trash
+let trash_resource is_folder path =
+  let trash resource =
+    let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+    Utils.log_message "Trashing file (id=%s)...%!" remote_id;
+    FilesResource.trash
+      ~std_params:file_std_params
+      ~fileId:remote_id >>= fun trashed_file ->
+    Utils.log_message "done\n%!";
+    SessionM.return (Some trashed_file)
   in
-    do_request trash_file |> ignore
+  update_remote_resource
+    ~update_file_in_cache:(
+      fun content_path ->
+        if not is_folder
+        then Sys.remove content_path)
+    ~save_to_db:(
+      fun cache resource file ->
+        Utils.log_message "Deleting resource (path=%s)...%!" path;
+        Cache.Resource.delete_resource_with_path cache path;
+        Utils.log_message "done\n%!";
+        if is_folder then begin
+          Utils.log_message "Deleting folder old content (path=%s)...%!"
+            path;
+          Cache.Resource.delete_all_with_parent_path cache path;
+          Utils.log_message "done\n%!";
+        end)
+    path
+    trash
+    trash
+
+let delete_remote_resource is_folder path =
+  let trash_file = trash_resource is_folder path in
+  do_request trash_file |> ignore
 (* END Delete (trash) resources *)
 
 (* unlink *)
@@ -1047,11 +1118,26 @@ let rmdir path =
 let rename path new_path =
   let old_parent_path = Filename.dirname path in
   let new_parent_path = Filename.dirname new_path in
+  let old_name = Filename.basename path in
+  let new_name = Filename.basename new_path in
+  let delete_target_path () =
+    if not (Context.get_ctx ()
+        |. Context.config_lens
+        |. Config.keep_duplicates) then begin
+      try
+        get_resource new_path >>= fun new_resource ->
+        trash_resource
+          (Cache.Resource.is_folder new_resource) new_path >>= fun () ->
+        SessionM.return ();
+      with File_not_found ->
+        SessionM.return ();
+    end else
+      SessionM.return ()
+  in
   let update =
     let rename_file use_etag resource =
+      delete_target_path () >>= fun () ->
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-      let old_name = Filename.basename path in
-      let new_name = Filename.basename new_path in
       if old_name <> new_name then begin
         Utils.log_message "Renaming file (id=%s) from %s to %s...%!"
           remote_id old_name new_name;
@@ -1073,6 +1159,7 @@ let rename path new_path =
       end
     in
     let move resource =
+      delete_target_path () >>= fun () ->
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       begin if old_parent_path <> new_parent_path then begin
         Utils.log_message "Moving file (id=%s) from %s to %s...%!"
@@ -1107,22 +1194,31 @@ let rename path new_path =
         fun cache resource file ->
           let updated_resource =
             update_resource_from_file resource file in
-          let resource_to_save =
+          let resource_with_new_path =
             updated_resource
               |> Cache.Resource.path ^= new_path
               |> Cache.Resource.parent_path ^= new_parent_path
               |> Cache.Resource.state ^=
-                (if Cache.Resource.is_folder resource
+                (if Cache.Resource.is_folder resource ||
+                    Cache.Resource.is_document resource
                  then Cache.Resource.State.ToDownload
-                 else updated_resource.Cache.Resource.state)
+                 else Cache.Resource.State.InSync) in
+          let resource_to_save =
+            if new_parent_path <> old_parent_path &&
+               new_name = old_name then
+              resource_with_new_path
+                |> Cache.Resource.path ^=
+                  recompute_path resource_with_new_path new_name
+            else resource_with_new_path
           in
-          Utils.log_message "Deleting resources (path=%s)...%!" new_path;
-          Cache.Resource.delete_resource_with_path cache new_path;
-          Utils.log_message "done\n%!";
           update_cached_resource cache resource_to_save;
+          Utils.log_message
+            "Deleting 'NotFound' resources (path=%s) from cache...%!" new_path;
+          Cache.Resource.delete_not_found_resource_with_path cache new_path;
+          Utils.log_message "done\n%!";
           if Cache.Resource.is_folder resource then begin
-            Utils.log_message "Deleting folder old content (path=%s)...%!"
-              path;
+            Utils.log_message
+              "Deleting folder old content (path=%s) from cache...%!" path;
             Cache.Resource.delete_all_with_parent_path cache path;
             Utils.log_message "done\n%!";
           end)

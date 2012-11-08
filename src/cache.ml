@@ -231,6 +231,15 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_delete_not_found_with_path_stmt db =
+    let sql =
+      "DELETE \
+       FROM resource \
+       WHERE path = :path \
+         AND state = 'NotFound';"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_delete_with_parent_path_stmt db =
     let sql =
       "DELETE \
@@ -600,6 +609,15 @@ struct
     with_db cache
       (fun db ->
          let stmt = ResourceStmts.prepare_delete_with_path_stmt db in
+           reset_stmt stmt;
+           bind_text stmt ":path" (Some path);
+           final_step stmt;
+           finalize_stmt stmt)
+
+  let delete_not_found_resource_with_path cache path =
+    with_db cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_delete_not_found_with_path_stmt db in
            reset_stmt stmt;
            bind_text stmt ":path" (Some path);
            final_step stmt;
