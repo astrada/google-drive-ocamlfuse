@@ -381,21 +381,21 @@ struct
     type t =
         InSync
       | ToDownload
-      | ToDelete
+      | ToUpload
       | NotFound
       | Restricted
 
     let to_string = function
         InSync -> "InSync"
       | ToDownload -> "ToDownload"
-      | ToDelete -> "ToDelete"
+      | ToUpload -> "ToUpload"
       | NotFound -> "NotFound"
       | Restricted -> "Restricted"
 
     let of_string = function
         "InSync" -> InSync
       | "ToDownload" -> ToDownload
-      | "ToDelete" -> ToDelete
+      | "ToUpload" -> ToUpload
       | "NotFound" -> NotFound
       | "Restricted" -> Restricted
       | s -> failwith ("Resource state unexpected: " ^ s)
