@@ -41,7 +41,7 @@ let do_request interact =
           let message =
             e |> GapiError.RequestError.to_data_model
               |> GapiJson.data_model_to_json
-              |> Json_io.string_of_json
+              |> Yojson.Safe.to_string
           in
             failwith message
   in

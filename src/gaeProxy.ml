@@ -8,43 +8,57 @@ let gae_proxy_url = "https://gd-ocaml-auth.appspot.com"
 let gae_proxy_request page query_string =
   let context = Context.get_ctx () in
   let page_url = Printf.sprintf "%s/%s?%s" gae_proxy_url page query_string in
-    GapiConversation.with_curl
-      context.Context.gapi_config
-      (fun session ->
-         let (tokens, _) =
-           GapiConversation.request
-             GapiCore.HttpMethod.GET
-             session
-             page_url
-             (fun pipe code headers session ->
-                let response = GapiConversation.read_all pipe in
-                if code <> 200 then begin
-                  Utils.log_message "fail\n%!";
-                  raise (ServerError (Printf.sprintf
-                                        "Server response: %s (code=%d)"
-                                        response code));
-                end else begin
-                  match response with
-                      "Not_found" ->
-                        Utils.log_message "not found, retrying\n%!";
-                        raise Not_found
-                    | "access_denied"
-                    | "ConflictError"
-                    | "Exception" as error_code ->
-                        Utils.log_message "fail (error_code=%s)\n%!" error_code;
-                        raise (ServerError ("error_code " ^ error_code))
-                    | "Missing_request_id" ->
-                        failwith "Bug! Missing_request_id"
-                    | "Missing_refresh_token" ->
-                        failwith "Bug! Missing_refresh_token"
-                    | _ -> ()
-                end;
-                Utils.log_message "ok\n%!";
-                let json = Json_io.json_of_string response in
-                let obj = Json_type.Browse.objekt json in
-                  Json_type.Browse.make_table obj)
-         in
-           tokens)
+  GapiConversation.with_curl
+    context.Context.gapi_config
+    (fun session ->
+       let (tokens, _) =
+         GapiConversation.request
+           GapiCore.HttpMethod.GET
+           session
+           page_url
+           (fun pipe code headers session ->
+              let response = GapiConversation.read_all pipe in
+              if code <> 200 then begin
+                Utils.log_message "fail\n%!";
+                raise (ServerError (Printf.sprintf
+                                      "Server response: %s (code=%d)"
+                                      response code));
+              end else begin
+                match response with
+                    "Not_found" ->
+                      Utils.log_message "not found, retrying\n%!";
+                      raise Not_found
+                  | "access_denied"
+                  | "ConflictError"
+                  | "Exception" as error_code ->
+                      Utils.log_message "fail (error_code=%s)\n%!" error_code;
+                      raise (ServerError ("error_code " ^ error_code))
+                  | "Missing_request_id" ->
+                      failwith "Bug! Missing_request_id"
+                  | "Missing_refresh_token" ->
+                      failwith "Bug! Missing_refresh_token"
+                  | _ -> ()
+              end;
+              Utils.log_message "ok\n%!";
+              let json = Yojson.Safe.from_string response in
+              let fields =
+                match json with
+                    `Assoc xs -> xs
+                  | _ ->
+                      failwith ("Unexpected response from proxy: " ^ response)
+              in
+              let table = Hashtbl.create 8 in
+              List.iter
+                (fun (n, v) -> Hashtbl.add table n v)
+                fields;
+              table)
+       in
+       tokens)
+
+let get_string_field table name =
+  match Hashtbl.find table name with
+      `String s -> s
+    | _ -> failwith ("Cannot get " ^ name ^ " field from JSON response")
 
 let get_tokens () =
   Utils.log_message "Getting tokens from GAE proxy...";
@@ -53,16 +67,14 @@ let get_tokens () =
   let query_string =
     Netencoding.Url.mk_url_encoded_parameters [("requestid", request_id)] in
   let table = gae_proxy_request "gettokens" query_string in
-  let open Json_type.Browse in
-    context
+  let get_string = get_string_field table in
+  context
     |> Context.state_lens ^=
-         { State.auth_request_id = field table "request_id" |> string;
-           auth_request_date =
-             field table "refresh_date" |> string |> GapiDate.of_string;
-           refresh_token = field table "refresh_token" |> string;
-           last_access_token = field table "access_token" |> string;
-           access_token_date =
-             field table "refresh_date" |> string |> GapiDate.of_string;
+         { State.auth_request_id = get_string "request_id";
+           auth_request_date = get_string "refresh_date" |> GapiDate.of_string;
+           refresh_token = get_string "refresh_token";
+           last_access_token = get_string "access_token";
+           access_token_date = get_string "refresh_date" |> GapiDate.of_string;
          }
     |> Context.save_state_from_context
 
@@ -85,14 +97,13 @@ let refresh_access_token () =
   let query_string =
     Netencoding.Url.mk_url_encoded_parameters [("token", token)] in
   let table = gae_proxy_request "refreshtoken" query_string in
+  let get_string = get_string_field table in
   let current_state = context |. Context.state_lens in
-  let open Json_type.Browse in
-    context
+  context
     |> Context.state_lens ^=
       { current_state with
-            State.last_access_token = field table "access_token" |> string;
-            access_token_date =
-              field table "refresh_date" |> string |> GapiDate.of_string;
+            State.last_access_token = get_string "access_token";
+            access_token_date = get_string "refresh_date" |> GapiDate.of_string;
       }
     |> Context.save_state_from_context
 
