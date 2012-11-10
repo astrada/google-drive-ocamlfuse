@@ -4,6 +4,11 @@ FUSE filesystem over Google Drive
 **google-drive-ocamlfuse** is a FUSE filesystem backed by Google Drive,
 written in OCaml.
 
+### Features
+
+* Offline Google Documents access (read-only)
+* Duplicate file handling
+
 Getting started
 ---------------
 
