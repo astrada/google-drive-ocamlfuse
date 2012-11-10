@@ -271,10 +271,16 @@ let truncate path size =
   with e -> handle_exception e "truncate" path
 
 let release path flags hnd =
-  Utils.log_with_header "release %s %s\n%!" path (Utils.flags_to_string flags)
+  Utils.log_with_header "release %s %s\n%!" path (Utils.flags_to_string flags);
+  try
+    Docs.release path flags hnd
+  with e -> handle_exception e "release" path
 
 let flush path file_descr =
-  Utils.log_with_header "flush %s %d\n%!" path file_descr
+  Utils.log_with_header "flush %s %d\n%!" path file_descr;
+  try
+    Docs.flush path file_descr
+  with e -> handle_exception e "flush" path
 
 let fsync path ds file_descr =
   Utils.log_with_header "fsync %s %b %d\n%!" path ds file_descr
@@ -282,6 +288,12 @@ let fsync path ds file_descr =
 let setxattr path name value xflags =
   Utils.log_with_header "setxattr %s %s %s %s\n%!"
     path name value (Utils.xattr_flags_to_string xflags)
+
+let chmod path mode =
+  Utils.log_with_header "chmod %s %d\n%!" path mode
+
+let chown path uid gid =
+  Utils.log_with_header "chown %s %d %d\n%!" path uid gid
 
 let start_filesystem mountpoint fuse_args =
   if not (Sys.file_exists mountpoint && Sys.is_directory mountpoint) then
@@ -314,6 +326,8 @@ let start_filesystem mountpoint fuse_args =
           flush;
           fsync;
           setxattr;
+          chmod;
+          chown;
     }
 (* END FUSE bindings *)
 
