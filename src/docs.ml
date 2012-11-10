@@ -644,27 +644,27 @@ let download_resource resource =
     Cache.Resource.update_resource cache updated_resource;
     SessionM.return content_path
   in
-    match resource.Cache.Resource.state with
-        Cache.Resource.State.InSync ->
-          if Sys.file_exists content_path then
-            SessionM.return content_path
-          else
-            do_download ()
-      | Cache.Resource.State.ToDownload ->
-          if check_md5_checksum resource then
-            SessionM.return content_path
-          else
-            do_download ()
-      | Cache.Resource.State.NotFound
-      | Cache.Resource.State.ToDelete ->
-          raise File_not_found
-      | Cache.Resource.State.Restricted ->
-          begin if not (Sys.file_exists content_path) then
-            create_empty_file ()
-          else
-            SessionM.return ()
-          end >>
+  match resource.Cache.Resource.state with
+      Cache.Resource.State.InSync
+    | Cache.Resource.State.ToUpload ->
+        if Sys.file_exists content_path then
           SessionM.return content_path
+        else
+          do_download ()
+    | Cache.Resource.State.ToDownload ->
+        if check_md5_checksum resource then
+          SessionM.return content_path
+        else
+          do_download ()
+    | Cache.Resource.State.NotFound ->
+        raise File_not_found
+    | Cache.Resource.State.Restricted ->
+        begin if not (Sys.file_exists content_path) then
+          create_empty_file ()
+        else
+          SessionM.return ()
+        end >>
+        SessionM.return content_path
 
 let download_resource_with_retry resource =
   let rec loop n =
@@ -973,15 +973,15 @@ let read path buf offset file_descr =
     Utils.with_in_channel content_path
       (fun ch ->
          let file_descr = Unix.descr_of_in_channel ch in
-           Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
-           Unix_util.read file_descr buf)
+         Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
+         Unix_util.read file_descr buf)
 (* END read *)
 
 (* write *)
 let write path buf offset file_descr =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
-  let upload_resource =
+  let write_to_resource =
     get_resource path >>= fun resource ->
     let content_path = Cache.get_content_path cache resource in
     Utils.log_message "Writing local file (path=%s)...%!" path;
@@ -989,29 +989,52 @@ let write path buf offset file_descr =
       Utils.with_out_channel content_path
         (fun ch ->
            let file_descr = Unix.descr_of_out_channel ch in
-             Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
-             Unix_util.write file_descr buf) in
-    Utils.log_message "done\n%!";
-    let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-    let media_source = GapiMediaResource.create_file_resource content_path in
-    Utils.log_message "Uploading file (cache path=%s)...%!" content_path;
-    FilesResource.get
-      ~std_params:file_std_params
-      ~fileId:remote_id >>= fun refreshed_file ->
-    FilesResource.update
-      ~std_params:file_std_params
-      ~media_source
-      ~fileId:remote_id
-      refreshed_file >>= fun file ->
+           Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
+           Unix_util.write file_descr buf) in
     Utils.log_message "done\n%!";
     let updated_resource =
-      update_resource_from_file
-        ~state:Cache.Resource.State.InSync resource file in
+      resource |> Cache.Resource.state ^= Cache.Resource.State.ToUpload in
     update_cached_resource cache updated_resource;
     SessionM.return bytes
   in
-  do_request upload_resource |> fst
+  do_request write_to_resource |> fst
 (* END write *)
+
+let upload_if_dirty path =
+  let context = Context.get_ctx () in
+  let cache = context.Context.cache in
+  get_resource path >>= fun resource ->
+  match resource.Cache.Resource.state with
+      Cache.Resource.State.ToUpload ->
+        let content_path = Cache.get_content_path cache resource in
+        let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+        let media_source =
+          GapiMediaResource.create_file_resource content_path in
+        Utils.log_message "Uploading file (cache path=%s)...%!" content_path;
+        FilesResource.get
+          ~std_params:file_std_params
+          ~fileId:remote_id >>= fun refreshed_file ->
+        FilesResource.update
+          ~std_params:file_std_params
+          ~media_source
+          ~fileId:remote_id
+          refreshed_file >>= fun file ->
+        Utils.log_message "done\n%!";
+        let updated_resource =
+          update_resource_from_file
+            ~state:Cache.Resource.State.InSync resource file in
+        update_cached_resource cache updated_resource;
+        SessionM.return ()
+    | _ ->
+        SessionM.return ()
+
+(* flush *)
+let flush path file_descr =
+  do_request (upload_if_dirty path) |> ignore
+
+(* release *)
+let release path flags hnd =
+  do_request (upload_if_dirty path) |> ignore
 
 (* Create resources *)
 let create_remote_resource is_folder path mode =
