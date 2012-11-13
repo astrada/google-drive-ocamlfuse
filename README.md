@@ -17,7 +17,7 @@ Getting started
 * [OCaml][] >= 3.12.0
 * [Findlib][] >= 1.2.7
 * [ocamlfuse][] >= 2.7.1
-* [gapi-ocaml][] >= 0.1.16
+* [gapi-ocaml][] >= 0.2
 * [sqlite3-ocaml][] >= 1.6.1
 
 [OCaml]: http://caml.inria.fr/ocaml/release.en.html
