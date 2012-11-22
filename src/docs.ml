@@ -32,21 +32,61 @@ let change_id_limit = 50L
 let chars_blacklist_regexp = Str.regexp ("[/\000]")
 let clean_filename title = Str.global_replace chars_blacklist_regexp "_" title
 
-let disambiguate_title title filename_table  =
+let common_double_extension_suffixes = [".gz"; ".z"; ".bz2"]
+let split_filename filename =
+  let split full =
+    try
+      let last_dot = String.rindex full '.' in
+      (Str.string_before full last_dot,
+       Str.string_after full last_dot)
+    with Not_found -> (full, "")
+  in
+
+  let (rest, first_extension) =
+    split filename in
+  let (base_name, second_extension) =
+    if List.mem
+         (String.lowercase first_extension)
+         common_double_extension_suffixes then
+      split rest
+    else
+      (rest, "")
+  in
+  let extension =
+    match (first_extension, second_extension) with
+        (_, "") -> first_extension
+      | (f, s) -> s ^ f
+  in
+  (base_name, extension)
+
+let disambiguate_title title is_document filename_table  =
   let rec find_first_unique_filename filename copy_number =
-    let new_candidate = Printf.sprintf "%s (%d)" filename copy_number in
-    if not (Hashtbl.mem filename_table new_candidate) then
-      new_candidate
-    else find_first_unique_filename filename (succ copy_number)
+    let new_candidate =
+      if is_document then
+        Printf.sprintf "%s (%d)" filename copy_number
+      else
+        let (base_name, extension) = split_filename filename in
+        Printf.sprintf "%s (%d)%s" base_name copy_number extension
+    in
+    Utils.log_message "Checking: %s...%!" new_candidate;
+    if not (Hashtbl.mem filename_table new_candidate) then begin
+      Utils.log_message "OK\n%!";
+      (new_candidate, copy_number)
+    end else begin
+      Utils.log_message "KO\n%!";
+      find_first_unique_filename filename (copy_number + 1)
+    end
   in
   let filename = clean_filename title in
   if Hashtbl.mem filename_table filename then begin
+    Utils.log_message "Filename collision detected: %s\n%!" filename;
     let last_copy_number = Hashtbl.find filename_table filename in
-    let copy_number = succ last_copy_number in
-    let unique_filename = find_first_unique_filename filename copy_number in
+    let (unique_filename, copy_number) =
+      find_first_unique_filename filename (last_copy_number + 1) in
     Hashtbl.replace filename_table filename copy_number;
     unique_filename
   end else begin
+    Utils.log_message "Filename (unused): %s\n%!" filename;
     Hashtbl.add filename_table filename 0;
     filename
   end
@@ -116,8 +156,9 @@ let recompute_path resource title =
   let (filename_table, _) =
     build_resource_tables resource.Cache.Resource.parent_path in
   let clean_title = clean_filename title in
-  let filename = disambiguate_title clean_title filename_table in
-    Filename.concat resource.Cache.Resource.parent_path filename
+  let is_document = Cache.Resource.is_document resource in
+  let filename = disambiguate_title clean_title is_document filename_table in
+  Filename.concat resource.Cache.Resource.parent_path filename
 
 let update_resource_from_file ?state resource file =
   let largest_change_id =
@@ -675,7 +716,7 @@ let download_resource_with_retry resource =
         raise e
       else
         GapiUtils.wait_exponential_backoff n;
-        let n' = succ n in
+        let n' = n + 1 in
         Utils.log_message "Retry (%d) downloading resource (id=%Ld)...%!"
           n' resource.Cache.Resource.id;
         loop n'
@@ -835,7 +876,10 @@ let read_dir path =
                  Some r -> r
                | None ->
                    let title = file.File.title in
-                   let filename = disambiguate_title title filename_table in
+                   let is_document =
+                     Cache.Resource.is_document_mime_type file.File.mimeType in
+                   let filename =
+                     disambiguate_title title is_document filename_table in
                    let resource_path = Filename.concat path filename in
                    let resource = create_resource resource_path change_id in
                    update_resource_from_file resource file)

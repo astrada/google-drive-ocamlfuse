@@ -428,86 +428,86 @@ struct
     last_update : float;
   }
 
-	let id = {
-		GapiLens.get = (fun x -> x.id);
-		GapiLens.set = (fun v x -> { x with id = v })
-	}
-	let etag = {
-		GapiLens.get = (fun x -> x.etag);
-		GapiLens.set = (fun v x -> { x with etag = v })
-	}
-	let remote_id = {
-		GapiLens.get = (fun x -> x.remote_id);
-		GapiLens.set = (fun v x -> { x with remote_id = v })
-	}
-	let title = {
-		GapiLens.get = (fun x -> x.title);
-		GapiLens.set = (fun v x -> { x with title = v })
-	}
-	let mime_type = {
-		GapiLens.get = (fun x -> x.mime_type);
-		GapiLens.set = (fun v x -> { x with mime_type = v })
-	}
-	let created_date = {
-		GapiLens.get = (fun x -> x.created_date);
-		GapiLens.set = (fun v x -> { x with created_date = v })
-	}
-	let modified_date = {
-		GapiLens.get = (fun x -> x.modified_date);
-		GapiLens.set = (fun v x -> { x with modified_date = v })
-	}
-	let last_viewed_by_me_date = {
-		GapiLens.get = (fun x -> x.last_viewed_by_me_date);
-		GapiLens.set = (fun v x -> { x with last_viewed_by_me_date = v })
-	}
-	let parent_remote_ids = {
-		GapiLens.get = (fun x -> x.parent_remote_ids);
-		GapiLens.set = (fun v x -> { x with parent_remote_ids = v })
-	}
-	let download_url = {
-		GapiLens.get = (fun x -> x.download_url);
-		GapiLens.set = (fun v x -> { x with download_url = v })
-	}
-	let export_links = {
-		GapiLens.get = (fun x -> x.export_links);
-		GapiLens.set = (fun v x -> { x with export_links = v })
-	}
-	let file_extension = {
-		GapiLens.get = (fun x -> x.file_extension);
-		GapiLens.set = (fun v x -> { x with file_extension = v })
-	}
-	let md5_checksum = {
-		GapiLens.get = (fun x -> x.md5_checksum);
-		GapiLens.set = (fun v x -> { x with md5_checksum = v })
-	}
-	let file_size = {
-		GapiLens.get = (fun x -> x.file_size);
-		GapiLens.set = (fun v x -> { x with file_size = v })
-	}
-	let editable = {
-		GapiLens.get = (fun x -> x.editable);
-		GapiLens.set = (fun v x -> { x with editable = v })
-	}
-	let parent_path = {
-		GapiLens.get = (fun x -> x.parent_path);
-		GapiLens.set = (fun v x -> { x with parent_path = v })
-	}
-	let path = {
-		GapiLens.get = (fun x -> x.path);
-		GapiLens.set = (fun v x -> { x with path = v })
-	}
-	let state = {
-		GapiLens.get = (fun x -> x.state);
-		GapiLens.set = (fun v x -> { x with state = v })
-	}
-	let change_id = {
-		GapiLens.get = (fun x -> x.change_id);
-		GapiLens.set = (fun v x -> { x with change_id = v })
-	}
-	let last_update = {
-		GapiLens.get = (fun x -> x.last_update);
-		GapiLens.set = (fun v x -> { x with last_update = v })
-	}
+  let id = {
+    GapiLens.get = (fun x -> x.id);
+    GapiLens.set = (fun v x -> { x with id = v })
+  }
+  let etag = {
+    GapiLens.get = (fun x -> x.etag);
+    GapiLens.set = (fun v x -> { x with etag = v })
+  }
+  let remote_id = {
+    GapiLens.get = (fun x -> x.remote_id);
+    GapiLens.set = (fun v x -> { x with remote_id = v })
+  }
+  let title = {
+    GapiLens.get = (fun x -> x.title);
+    GapiLens.set = (fun v x -> { x with title = v })
+  }
+  let mime_type = {
+    GapiLens.get = (fun x -> x.mime_type);
+    GapiLens.set = (fun v x -> { x with mime_type = v })
+  }
+  let created_date = {
+    GapiLens.get = (fun x -> x.created_date);
+    GapiLens.set = (fun v x -> { x with created_date = v })
+  }
+  let modified_date = {
+    GapiLens.get = (fun x -> x.modified_date);
+    GapiLens.set = (fun v x -> { x with modified_date = v })
+  }
+  let last_viewed_by_me_date = {
+    GapiLens.get = (fun x -> x.last_viewed_by_me_date);
+    GapiLens.set = (fun v x -> { x with last_viewed_by_me_date = v })
+  }
+  let parent_remote_ids = {
+    GapiLens.get = (fun x -> x.parent_remote_ids);
+    GapiLens.set = (fun v x -> { x with parent_remote_ids = v })
+  }
+  let download_url = {
+    GapiLens.get = (fun x -> x.download_url);
+    GapiLens.set = (fun v x -> { x with download_url = v })
+  }
+  let export_links = {
+    GapiLens.get = (fun x -> x.export_links);
+    GapiLens.set = (fun v x -> { x with export_links = v })
+  }
+  let file_extension = {
+    GapiLens.get = (fun x -> x.file_extension);
+    GapiLens.set = (fun v x -> { x with file_extension = v })
+  }
+  let md5_checksum = {
+    GapiLens.get = (fun x -> x.md5_checksum);
+    GapiLens.set = (fun v x -> { x with md5_checksum = v })
+  }
+  let file_size = {
+    GapiLens.get = (fun x -> x.file_size);
+    GapiLens.set = (fun v x -> { x with file_size = v })
+  }
+  let editable = {
+    GapiLens.get = (fun x -> x.editable);
+    GapiLens.set = (fun v x -> { x with editable = v })
+  }
+  let parent_path = {
+    GapiLens.get = (fun x -> x.parent_path);
+    GapiLens.set = (fun v x -> { x with parent_path = v })
+  }
+  let path = {
+    GapiLens.get = (fun x -> x.path);
+    GapiLens.set = (fun v x -> { x with path = v })
+  }
+  let state = {
+    GapiLens.get = (fun x -> x.state);
+    GapiLens.set = (fun v x -> { x with state = v })
+  }
+  let change_id = {
+    GapiLens.get = (fun x -> x.change_id);
+    GapiLens.set = (fun v x -> { x with change_id = v })
+  }
+  let last_update = {
+    GapiLens.get = (fun x -> x.last_update);
+    GapiLens.set = (fun v x -> { x with last_update = v })
+  }
 
   (* Export links *)
   let render_export_links export_links =
@@ -739,13 +739,18 @@ struct
         Some "application/vnd.google-apps.folder" -> true
       | _ -> false
 
+  let is_document_mime_type mime_type =
+    match mime_type with
+        "application/vnd.google-apps.document"
+      | "application/vnd.google-apps.drawing"
+      | "application/vnd.google-apps.form"
+      | "application/vnd.google-apps.presentation"
+      | "application/vnd.google-apps.spreadsheet" -> true
+      | _ -> false
+
   let is_document resource =
     match resource.mime_type with
-        Some "application/vnd.google-apps.document"
-      | Some "application/vnd.google-apps.drawing"
-      | Some "application/vnd.google-apps.form"
-      | Some "application/vnd.google-apps.presentation"
-      | Some "application/vnd.google-apps.spreadsheet" -> true
+        Some mime_type -> is_document_mime_type mime_type
       | _ -> false
 
   let is_valid resource largest_change_id =
