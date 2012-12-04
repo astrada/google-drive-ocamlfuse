@@ -473,7 +473,8 @@ let get_file_from_server parent_folder_id title =
   Utils.log_message "Getting resource %s (in folder %s) from server...%!"
     title parent_folder_id;
   let q =
-    Printf.sprintf "title = '%s' and '%s' in parents" title parent_folder_id in
+    Printf.sprintf "title = '%s' and '%s' in parents and trashed = false"
+      title parent_folder_id in
   try
     FilesResource.list
       ~std_params:file_list_std_params
