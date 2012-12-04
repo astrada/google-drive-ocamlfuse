@@ -158,13 +158,13 @@ let setup_application debug fs_label client_id client_secret mountpoint =
 (* FUSE bindings *)
 let handle_exception e label param =
   match e with
-      Docs.File_not_found ->
+      Drive.File_not_found ->
         Utils.log_message "File not found: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.ENOENT, label, param))
-    | Docs.Permission_denied ->
+    | Drive.Permission_denied ->
         Utils.log_message "Permission denied: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.EACCES, label, param))
-    | Docs.Resource_busy ->
+    | Drive.Resource_busy ->
         Utils.log_message "Resource busy: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.EBUSY, label, param))
     | e ->
@@ -177,7 +177,7 @@ let init_filesystem () =
 let statfs path =
   Utils.log_with_header "statfs %s\n%!" path;
   try
-    Docs.statfs ()
+    Drive.statfs ()
   with e ->
     Utils.log_exception e;
     raise (Unix.Unix_error (Unix.EBUSY, "statfs", path))
@@ -185,14 +185,14 @@ let statfs path =
 let getattr path =
   Utils.log_with_header "getattr %s\n%!" path;
   try
-    Docs.get_attr path
+    Drive.get_attr path
   with e -> handle_exception e "stat" path
 
 let readdir path hnd =
   Utils.log_with_header "readdir %s %d\n%!" path hnd;
   let dir_list =
     try
-      Docs.read_dir path
+      Drive.read_dir path
     with e -> handle_exception e "readdir" path
   in
     Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
@@ -200,7 +200,7 @@ let readdir path hnd =
 let opendir path flags =
   Utils.log_with_header "opendir %s %s\n%!" path (Utils.flags_to_string flags);
   try
-    Docs.opendir path flags
+    Drive.opendir path flags
   with e -> handle_exception e "opendir" path
 
 let releasedir path flags hnd =
@@ -213,73 +213,73 @@ let fsyncdir path ds hnd =
 let utime path atime mtime =
   Utils.log_with_header "utime %s %f %f\n%!" path atime mtime;
   try
-    Docs.utime path atime mtime
+    Drive.utime path atime mtime
   with e -> handle_exception e "utime" path
 
 let fopen path flags =
   Utils.log_with_header "fopen %s %s\n%!" path (Utils.flags_to_string flags);
   try
-    Docs.fopen path flags
+    Drive.fopen path flags
   with e -> handle_exception e "fopen" path
 
 let read path buf offset file_descr =
   Utils.log_with_header "read %s buf %Ld %d\n%!" path offset file_descr;
   try
-    Docs.read path buf offset file_descr
+    Drive.read path buf offset file_descr
   with e -> handle_exception e "read" path
 
 let write path buf offset file_descr =
   Utils.log_with_header "write %s buf %Ld %d\n%!" path offset file_descr;
   try
-    Docs.write path buf offset file_descr
+    Drive.write path buf offset file_descr
   with e -> handle_exception e "write" path
 
 let mknod path mode =
   Utils.log_with_header "mknod %s %d\n%!" path mode;
   try
-    Docs.mknod path mode
+    Drive.mknod path mode
   with e -> handle_exception e "mknod" path
 
 let mkdir path mode =
   Utils.log_with_header "mkdir %s %d\n%!" path mode;
   try
-    Docs.mkdir path mode
+    Drive.mkdir path mode
   with e -> handle_exception e "mkdir" path
 
 let unlink path =
   Utils.log_with_header "unlink %s\n%!" path;
   try
-    Docs.unlink path
+    Drive.unlink path
   with e -> handle_exception e "unlink" path
 
 let rmdir path =
   Utils.log_with_header "rmdir %s\n%!" path;
   try
-    Docs.rmdir path
+    Drive.rmdir path
   with e -> handle_exception e "rmdir" path
 
 let rename path new_path =
   Utils.log_with_header "rename %s %s\n%!" path new_path;
   try
-    Docs.rename path new_path
+    Drive.rename path new_path
   with e -> handle_exception e "rename" path
 
 let truncate path size =
   Utils.log_with_header "truncate %s %Ld\n%!" path size;
   try
-    Docs.truncate path size
+    Drive.truncate path size
   with e -> handle_exception e "truncate" path
 
 let release path flags hnd =
   Utils.log_with_header "release %s %s\n%!" path (Utils.flags_to_string flags);
   try
-    Docs.release path flags hnd
+    Drive.release path flags hnd
   with e -> handle_exception e "release" path
 
 let flush path file_descr =
   Utils.log_with_header "flush %s %d\n%!" path file_descr;
   try
-    Docs.flush path file_descr
+    Drive.flush path file_descr
   with e -> handle_exception e "flush" path
 
 let fsync path ds file_descr =
