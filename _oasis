@@ -1,19 +1,14 @@
 OASISFormat: 0.3
 OCamlVersion: >= 3.12.0
 Name: google-drive-ocamlfuse
-Version: 0.2.1
+Version: 0.2.1-1
 LicenseFile: LICENSE
 License: MIT
 BuildType: ocamlbuild (0.3)
 Authors: Alessandro Strada
 Copyrights: (C) 2012 Alessandro Strada
-Homepage: https://github.com/astrada/google-drive-ocamlfuse
+Homepage: http://gdfuse.forge.ocamlcore.org/
 BuildTools: ocamlbuild
-
-# Flags
-Flag opam
-  Description: Build for OPAM package manager
-  Default: false
 
 Synopsis: A FUSE filesystem over Google Drive
 Description:
@@ -26,9 +21,7 @@ Executable "google-drive-ocamlfuse"
   MainIs: gdfuse.ml
   Install: true
   CompiledObject: best
-  if flag(opam)
-    NativeOpt: -ccopt -L$dummy/camlidl
-  BuildDepends: gapi-ocaml, Fuse, sqlite3, threads
+  BuildDepends: gapi-ocaml, Fuse, sqlite3, threads, camlidl
 
 # VCS
 SourceRepository head
