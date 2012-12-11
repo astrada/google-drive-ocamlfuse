@@ -362,10 +362,10 @@ let create_cache app_dir config =
   let cache_dir = app_dir.AppDir.cache_dir in
   let db_path = Filename.concat cache_dir "cache.db" in
   let busy_timeout = config.Config.sqlite3_busy_timeout in
-    { cache_dir;
-      db_path;
-      busy_timeout;
-    }
+  { cache_dir;
+    db_path;
+    busy_timeout;
+  }
 
 let open_db cache =
   let db = Sqlite3.db_open cache.db_path in
@@ -975,7 +975,7 @@ let setup_db cache =
   with_db cache
     (fun db ->
       wrap_exec_not_null_no_headers db
-        "BEGIN TRANSACTION;
+        "BEGIN TRANSACTION; \
          CREATE TABLE IF NOT EXISTS resource ( \
             id INTEGER PRIMARY KEY, \
             etag TEXT NULL, \
@@ -1013,7 +1013,20 @@ let setup_db cache =
             root_folder_id TEXT NOT NULL, \
             permission_id TEXT NOT NULL, \
             last_update REAL NOT NULL \
-         );
+         ); \
          COMMIT TRANSACTION;" |> ignore)
 (* END Setup *)
+
+let clean_up_cache cache =
+  if Sys.file_exists cache.cache_dir &&
+     Sys.is_directory cache.cache_dir then begin
+    Array.iter
+      (fun file ->
+         try
+           Sys.remove (Filename.concat cache.cache_dir file)
+         with e ->
+           Utils.log_message "Error removing file %s: %s\n%!"
+             file (Printexc.to_string e))
+      (Sys.readdir cache.cache_dir)
+  end
 

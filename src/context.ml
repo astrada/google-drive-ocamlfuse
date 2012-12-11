@@ -69,6 +69,9 @@ let request_id_lens =
 let refresh_token_lens =
   state_lens |-- State.refresh_token
 
+let saved_version_lens =
+  StateFileStore.data |-- State.saved_version
+
 let largest_change_id_lens =
   metadata |-- GapiLens.option_get |-- Cache.Metadata.largest_change_id
 
