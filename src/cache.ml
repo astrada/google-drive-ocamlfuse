@@ -127,6 +127,7 @@ struct
      md5_checksum, \
      file_size, \
      editable, \
+     trashed, \
      parent_path, \
      path, \
      state, \
@@ -153,6 +154,7 @@ struct
          :md5_checksum, \
          :file_size, \
          :editable, \
+         :trashed, \
          :parent_path, \
          :path, \
          :state, \
@@ -180,6 +182,7 @@ struct
          md5_checksum = :md5_checksum, \
          file_size = :file_size, \
          editable = :editable, \
+         trashed = :trashed, \
          parent_path = :parent_path, \
          path = :path, \
          state = :state, \
@@ -201,7 +204,17 @@ struct
     let sql =
       "DELETE \
        FROM resource \
-       WHERE parent_path LIKE :parent_path"
+       WHERE parent_path LIKE :parent_path \
+         AND trashed = :trashed"
+    in
+      Sqlite3.prepare db sql
+
+  let prepare_trash_all_with_parent_path db =
+    let sql =
+      "UPDATE resource \
+       SET trashed = 1 \
+       WHERE parent_path LIKE :parent_path \
+         AND trashed = 0"
     in
       Sqlite3.prepare db sql
 
@@ -215,19 +228,32 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_invalidate_trash_bin_stmt db =
+    let sql =
+      "UPDATE resource \
+       SET \
+         state = 'ToDownload', \
+         change_id = :change_id \
+       WHERE path LIKE '/' \
+         AND trashed = 1;"
+    in
+      Sqlite3.prepare db sql
+
+  let prepare_trash_stmt db =
+    let sql =
+      "UPDATE resource \
+       SET \
+         trashed = 1, \
+         change_id = :change_id \
+       WHERE id = :id;"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_delete_stmt db =
     let sql =
       "DELETE \
        FROM resource \
        WHERE id = :id;"
-    in
-      Sqlite3.prepare db sql
-
-  let prepare_delete_with_path_stmt db =
-    let sql =
-      "DELETE \
-       FROM resource \
-       WHERE path = :path;"
     in
       Sqlite3.prepare db sql
 
@@ -245,6 +271,7 @@ struct
       "DELETE \
        FROM resource \
        WHERE parent_path = :parent_path \
+         AND trashed = :trashed \
          AND (change_id < :change_id \
            OR state <> 'NotFound');"
     in
@@ -254,7 +281,8 @@ struct
     let sql =
       "SELECT " ^ fields ^ " \
        FROM resource \
-       WHERE path = :path;"
+       WHERE path = :path \
+         AND trashed = :trashed;"
     in
       Sqlite3.prepare db sql
 
@@ -271,6 +299,7 @@ struct
       "SELECT " ^ fields ^ " \
        FROM resource \
        WHERE parent_path = :parent_path \
+         AND trashed = :trashed
          AND state IN ('InSync', 'ToDownload');"
     in
       Sqlite3.prepare db sql
@@ -420,6 +449,7 @@ struct
     md5_checksum : string option;
     file_size : int64 option;
     editable : bool option;
+    trashed : bool option;
     (* local data *)
     parent_path : string;
     path : string;
@@ -487,6 +517,10 @@ struct
   let editable = {
     GapiLens.get = (fun x -> x.editable);
     GapiLens.set = (fun v x -> { x with editable = v })
+  }
+  let trashed = {
+    GapiLens.get = (fun x -> x.trashed);
+    GapiLens.set = (fun v x -> { x with trashed = v })
   }
   let parent_path = {
     GapiLens.get = (fun x -> x.parent_path);
@@ -564,6 +598,7 @@ struct
     bind_text stmt ":md5_checksum" resource.md5_checksum;
     bind_int stmt ":file_size" resource.file_size;
     bind_bool stmt ":editable" resource.editable;
+    bind_bool stmt ":trashed" resource.trashed;
     bind_text stmt ":parent_path" (Some resource.parent_path);
     bind_text stmt ":path" (Some resource.path);
     bind_text stmt ":state" (Some (State.to_string resource.state));
@@ -605,45 +640,37 @@ struct
            _delete_resource stmt resource.id;
            finalize_stmt stmt)
 
-  let delete_resource_with_path cache path =
-    with_db cache
-      (fun db ->
-         let stmt = ResourceStmts.prepare_delete_with_path_stmt db in
-           reset_stmt stmt;
-           bind_text stmt ":path" (Some path);
-           final_step stmt;
-           finalize_stmt stmt)
-
   let delete_not_found_resource_with_path cache path =
     with_db cache
       (fun db ->
          let stmt = ResourceStmts.prepare_delete_not_found_with_path_stmt db in
-           reset_stmt stmt;
-           bind_text stmt ":path" (Some path);
-           final_step stmt;
-           finalize_stmt stmt)
+         reset_stmt stmt;
+         bind_text stmt ":path" (Some path);
+         final_step stmt;
+         finalize_stmt stmt)
 
-  let _delete_resources_with_parent_path db parent_path change_id =
+  let _delete_resources_with_parent_path db parent_path change_id trashed =
     let stmt = ResourceStmts.prepare_delete_with_parent_path_stmt db in
-      bind_text stmt ":parent_path" (Some parent_path);
-      bind_int stmt ":change_id" (Some change_id);
-      final_step stmt;
-      finalize_stmt stmt
+    bind_text stmt ":parent_path" (Some parent_path);
+    bind_int stmt ":change_id" (Some change_id);
+    bind_bool stmt ":trashed" (Some trashed);
+    final_step stmt;
+    finalize_stmt stmt
 
   let delete_resources cache resources =
     with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_delete_stmt db in
-           List.iter
-             (fun resource ->
-                _delete_resource stmt resource.id)
-             resources;
-           finalize_stmt stmt)
+         List.iter
+           (fun resource ->
+              _delete_resource stmt resource.id)
+           resources;
+         finalize_stmt stmt)
 
-  let insert_resources cache resources parent_path change_id =
+  let insert_resources cache resources parent_path change_id trashed =
     with_transaction cache
       (fun db ->
-         _delete_resources_with_parent_path db parent_path change_id;
+         _delete_resources_with_parent_path db parent_path change_id trashed;
          let stmt = ResourceStmts.prepare_insert_stmt db in
          let results =
            List.map
@@ -669,14 +696,46 @@ struct
            ids;
          finalize_stmt stmt)
 
-  let delete_all_with_parent_path cache parent_path =
+  let invalidate_trash_bin cache change_id =
+    with_transaction cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_invalidate_trash_bin_stmt db in
+         reset_stmt stmt;
+         bind_int stmt ":change_id" (Some change_id);
+         final_step stmt;
+         finalize_stmt stmt)
+
+  let trash_resources cache resources change_id =
+    with_transaction cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_trash_stmt db in
+         List.iter
+           (fun resource ->
+              reset_stmt stmt;
+              bind_int stmt ":change_id" (Some change_id);
+              bind_int stmt ":id" (Some resource.id);
+              final_step stmt)
+           resources;
+         finalize_stmt stmt)
+
+  let delete_all_with_parent_path cache parent_path trashed =
     with_db cache
       (fun db ->
          let stmt = ResourceStmts.prepare_delete_all_with_parent_path db in
-           reset_stmt stmt;
-           bind_text stmt ":parent_path" (Some (parent_path ^ "%"));
-           final_step stmt;
-           finalize_stmt stmt)
+         reset_stmt stmt;
+         bind_text stmt ":parent_path" (Some (parent_path ^ "%"));
+         bind_bool stmt ":trashed" (Some trashed);
+         final_step stmt;
+         finalize_stmt stmt)
+
+  let trash_all_with_parent_path cache parent_path =
+    with_db cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_trash_all_with_parent_path db in
+         reset_stmt stmt;
+         bind_text stmt ":parent_path" (Some (parent_path ^ "%"));
+         final_step stmt;
+         finalize_stmt stmt)
 
   let row_to_resource row_data =
     { id = row_data.(0) |> data_to_int64 |> Option.get;
@@ -694,11 +753,12 @@ struct
       md5_checksum = row_data.(12) |> data_to_string;
       file_size = row_data.(13) |> data_to_int64;
       editable = row_data.(14) |> data_to_bool;
-      parent_path = row_data.(15) |> data_to_string |> Option.get;
-      path = row_data.(16) |> data_to_string |> Option.get;
-      state = row_data.(17) |> data_to_string |> Option.get |> State.of_string;
-      change_id = row_data.(18) |> data_to_int64 |> Option.get;
-      last_update = row_data.(19) |> data_to_float |> Option.get;
+      trashed = row_data.(15) |> data_to_bool;
+      parent_path = row_data.(16) |> data_to_string |> Option.get;
+      path = row_data.(17) |> data_to_string |> Option.get;
+      state = row_data.(18) |> data_to_string |> Option.get |> State.of_string;
+      change_id = row_data.(19) |> data_to_int64 |> Option.get;
+      last_update = row_data.(20) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -711,23 +771,27 @@ struct
            finalize_stmt stmt;
            result)
 
-  let select_resource_with_path cache path =
+  let select_resource_with_path cache path trashed =
     select_resource cache
       ResourceStmts.prepare_select_with_path_stmt
-      (fun stmt -> bind_text stmt ":path" (Some path))
+      (fun stmt ->
+         bind_text stmt ":path" (Some path);
+         bind_bool stmt ":trashed" (Some trashed))
 
   let select_resource_with_remote_id cache remote_id =
     select_resource cache
       ResourceStmts.prepare_select_with_remote_id_stmt
       (fun stmt -> bind_text stmt ":remote_id" (Some remote_id))
 
-  let select_resources_with_parent_path cache parent_path =
+  let select_resources_with_parent_path cache parent_path trashed =
     with_db cache
       (fun db ->
          let stmt = ResourceStmts.prepare_select_with_parent_path_stmt db in
          let results =
            select_all_rows stmt
-             (fun stmt -> bind_text stmt ":parent_path" (Some parent_path))
+             (fun stmt ->
+                bind_text stmt ":parent_path" (Some parent_path);
+                bind_bool stmt ":trashed" (Some trashed))
              row_to_resource
          in
            finalize_stmt stmt;
@@ -928,14 +992,15 @@ let setup_db cache =
             md5_checksum TEXT NULL, \
             file_size INTEGER NULL, \
             editable INTEGER NULL, \
+            trashed INTEGER NULL, \
             parent_path TEXT NOT NULL, \
             path TEXT NOT NULL, \
             state TEXT NOT NULL, \
             change_id INTEGER NOT NULL, \
             last_update REAL NOT NULL \
          ); \
-         CREATE INDEX IF NOT EXISTS path_index ON resource (path); \
-         CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path); \
+         CREATE INDEX IF NOT EXISTS path_index ON resource (path, trashed); \
+         CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path, trashed); \
          CREATE INDEX IF NOT EXISTS remote_id_index ON resource (remote_id); \
          CREATE TABLE IF NOT EXISTS metadata ( \
             id INTEGER PRIMARY KEY, \
