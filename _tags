@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: dc1bf01ab95aec902d21c2b418a03c9f)
+# DO NOT EDIT (digest: c90801c6227d5c3e92a46c6a4c1ef784)
 # Ignore VCS directories, you can use the same kind of rule outside 
 # OASIS_START/STOP if you want to exclude directories that contains 
 # useless stuff for the build process
@@ -14,8 +14,6 @@
 "_darcs": -traverse
 "_darcs": not_hygienic
 # Executable google-drive-ocamlfuse
-<src/gdfuse.{native,byte}>: oasis_executable_google_drive_ocamlfuse_native
-<src/*.ml{,i}>: oasis_executable_google_drive_ocamlfuse_native
 <src/gdfuse.{native,byte}>: pkg_gapi-ocaml
 <src/gdfuse.{native,byte}>: pkg_Fuse
 <src/gdfuse.{native,byte}>: pkg_sqlite3

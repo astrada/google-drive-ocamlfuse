@@ -7,13 +7,8 @@ License: MIT
 BuildType: ocamlbuild (0.3)
 Authors: Alessandro Strada
 Copyrights: (C) 2012 Alessandro Strada
-Homepage: https://github.com/astrada/google-drive-ocamlfuse
+Homepage: http://gdfuse.forge.ocamlcore.org/
 BuildTools: ocamlbuild
-
-# Flags
-Flag opam
-  Description: Build for OPAM package manager
-  Default: false
 
 Synopsis: A FUSE filesystem over Google Drive
 Description:
@@ -26,8 +21,6 @@ Executable "google-drive-ocamlfuse"
   MainIs: gdfuse.ml
   Install: true
   CompiledObject: best
-  if flag(opam)
-    NativeOpt: -ccopt -L$dummy/camlidl
   BuildDepends: gapi-ocaml, Fuse, sqlite3, threads
 
 # VCS

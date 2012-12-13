@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: 04d58675ebb2c175cc9ebdc610ca4a0b) *)
+(* DO NOT EDIT (digest: 288840fa5b4a061a5883ca7c4effe9df) *)
 module OASISGettext = struct
 (* # 21 "/home/alex/.odb/install-oasis/oasis-0.3.0/src/oasis/OASISGettext.ml" *)
 
@@ -476,51 +476,11 @@ end
 # 476 "myocamlbuild.ml"
 open Ocamlbuild_plugin;;
 let package_default =
-  {
-     MyOCamlbuildBase.lib_ocaml = [];
-     lib_c = [];
-     flags =
-       [
-          ([
-              "oasis_executable_google_drive_ocamlfuse_native";
-              "ocaml";
-              "link";
-              "native"
-           ],
-            [
-               (OASISExpr.EBool true, S []);
-               (OASISExpr.EFlag "opam",
-                 S [A "-ccopt"; A "-L${dummy}/camlidl"])
-            ]);
-          ([
-              "oasis_executable_google_drive_ocamlfuse_native";
-              "ocaml";
-              "ocamldep";
-              "native"
-           ],
-            [
-               (OASISExpr.EBool true, S []);
-               (OASISExpr.EFlag "opam",
-                 S [A "-ccopt"; A "-L${dummy}/camlidl"])
-            ]);
-          ([
-              "oasis_executable_google_drive_ocamlfuse_native";
-              "ocaml";
-              "compile";
-              "native"
-           ],
-            [
-               (OASISExpr.EBool true, S []);
-               (OASISExpr.EFlag "opam",
-                 S [A "-ccopt"; A "-L${dummy}/camlidl"])
-            ])
-       ];
-     includes = [];
-     }
+  {MyOCamlbuildBase.lib_ocaml = []; lib_c = []; flags = []; includes = []; }
   ;;
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default package_default;;
 
-# 525 "myocamlbuild.ml"
+# 485 "myocamlbuild.ml"
 (* OASIS_STOP *)
 Ocamlbuild_plugin.dispatch dispatch_default;;
