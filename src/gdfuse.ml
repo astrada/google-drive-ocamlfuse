@@ -55,25 +55,26 @@ let generate_request_id () =
 
 let create_empty_state_store app_dir =
   let request_id = generate_request_id () in
-  let state = State.empty |> State.auth_request_id ^= request_id in
+  let state = State.empty
+    |> State.auth_request_id ^= request_id
+    |> State.saved_version ^= Config.version in
   let state_store = {
     Context.StateFileStore.path = app_dir |. AppDir.state_path;
     data = state
-  }
-  in
-    Context.save_state_store state_store;
-    state_store
+  } in
+  Context.save_state_store state_store;
+  state_store
 
 let get_state_store app_dir =
   let state_path = app_dir |. AppDir.state_path in
-    try
-      Utils.log_with_header "Loading application state from %s..." state_path;
-      let state_store = Context.StateFileStore.load state_path in
-        Utils.log_message "done\n";
-        state_store
-    with KeyValueStore.File_not_found ->
-      Utils.log_message "not found.\n";
-      create_empty_state_store app_dir
+  try
+    Utils.log_with_header "Loading application state from %s..." state_path;
+    let state_store = Context.StateFileStore.load state_path in
+    Utils.log_message "done\n%!";
+    state_store
+  with KeyValueStore.File_not_found ->
+    Utils.log_message "not found.\n%!";
+    create_empty_state_store app_dir
 (* END Application state *)
 
 let setup_application debug fs_label client_id client_secret mountpoint =
@@ -113,7 +114,7 @@ let setup_application debug fs_label client_id client_secret mountpoint =
   Utils.log_message "Opening log file: %s\n%!" app_log_path;
   let log_channel = open_out app_log_path in
   Utils.log_channel := log_channel;
-  Utils.log_with_header "Setting up %s filesystem...\n" fs_label;
+  Utils.log_with_header "Setting up %s filesystem...\n%!" fs_label;
   let config_store = get_config_store debug app_dir in
   let current_config = config_store |. Context.ConfigFileStore.data in
   let config =
@@ -126,14 +127,24 @@ let setup_application debug fs_label client_id client_secret mountpoint =
   let config_store = config_store
     |> Context.ConfigFileStore.data ^= config in
   let gapi_config = Config.create_gapi_config config app_dir in
-  Utils.log_message "Setting up cache db...";
-  let cache = Cache.create_cache app_dir config in
-  Cache.setup_db cache;
-  Utils.log_message "done\n";
   let state_store = get_state_store app_dir in
-  Utils.log_message "Setting up CURL...";
+  let cache = Cache.create_cache app_dir config in
+  let saved_version = state_store |. Context.saved_version_lens in
+  if saved_version <> Config.version then begin
+    Utils.log_message
+      "Version mismatch (saved=%s, current=%s): cleaning up cache...%!"
+      saved_version Config.version;
+    Cache.clean_up_cache cache;
+    let updated_state_store = state_store
+      |> Context.saved_version_lens ^= Config.version in
+    Context.save_state_store updated_state_store;
+    Utils.log_message "done\n%!";
+  end;
+  Utils.log_message "Setting up cache db...%!";
+  Cache.setup_db cache;
+  Utils.log_message "done\nSetting up CURL...%!";
   let curl_state = GapiCurl.global_init () in
-  Utils.log_message "done\n";
+  Utils.log_message "done\n%!";
   let context = {
     Context.app_dir;
     config_store;

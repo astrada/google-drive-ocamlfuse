@@ -68,13 +68,17 @@ let get_tokens () =
     Netencoding.Url.mk_url_encoded_parameters [("requestid", request_id)] in
   let table = gae_proxy_request "gettokens" query_string in
   let get_string = get_string_field table in
+  let current_state = context |. Context.state_lens in
   context
     |> Context.state_lens ^=
-         { State.auth_request_id = get_string "request_id";
-           auth_request_date = get_string "refresh_date" |> GapiDate.of_string;
-           refresh_token = get_string "refresh_token";
-           last_access_token = get_string "access_token";
-           access_token_date = get_string "refresh_date" |> GapiDate.of_string;
+         { current_state with
+               State.auth_request_id = get_string "request_id";
+               auth_request_date =
+                 get_string "refresh_date" |> GapiDate.of_string;
+               refresh_token = get_string "refresh_token";
+               last_access_token = get_string "access_token";
+               access_token_date =
+                 get_string "refresh_date" |> GapiDate.of_string;
          }
     |> Context.save_state_from_context
 
