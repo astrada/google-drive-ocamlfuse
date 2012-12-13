@@ -8,6 +8,7 @@ written in OCaml.
 
 * Offline Google Documents access (read-only)
 * Duplicate file handling
+* Access to trash (`.Trash` directory)
 
 Getting started
 ---------------
@@ -30,7 +31,9 @@ It's better to use the last [CVS
 snapshot](http://sourceforge.net/scm/?type=cvs&group_id=121959) of
 `ocamlfuse`, because it contains some bugfixes. I've uploaded the snapshot on
 [OASIS DB](http://oasis.ocamlcore.org/dev/view/ocamlfuse/latest) and added
-OASIS support, to ease compilation and installation.
+OASIS support, to ease compilation and installation. Note that you will need
+`camlidl` package installed in the default library path (because standard
+`camlidl` packages don't use `findlib`.)
 
 ### Configuration and installation
 
@@ -99,16 +102,6 @@ change to your documents (server side), you won't see it immediately in the
 mounted filesystem.
 
 Note also that, at least for now, Google Documents will be exported read-only.
-
-### Upgrading from previous versions
-
-If you are upgrading from previous versions, you should clean every file in
-`~/.gdfuse/default`:
-
-    $ rm -rf ~/.gdfuse/default
-
-because previous versions used a different cache schema and/or a different
-Google API (the last version uses the new Drive API v2).
 
 ### Support
 
