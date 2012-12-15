@@ -1276,26 +1276,27 @@ let rename path new_path =
   let new_parent_path = Filename.dirname normalized_new_path in
   let old_name = Filename.basename normalized_path in
   let new_name = Filename.basename normalized_new_path in
-  let delete_target_path () =
+  let delete_target_path s =
+    (* Cannot use implicit monadic style, because there is a try/with. We need
+     * to eta-expand the function *)
     if not target_trashed &&
        not (Context.get_ctx ()
         |. Context.config_lens
         |. Config.keep_duplicates) then begin
       try
-        get_resource normalized_new_path target_trashed >>= fun new_resource ->
-        trash_resource
-          (Cache.Resource.is_folder new_resource) new_path >>= fun () ->
-        SessionM.return ();
+        (get_resource normalized_new_path target_trashed >>= fun new_resource ->
+         trash_resource
+           (Cache.Resource.is_folder new_resource) new_path) s
       with File_not_found ->
-        SessionM.return ();
+        ((), s)
     end else
-      SessionM.return ()
+      ((), s)
   in
   let update =
     let rename_file use_etag resource =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       if old_name <> new_name then begin
-        delete_target_path () >>= fun () ->
+        delete_target_path >>= fun () ->
         Utils.log_message "Renaming file (id=%s) from %s to %s...%!"
           remote_id old_name new_name;
         let etag = Option.default "" resource.Cache.Resource.etag in
@@ -1318,7 +1319,7 @@ let rename path new_path =
     let move resource =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       begin if old_parent_path <> new_parent_path then begin
-        delete_target_path () >>= fun () ->
+        delete_target_path >>= fun () ->
         Utils.log_message "Moving file (id=%s) from %s to %s...%!"
           remote_id old_parent_path new_parent_path;
         get_resource
