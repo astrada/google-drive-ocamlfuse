@@ -100,14 +100,14 @@ let is_in_trash_directory path =
   if path = trash_directory then false
   else ExtString.String.starts_with path trash_directory_base_path
 
-let normalize_path path =
+let get_path_in_cache path =
   if path = root_directory then
     (root_directory, false)
   else if path = trash_directory then
     (root_directory, true)
   else if is_in_trash_directory path then
-    let normalized_path = Str.string_after path trash_directory_name_length in
-    (normalized_path, true)
+    let path_in_cache = Str.string_after path trash_directory_name_length in
+    (path_in_cache, true)
   else
     (path, false)
 
@@ -784,10 +784,10 @@ let is_file_read_only resource =
 let get_attr path =
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
-  let (normalized_path, trashed) = normalize_path path in
+  let (path_in_cache, trashed) = get_path_in_cache path in
 
   let request_resource =
-    get_resource normalized_path trashed >>= fun resource ->
+    get_resource path_in_cache trashed >>= fun resource ->
     begin if Cache.Resource.is_document resource &&
              config.Config.download_docs then
       with_try
@@ -890,18 +890,18 @@ let read_dir path =
       loop []
   in
 
-  let (normalized_path, trashed) = normalize_path path in
+  let (path_in_cache, trashed) = get_path_in_cache path in
 
   let request_folder =
     Utils.log_message "Getting folder content (path=%s,trashed=%b)\n%!"
-      normalized_path trashed;
-    get_resource normalized_path trashed >>= fun resource ->
-    get_folder_id normalized_path trashed >>= fun folder_id ->
+      path_in_cache trashed;
+    get_resource path_in_cache trashed >>= fun resource ->
+    get_folder_id path_in_cache trashed >>= fun folder_id ->
     let q =
       Printf.sprintf "'%s' in parents and trashed = %b" folder_id trashed in
     get_all_files q >>= fun files ->
     Utils.log_message "Done getting folder content (path=%s,trashed=%b)\n%!"
-      normalized_path trashed;
+      path_in_cache trashed;
     begin if path = trash_directory && trashed then begin
       Utils.log_message "Getting explicitly trashed files...%!";
       let q =
@@ -919,20 +919,20 @@ let read_dir path =
 
   let cache = Context.get_cache () in
   let resources =
-    if check_resource_in_cache cache normalized_path trashed then begin
+    if check_resource_in_cache cache path_in_cache trashed then begin
       Utils.log_message
         "Getting resources from db (parent path=%s,trashed=%b)...%!"
-        normalized_path trashed;
+        path_in_cache trashed;
       let resources =
         Cache.Resource.select_resources_with_parent_path
-          cache normalized_path trashed in
+          cache path_in_cache trashed in
       Utils.log_message "done\n%!";
       resources
     end else begin
       let (files, folder_resource) = do_request request_folder |> fst in
       let change_id = folder_resource.Cache.Resource.change_id in
       let (filename_table, remote_id_table) =
-        build_resource_tables normalized_path trashed in
+        build_resource_tables path_in_cache trashed in
       let resources_and_files =
         List.map
           (fun file ->
@@ -958,7 +958,7 @@ let read_dir path =
                    let filename =
                      disambiguate_title title is_document filename_table in
                    let resource_path =
-                     Filename.concat normalized_path filename in
+                     Filename.concat path_in_cache filename in
                    let resource = create_resource resource_path change_id in
                    update_resource_from_file resource file)
           resources_and_files
@@ -967,7 +967,7 @@ let read_dir path =
           "Inserting folder resources into db (trashed=%b)...%!" trashed;
         let inserted_resources =
           Cache.Resource.insert_resources
-            cache resources normalized_path change_id trashed in
+            cache resources path_in_cache change_id trashed in
         Utils.log_message "done\n%!";
         let change_id =
           Context.get_ctx () |. Context.largest_change_id_lens in
@@ -991,11 +991,11 @@ let read_dir path =
 
 (* fopen *)
 let fopen path flags =
-  let (normalized_path, trashed) = normalize_path path in
+  let (path_in_cache, trashed) = get_path_in_cache path in
   let is_read_only_request = List.mem Unix.O_RDONLY flags in
 
   let check_editable =
-    get_resource normalized_path trashed >>= fun resource ->
+    get_resource path_in_cache trashed >>= fun resource ->
     if not is_read_only_request && is_file_read_only resource then
       raise Permission_denied
     else
@@ -1012,8 +1012,8 @@ let fopen path flags =
 
 (* opendir *)
 let opendir path flags =
-  let (normalized_path, trashed) = normalize_path path in
-  do_request (get_resource normalized_path trashed) |> ignore;
+  let (path_in_cache, trashed) = get_path_in_cache path in
+  do_request (get_resource path_in_cache trashed) |> ignore;
   None
 (* END opendir *)
 
@@ -1030,9 +1030,9 @@ let update_remote_resource path
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
   let cache = context.Context.cache in
-  let (normalized_path, trashed) = normalize_path path in
+  let (path_in_cache, trashed) = get_path_in_cache path in
   let update_file =
-    get_resource normalized_path trashed >>= fun resource ->
+    get_resource path_in_cache trashed >>= fun resource ->
     with_try
       (do_remote_update resource)
       (function
@@ -1098,10 +1098,10 @@ let utime path atime mtime =
 
 (* read *)
 let read path buf offset file_descr =
-  let (normalized_path, trashed) = normalize_path path in
+  let (path_in_cache, trashed) = get_path_in_cache path in
     
   let request_resource =
-    get_resource normalized_path trashed >>= fun resource ->
+    get_resource path_in_cache trashed >>= fun resource ->
     download_resource_with_retry resource
   in
 
@@ -1115,15 +1115,15 @@ let read path buf offset file_descr =
 
 (* write *)
 let write path buf offset file_descr =
-  let (normalized_path, trashed) = normalize_path path in
+  let (path_in_cache, trashed) = get_path_in_cache path in
 
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
   let write_to_resource =
-    get_resource normalized_path trashed >>= fun resource ->
+    get_resource path_in_cache trashed >>= fun resource ->
     download_resource_with_retry resource >>= fun content_path ->
     Utils.log_message "Writing local file (path=%s,trashed=%b)...%!"
-      normalized_path trashed;
+      path_in_cache trashed;
     let bytes =
       Utils.with_out_channel content_path
         (fun ch ->
@@ -1140,11 +1140,11 @@ let write path buf offset file_descr =
 (* END write *)
 
 let upload_if_dirty path =
-  let (normalized_path, trashed) = normalize_path path in
+  let (path_in_cache, trashed) = get_path_in_cache path in
 
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
-  get_resource normalized_path trashed >>= fun resource ->
+  get_resource path_in_cache trashed >>= fun resource ->
   match resource.Cache.Resource.state with
       Cache.Resource.State.ToUpload ->
         let content_path = Cache.get_content_path cache resource in
@@ -1179,13 +1179,13 @@ let release path flags hnd =
 
 (* Create resources *)
 let create_remote_resource is_folder path mode =
-  let (normalized_path, trashed) = normalize_path path in
+  let (path_in_cache, trashed) = get_path_in_cache path in
   if trashed then raise Permission_denied;
 
   let context = Context.get_ctx () in
   let largest_change_id = context |. Context.largest_change_id_lens in
   let cache = context.Context.cache in
-  let parent_path = Filename.dirname normalized_path in
+  let parent_path = Filename.dirname path_in_cache in
   let create_file =
     get_resource parent_path trashed >>= fun parent_resource ->
     let parent_id =
@@ -1199,20 +1199,20 @@ let create_remote_resource is_folder path mode =
       else "" in
     let file = {
       File.empty with
-          File.title = Filename.basename normalized_path;
+          File.title = Filename.basename path_in_cache;
           parents = [parent_reference];
           mimeType;
     } in
     Utils.log_message "Creating %s (path=%s,trashed=%b) on server...%!"
-      (if is_folder then "folder" else "file") normalized_path trashed;
+      (if is_folder then "folder" else "file") path_in_cache trashed;
     FilesResource.insert
       ~std_params:file_std_params
       file >>= fun created_file ->
     Utils.log_message "done\n%!";
-    let new_resource = create_resource normalized_path largest_change_id in
+    let new_resource = create_resource path_in_cache largest_change_id in
     Utils.log_message "Deleting 'NotFound' resources (path=%s) from cache...%!"
-      normalized_path;
-    Cache.Resource.delete_not_found_resource_with_path cache normalized_path;
+      path_in_cache;
+    Cache.Resource.delete_not_found_resource_with_path cache path_in_cache;
     Utils.log_message "done\n%!";
     let inserted =
       insert_resource_into_cache
@@ -1237,7 +1237,7 @@ let mkdir path mode =
 
 (* Delete (trash) resources *)
 let trash_resource is_folder path =
-  let (_, trashed) = normalize_path path in
+  let (_, trashed) = get_path_in_cache path in
   if trashed then raise Permission_denied;
 
   let trash resource =
@@ -1258,10 +1258,10 @@ let trash_resource is_folder path =
         Cache.Resource.invalidate_trash_bin
           cache resource.Cache.Resource.change_id;
         if is_folder then begin
-          let (normalized_path, _) = normalize_path path in
+          let (path_in_cache, _) = get_path_in_cache path in
           Utils.log_message "Trashing folder old content (path=%s)...%!"
-            normalized_path;
-          Cache.Resource.trash_all_with_parent_path cache normalized_path;
+            path_in_cache;
+          Cache.Resource.trash_all_with_parent_path cache path_in_cache;
           Utils.log_message "done\n%!";
         end)
     path
@@ -1285,21 +1285,21 @@ let rmdir path =
 
 (* rename *)
 let rename path new_path =
-  let (normalized_path, trashed) = normalize_path path in
-  let (normalized_new_path, target_trashed) = normalize_path new_path in
+  let (path_in_cache, trashed) = get_path_in_cache path in
+  let (new_path_in_cache, target_trashed) = get_path_in_cache new_path in
   if trashed <> target_trashed then raise Permission_denied;
 
-  let old_parent_path = Filename.dirname normalized_path in
-  let new_parent_path = Filename.dirname normalized_new_path in
-  let old_name = Filename.basename normalized_path in
-  let new_name = Filename.basename normalized_new_path in
+  let old_parent_path = Filename.dirname path_in_cache in
+  let new_parent_path = Filename.dirname new_path_in_cache in
+  let old_name = Filename.basename path_in_cache in
+  let new_name = Filename.basename new_path_in_cache in
   let delete_target_path =
     if not target_trashed &&
        not (Context.get_ctx ()
         |. Context.config_lens
         |. Config.keep_duplicates) then begin
       with_try
-        (get_resource normalized_new_path target_trashed >>= fun new_resource ->
+        (get_resource new_path_in_cache target_trashed >>= fun new_resource ->
          trash_resource
            (Cache.Resource.is_folder new_resource) new_path)
         (function
@@ -1371,7 +1371,7 @@ let rename path new_path =
             update_resource_from_file resource file in
           let resource_with_new_path =
             updated_resource
-              |> Cache.Resource.path ^= normalized_new_path
+              |> Cache.Resource.path ^= new_path_in_cache
               |> Cache.Resource.parent_path ^= new_parent_path
               |> Cache.Resource.trashed ^= Some target_trashed
               |> Cache.Resource.state ^=
@@ -1390,16 +1390,16 @@ let rename path new_path =
           update_cached_resource cache resource_to_save;
           Utils.log_message
             "Deleting 'NotFound' resources (path=%s) from cache...%!"
-            normalized_new_path;
+            new_path_in_cache;
           Cache.Resource.delete_not_found_resource_with_path
-            cache normalized_new_path;
+            cache new_path_in_cache;
           Utils.log_message "done\n%!";
           if Cache.Resource.is_folder resource then begin
             Utils.log_message
               "Deleting folder old content (path=%s,trashed=%b) from cache...%!"
-              normalized_path trashed;
+              path_in_cache trashed;
             Cache.Resource.delete_all_with_parent_path
-              cache normalized_path trashed;
+              cache path_in_cache trashed;
             Utils.log_message "done\n%!";
           end)
   in
