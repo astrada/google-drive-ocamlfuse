@@ -114,11 +114,15 @@ let get_path_in_cache path =
 (* Used to do a try/with on a monadic f: state parameter s is eta-expanded,
  * otherwise the try/with will be ignored because f is only partially applied
  *)
-let with_try f exception_handler s =
+let with_try f handle_exception s =
   try
     f s
   with e ->
-    exception_handler e s
+    handle_exception e s
+
+(* Raise with an extra parameter used in monadic functions *)
+let throw e _ =
+  raise e
 
 (* Resource cache *)
 let build_resource_tables parent_path trashed =
@@ -572,7 +576,7 @@ and get_resource path trashed =
   let get_new_resource cache =
     let parent_path = Filename.dirname path in
       if check_resource_in_cache cache parent_path trashed then begin
-        raise File_not_found
+        throw File_not_found
       end else begin
         let new_resource = create_resource path change_id in
         let title = Filename.basename path in
@@ -634,11 +638,11 @@ and get_resource path trashed =
                        |> Cache.Resource.last_update ^= Unix.gettimeofday () in
                      update_cached_resource cache updated_resource;
                      SessionM.return updated_resource
-                 | e -> raise e)
+                 | e -> throw e)
     end >>= fun resource ->
     begin match resource.Cache.Resource.state with
         Cache.Resource.State.NotFound ->
-          raise File_not_found 
+          throw File_not_found
       | _ ->
           SessionM.return resource
     end
@@ -713,14 +717,15 @@ let download_resource resource =
         (function
              GapiRequest.PermissionDenied session ->
                Utils.log_message "Server error: Permission denied.\n%!";
-               raise Permission_denied
+               throw Permission_denied
            | GapiRequest.RequestTimeout _ ->
                Utils.log_message "Server error: Request Timeout.\n%!";
-               raise Resource_busy
+               throw Resource_busy
+           | GapiRequest.PreconditionFailed _
            | GapiRequest.Conflict _ ->
                Utils.log_message "Server error: Conflict.\n%!";
-               raise Resource_busy
-           | e -> raise e)
+               throw Resource_busy
+           | e -> throw e)
     else
       create_empty_file ()
     end >>= fun () ->
@@ -743,7 +748,7 @@ let download_resource resource =
         else
           do_download ()
     | Cache.Resource.State.NotFound ->
-        raise File_not_found
+        throw File_not_found
     | Cache.Resource.State.Restricted ->
         begin if not (Sys.file_exists content_path) then
           create_empty_file ()
@@ -756,19 +761,18 @@ let download_resource_with_retry resource =
   let rec loop n =
     with_try
       (download_resource resource)
-      (fun e ->
-         match e with
-             Resource_busy ->
-               if n > 4 then raise e
-               else begin
-                 GapiUtils.wait_exponential_backoff n;
-                 let n' = n + 1 in
-                 Utils.log_message
-                   "Retry (%d) downloading resource (id=%Ld)...%!"
-                   n' resource.Cache.Resource.id;
-                 loop n'
-               end
-           | e -> raise e)
+      (function
+           Resource_busy as e ->
+             if n > 4 then throw e
+             else begin
+               GapiUtils.wait_exponential_backoff n;
+               let n' = n + 1 in
+               Utils.log_message
+                 "Retry (%d) downloading resource (id=%Ld)...%!"
+                 n' resource.Cache.Resource.id;
+               loop n'
+             end
+         | e -> throw e)
   in
     loop 0
 
@@ -793,9 +797,8 @@ let get_attr path =
       with_try
         (download_resource_with_retry resource)
         (function
-             File_not_found ->
-               SessionM.return ""
-           | e -> raise e)
+             File_not_found -> SessionM.return ""
+           | e -> throw e)
     else
       SessionM.return ""
     end >>= fun content_path ->
@@ -997,7 +1000,7 @@ let fopen path flags =
   let check_editable =
     get_resource path_in_cache trashed >>= fun resource ->
     if not is_read_only_request && is_file_read_only resource then
-      raise Permission_denied
+      throw Permission_denied
     else
       SessionM.return ()
   in
@@ -1036,20 +1039,23 @@ let update_remote_resource path
     with_try
       (do_remote_update resource)
       (function
-           GapiRequest.Conflict session ->
+           GapiRequest.PreconditionFailed session
+         | GapiRequest.Conflict session ->
              Utils.log_message "Conflict detected: %!";
              GapiMonad.SessionM.put session >>
              begin match config.Config.conflict_resolution with
                  Config.ConflictResolutionStrategy.Client ->
                    Utils.log_message "Retrying...%!";
-                   retry_update resource >>= fun file ->
+                   let resource_without_etag =
+                     resource |> Cache.Resource.etag ^= None in
+                   retry_update resource_without_etag >>= fun file ->
                    Utils.log_message "done\n%!";
                    SessionM.return file
                | Config.ConflictResolutionStrategy.Server ->
-                   Utils.log_message "Keeping server changes\n%!";
-                   SessionM.return None
+                   Utils.log_message "Keeping server changes.\n%!";
+                   throw Resource_busy
              end
-         | e -> raise e) >>= fun file_option ->
+         | e -> throw e) >>= fun file_option ->
     begin match file_option with
         None -> ()
       | Some file ->
@@ -1294,19 +1300,22 @@ let rename path new_path =
   let old_name = Filename.basename path_in_cache in
   let new_name = Filename.basename new_path_in_cache in
   let delete_target_path =
-    if not target_trashed &&
+    let trash_target_path () =
+      get_resource new_path_in_cache target_trashed >>= fun new_resource ->
+      trash_resource (Cache.Resource.is_folder new_resource) new_path
+    in
+    begin if not target_trashed &&
        not (Context.get_ctx ()
         |. Context.config_lens
-        |. Config.keep_duplicates) then begin
+        |. Config.keep_duplicates) then
       with_try
-        (get_resource new_path_in_cache target_trashed >>= fun new_resource ->
-         trash_resource
-           (Cache.Resource.is_folder new_resource) new_path)
+        (trash_target_path ())
         (function
              File_not_found -> SessionM.return ()
-           | e -> raise e)
-    end else
+           | e -> throw e)
+    else
       SessionM.return ()
+    end
   in
   let update =
     let rename_file use_etag resource =
