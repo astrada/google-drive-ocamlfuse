@@ -23,14 +23,14 @@ let wrap_exec_not_null_no_headers
   let result = ref None in
   let cb row = result := callback row in
   let rc = Sqlite3.exec_not_null_no_headers db ~cb sql in
-    get_result rc result
+  get_result rc result
 
 let wrap_exec
       db ?(callback = (fun _ _ -> Some ())) sql =
   let result = ref None in
   let cb row headers = result := callback row headers in
   let rc = Sqlite3.exec db ~cb sql in
-    get_result rc result
+  get_result rc result
 
 let reset_stmt stmt =
   Sqlite3.reset stmt |> fail_if_not_ok
@@ -79,11 +79,11 @@ let data_to_float = function
 
 let get_next_row stmt row_to_data =
   let rc = Sqlite3.step stmt in
-    match rc with
-        Sqlite3.Rc.ROW ->
-          Some (Sqlite3.row_data stmt |> row_to_data)
-      | Sqlite3.Rc.DONE -> None
-      | _ -> fail rc
+  match rc with
+      Sqlite3.Rc.ROW ->
+        Some (Sqlite3.row_data stmt |> row_to_data)
+    | Sqlite3.Rc.DONE -> None
+    | _ -> fail rc
 
 let select_first_row stmt bind_parameters row_to_data =
   bind_parameters stmt;
@@ -97,7 +97,7 @@ let select_all_rows stmt bind_parameters row_to_data =
           None -> rows
         | Some r -> loop (r :: rows)
   in
-    loop []
+  loop []
 (* END Query helpers *)
 
 (* Prepare SQL *)
@@ -257,6 +257,15 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_delete_all_with_path_stmt db =
+    let sql =
+      "DELETE \
+       FROM resource \
+       WHERE path = :path \
+         AND trashed = :trashed;"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_delete_not_found_with_path_stmt db =
     let sql =
       "DELETE \
@@ -369,8 +378,8 @@ let create_cache app_dir config =
 
 let open_db cache =
   let db = Sqlite3.db_open cache.db_path in
-    Sqlite3.busy_timeout db cache.busy_timeout;
-    db
+  Sqlite3.busy_timeout db cache.busy_timeout;
+  db
 
 let close_db db =
   let rec try_close n =
@@ -386,9 +395,9 @@ let close_db db =
 
 let with_db cache f =
   let db = open_db cache in
-    Utils.try_finally
-      (fun () -> f db)
-      (fun () -> close_db db)
+  Utils.try_finally
+    (fun () -> f db)
+    (fun () -> close_db db)
 
 let with_transaction cache f =
   with_db cache
@@ -549,38 +558,38 @@ struct
     List.iter
       (fun (fmt, link) ->
          let s = Printf.sprintf "%S:%S;" fmt link in
-           Buffer.add_string buffer s)
+         Buffer.add_string buffer s)
       export_links;
     Buffer.contents buffer
 
   let parse_export_links s =
     let sb = Scanf.Scanning.from_string s in
     let export_links = ref [] in
-      while (not (Scanf.Scanning.end_of_input sb)) do
-        let (fmt, link) = Scanf.bscanf sb "%S:%S;" (fun f l -> (f, l)) in
-          export_links := (fmt, link) :: !export_links
-      done;
-      !export_links
+    while (not (Scanf.Scanning.end_of_input sb)) do
+      let (fmt, link) = Scanf.bscanf sb "%S:%S;" (fun f l -> (f, l)) in
+      export_links := (fmt, link) :: !export_links
+    done;
+    !export_links
 
   (* Parent remote ids *)
   let render_parent_remote_ids parents =
     let buffer = Buffer.create 64 in
     List.iter
       (fun parent ->
-         let s = Printf.sprintf "%S;"
-                   parent.GapiDriveV2Model.ParentReference.id in
-           Buffer.add_string buffer s)
+         let s =
+           Printf.sprintf "%S;" parent.GapiDriveV2Model.ParentReference.id in
+         Buffer.add_string buffer s)
       parents;
     Buffer.contents buffer
 
   let parse_parent_remote_ids s =
     let sb = Scanf.Scanning.from_string s in
     let remote_ids = ref [] in
-      while (not (Scanf.Scanning.end_of_input sb)) do
-        let id = Scanf.bscanf sb "%S;" (fun x -> x) in
-          remote_ids := id :: !remote_ids
-      done;
-      !remote_ids
+    while (not (Scanf.Scanning.end_of_input sb)) do
+      let id = Scanf.bscanf sb "%S;" (fun x -> x) in
+      remote_ids := id :: !remote_ids
+    done;
+    !remote_ids
 
   (* Queries *)
   let bind_resource_parameters stmt resource =
@@ -612,21 +621,30 @@ struct
     resource |> id ^= Sqlite3.last_insert_rowid db
 
   let insert_resource cache resource =
-    with_db cache
+    let delete_stmt db =
+      let stmt = ResourceStmts.prepare_delete_all_with_path_stmt db in
+      bind_text stmt ":path" (Some resource.path);
+      bind_bool stmt ":trashed" resource.trashed;
+      finalize_stmt stmt in
+    let insert_stmt db =
+      let stmt = ResourceStmts.prepare_insert_stmt db in
+      let result = step_insert_resource db stmt resource in
+      finalize_stmt stmt;
+      result
+    in
+    with_transaction cache
       (fun db ->
-         let stmt = ResourceStmts.prepare_insert_stmt db in
-         let result = step_insert_resource db stmt resource in
-           finalize_stmt stmt;
-           result)
+         delete_stmt db;
+         insert_stmt db)
 
   let update_resource cache resource =
     with_db cache
       (fun db ->
          let stmt = ResourceStmts.prepare_update_stmt db in
-           bind_resource_parameters stmt resource;
-           bind_int stmt ":id" (Some resource.id);
-           final_step stmt;
-           finalize_stmt stmt)
+         bind_resource_parameters stmt resource;
+         bind_int stmt ":id" (Some resource.id);
+         final_step stmt;
+         finalize_stmt stmt)
 
   let _delete_resource stmt id =
     reset_stmt stmt;
@@ -637,8 +655,8 @@ struct
     with_db cache
       (fun db ->
          let stmt = ResourceStmts.prepare_delete_stmt db in
-           _delete_resource stmt resource.id;
-           finalize_stmt stmt)
+         _delete_resource stmt resource.id;
+         finalize_stmt stmt)
 
   let delete_not_found_resource_with_path cache path =
     with_db cache
@@ -697,7 +715,7 @@ struct
          finalize_stmt stmt)
 
   let invalidate_trash_bin cache change_id =
-    with_transaction cache
+    with_db cache
       (fun db ->
          let stmt = ResourceStmts.prepare_invalidate_trash_bin_stmt db in
          reset_stmt stmt;
@@ -766,10 +784,9 @@ struct
       (fun db ->
          let stmt = prepare db in
          let result =
-           select_first_row stmt bind row_to_resource
-         in
-           finalize_stmt stmt;
-           result)
+           select_first_row stmt bind row_to_resource in
+         finalize_stmt stmt;
+         result)
 
   let select_resource_with_path cache path trashed =
     select_resource cache
@@ -792,10 +809,9 @@ struct
              (fun stmt ->
                 bind_text stmt ":parent_path" (Some parent_path);
                 bind_bool stmt ":trashed" (Some trashed))
-             row_to_resource
-         in
-           finalize_stmt stmt;
-           results)
+             row_to_resource in
+         finalize_stmt stmt;
+         results)
   (* END Queries *)
 
   let is_folder resource =
@@ -866,42 +882,42 @@ struct
     last_update : float;
   }
 
-	let etag = {
-		GapiLens.get = (fun x -> x.etag);
-		GapiLens.set = (fun v x -> { x with etag = v })
-	}
-	let username = {
-		GapiLens.get = (fun x -> x.username);
-		GapiLens.set = (fun v x -> { x with username = v })
-	}
-	let quota_bytes_total = {
-		GapiLens.get = (fun x -> x.quota_bytes_total);
-		GapiLens.set = (fun v x -> { x with quota_bytes_total = v })
-	}
-	let quota_bytes_used = {
-		GapiLens.get = (fun x -> x.quota_bytes_used);
-		GapiLens.set = (fun v x -> { x with quota_bytes_used = v })
-	}
-	let largest_change_id = {
-		GapiLens.get = (fun x -> x.largest_change_id);
-		GapiLens.set = (fun v x -> { x with largest_change_id = v })
-	}
-	let remaining_change_ids = {
-		GapiLens.get = (fun x -> x.remaining_change_ids);
-		GapiLens.set = (fun v x -> { x with remaining_change_ids = v })
-	}
-	let root_folder_id = {
-		GapiLens.get = (fun x -> x.root_folder_id);
-		GapiLens.set = (fun v x -> { x with root_folder_id = v })
-	}
-	let permission_id = {
-		GapiLens.get = (fun x -> x.permission_id);
-		GapiLens.set = (fun v x -> { x with permission_id = v })
-	}
-	let last_update = {
-		GapiLens.get = (fun x -> x.last_update);
-		GapiLens.set = (fun v x -> { x with last_update = v })
-	}
+  let etag = {
+    GapiLens.get = (fun x -> x.etag);
+    GapiLens.set = (fun v x -> { x with etag = v })
+  }
+  let username = {
+    GapiLens.get = (fun x -> x.username);
+    GapiLens.set = (fun v x -> { x with username = v })
+  }
+  let quota_bytes_total = {
+    GapiLens.get = (fun x -> x.quota_bytes_total);
+    GapiLens.set = (fun v x -> { x with quota_bytes_total = v })
+  }
+  let quota_bytes_used = {
+    GapiLens.get = (fun x -> x.quota_bytes_used);
+    GapiLens.set = (fun v x -> { x with quota_bytes_used = v })
+  }
+  let largest_change_id = {
+    GapiLens.get = (fun x -> x.largest_change_id);
+    GapiLens.set = (fun v x -> { x with largest_change_id = v })
+  }
+  let remaining_change_ids = {
+    GapiLens.get = (fun x -> x.remaining_change_ids);
+    GapiLens.set = (fun v x -> { x with remaining_change_ids = v })
+  }
+  let root_folder_id = {
+    GapiLens.get = (fun x -> x.root_folder_id);
+    GapiLens.set = (fun v x -> { x with root_folder_id = v })
+  }
+  let permission_id = {
+    GapiLens.get = (fun x -> x.permission_id);
+    GapiLens.set = (fun v x -> { x with permission_id = v })
+  }
+  let last_update = {
+    GapiLens.get = (fun x -> x.last_update);
+    GapiLens.set = (fun v x -> { x with last_update = v })
+  }
 
   (* Queries *)
   let save_metadata stmt metadata =
@@ -920,8 +936,8 @@ struct
     with_db cache
       (fun db ->
          let stmt = MetadataStmts.prepare_insert_stmt db in
-           save_metadata stmt resource;
-           finalize_stmt stmt)
+         save_metadata stmt resource;
+         finalize_stmt stmt)
 
   let row_to_metadata row_data =
     { etag = row_data.(0) |> data_to_string |> Option.get;
@@ -940,15 +956,14 @@ struct
       (fun db ->
          let stmt = MetadataStmts.prepare_select_stmt db in
          let result =
-           select_first_row stmt (fun _ -> ()) row_to_metadata
-         in
-           finalize_stmt stmt;
-           result)
+           select_first_row stmt (fun _ -> ()) row_to_metadata in
+         finalize_stmt stmt;
+         result)
   (* END Queries *)
 
   let is_valid metadata_cache_time metadata =
     let now = Unix.gettimeofday () in
-      now -. metadata.last_update <= float_of_int metadata_cache_time
+    now -. metadata.last_update <= float_of_int metadata_cache_time
 
 end
 
@@ -967,7 +982,7 @@ let delete_resources cache resources =
   List.iter
     (fun resource ->
        let content_path = get_content_path cache resource in
-         remove_file content_path)
+       remove_file content_path)
     resources
 
 (* Setup *)
