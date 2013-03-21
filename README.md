@@ -2,11 +2,14 @@ FUSE filesystem over Google Drive
 =================================
 
 **google-drive-ocamlfuse** is a FUSE filesystem backed by Google Drive,
-written in OCaml.
+written in OCaml. It lets you mount your Google Drive on Linux.
 
 ### Features
 
-* Offline Google Documents access (read-only)
+* Full read/write access to ordinary files and folders
+* Read-only access to Google Docs, Sheets, and Slides (exported to
+  configurable formats)
+* Multiple account support
 * Duplicate file handling
 * Access to trash (`.Trash` directory)
 
