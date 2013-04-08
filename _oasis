@@ -6,6 +6,7 @@ LicenseFile: LICENSE
 License: MIT
 BuildType: ocamlbuild (0.3)
 Authors: Alessandro Strada
+Maintainers: Alessandro Strada <alessandro.strada@gmail.com>
 Copyrights: (C) 2012 Alessandro Strada
 Homepage: http://gdfuse.forge.ocamlcore.org/
 BuildTools: ocamlbuild
