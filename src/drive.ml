@@ -336,7 +336,8 @@ let get_metadata () =
         let std_params =
           { GapiService.StandardParameters.default with
                 GapiService.StandardParameters.fields =
-                  "items(deleted,file,fileId),nextPageToken"
+                  "items(deleted,file(" ^ file_fields
+                  ^ "),fileId),nextPageToken"
           } in
         ChangesResource.list
           ~std_params
