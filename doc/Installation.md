@@ -2,7 +2,7 @@ Here you can find instructions on how to install `google-drive-ocamlfuse`. You c
 
 ## Installing the binaries
 
-I've uploaded 2 binary packages that target the distributions I've installed on my machine: Ubuntu 12.04 64-bit, and Ubuntu 12.10 32-bit (VirtualBox image).
+I've uploaded 3 binary packages that target the distributions I've installed on my machine: Ubuntu 12.04 64-bit (VirtualBox image), Ubuntu 12.10 64-bit, and Ubuntu 12.10 32-bit (VirtualBox image).
 
 ### Prerequisites
 
@@ -12,15 +12,15 @@ This project uses these C libraries: `curl`, `fuse`, and `sqlite3`. If you are u
 
 ### Ubuntu 12.04 64-bit
 
-Download package https://forge.ocamlcore.org/frs/download.php/1087/google-drive-ocamlfuse-0.3.1-bin-ubuntu12.04-64bit.tar.gz
+Download package https://forge.ocamlcore.org/frs/download.php/1087/google-drive-ocamlfuse-0.3.1-bin-ubuntu12.04-64bit.tar.gz (note that this package contains google-drive-ocamlfuse version 0.3.1, while the other ones contain version 0.3.2)  
 
 ### Ubuntu 12.10 32-bit
 
-Download package https://forge.ocamlcore.org/frs/download.php/1088/google-drive-ocamlfuse-0.3.1-bin-ubuntu12.10-32bit.tar.gz
+Download package https://forge.ocamlcore.org/frs/download.php/1164/google-drive-ocamlfuse-0.3.2-bin-ubuntu12.10-32bit.tar.gz
 
 ### Ubuntu 12.10 64-bit
 
-Download package https://forge.ocamlcore.org/frs/download.php/1092/google-drive-ocamlfuse-0.3.1-bin-ubuntu12.10-64bit.tar.gz
+Download package https://forge.ocamlcore.org/frs/download.php/1163/google-drive-ocamlfuse-0.3.2-bin-ubuntu12.10-64bit.tar.gz
 
 ## Installing from source
 
@@ -28,10 +28,10 @@ If you are using a different distribution or you want to build the package from 
 
 ### Installing with OPAM
 
-1. Install `OPAM` (http://opam.ocamlpro.com/doc/Quick_Install.html). Note that on Ubuntu 12.10 I also had to install `m4`
-2. Install the C libraries: `curl`, `fuse`, and `sqlite3`. These dependencies are not managed by OPAM, so you have to install them in order to compile the executable. If you are using a .deb based distribution, you can install the libraries with this command:
+1. Install `OPAM` (http://opam.ocamlpro.com/doc/Quick_Install.html)
+2. Install the C tools and libraries: `m4`, `curl`, `fuse`, and `sqlite3`. These dependencies are not managed by OPAM, so you have to install them in order to compile the executable. If you are using a .deb based distribution, you can install the libraries with this command:
 
-        $ sudo apt-get install libcurl4-gnutls-dev libfuse-dev libsqlite3-dev
+        $ sudo apt-get install m4 libcurl4-gnutls-dev libfuse-dev libsqlite3-dev
 
 3. Update OPAM
 
