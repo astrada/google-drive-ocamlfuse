@@ -13,6 +13,12 @@ written in OCaml. It lets you mount your Google Drive on Linux.
 * Duplicate file handling
 * Access to trash (`.Trash` directory)
 
+### Resources
+
+* [Homepage](http://gdfuse.forge.ocamlcore.org/)
+* [Wiki](https://github.com/astrada/google-drive-ocamlfuse/wiki): includes installation instructions,
+  and more details about configuration, and authorization
+
 Getting started
 ---------------
 
@@ -52,6 +58,8 @@ To install it, run (as root, if your user doesn't have enough privileges)
 To uninstall anything that was previously installed, execute
 
     $ ocaml setup.ml -uninstall
+
+For further information, please refer to the [wiki](https://github.com/astrada/google-drive-ocamlfuse/wiki/Installation).
 
 ### Usage
 
