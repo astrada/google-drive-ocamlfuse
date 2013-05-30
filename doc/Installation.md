@@ -2,7 +2,7 @@ Here you can find instructions on how to install `google-drive-ocamlfuse`. You c
 
 ## Installing the binaries
 
-I've uploaded 3 binary packages that target the distributions I've installed on my machine: Ubuntu 12.04 64-bit (VirtualBox image), Ubuntu 12.10 64-bit, and Ubuntu 12.10 32-bit (VirtualBox image).
+I've uploaded some binary packages that target the distributions I've installed on my machine: Ubuntu 12.04 64-bit (VirtualBox image), Ubuntu 12.10 32-bit (VirtualBox image), Ubuntu 12.10 64-bit, and Ubuntu 13.04 64-bit.
 
 ### Prerequisites
 
@@ -21,6 +21,10 @@ Download package https://forge.ocamlcore.org/frs/download.php/1164/google-drive-
 ### Ubuntu 12.10 64-bit
 
 Download package https://forge.ocamlcore.org/frs/download.php/1163/google-drive-ocamlfuse-0.3.2-bin-ubuntu12.10-64bit.tar.gz
+
+### Ubuntu 13.04 64-bit
+
+Download package https://forge.ocamlcore.org/frs/download.php/1177/google-drive-ocamlfuse-0.3.2-bin-ubuntu13.04-64bit.tar.gz
 
 ## Installing from source
 

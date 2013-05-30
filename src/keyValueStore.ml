@@ -37,14 +37,14 @@ struct
     data : data
   }
 
-	let path = {
-		GapiLens.get = (fun x -> x.path);
-		GapiLens.set = (fun v x -> { x with path = v })
-	}
-	let data = {
-		GapiLens.get = (fun x -> x.data);
-		GapiLens.set = (fun v x -> { x with data = v })
-	}
+  let path = {
+    GapiLens.get = (fun x -> x.path);
+    GapiLens.set = (fun v x -> { x with path = v })
+  }
+  let data = {
+    GapiLens.get = (fun x -> x.data);
+    GapiLens.set = (fun v x -> { x with data = v })
+  }
 
   let load filename =
     if not (Sys.file_exists filename) then raise File_not_found;

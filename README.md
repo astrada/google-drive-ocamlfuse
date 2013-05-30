@@ -16,8 +16,9 @@ written in OCaml. It lets you mount your Google Drive on Linux.
 ### Resources
 
 * [Homepage](http://gdfuse.forge.ocamlcore.org/)
-* [Wiki](https://github.com/astrada/google-drive-ocamlfuse/wiki): includes installation instructions,
-  and more details about configuration, and authorization
+* [Wiki](https://github.com/astrada/google-drive-ocamlfuse/wiki): includes
+  installation instructions, and more details about configuration, and
+  authorization
 
 Getting started
 ---------------

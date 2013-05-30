@@ -77,7 +77,7 @@ let get_state_store app_dir =
     create_empty_state_store app_dir
 (* END Application state *)
 
-let setup_application debug fs_label client_id client_secret mountpoint =
+let setup_application debug fs_label cid csecret mountpoint =
   let get_auth_tokens_from_server () =
     let context = Context.get_ctx () in
     let request_id =
@@ -117,6 +117,10 @@ let setup_application debug fs_label client_id client_secret mountpoint =
   Utils.log_with_header "Setting up %s filesystem...\n%!" fs_label;
   let config_store = get_config_store debug app_dir in
   let current_config = config_store |. Context.ConfigFileStore.data in
+  let client_id =
+    if cid = "" then current_config |. Config.client_id else cid in
+  let client_secret =
+    if csecret = "" then current_config |. Config.client_secret else csecret in
   let config =
     { current_config with
           Config.debug;
