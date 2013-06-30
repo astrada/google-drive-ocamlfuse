@@ -12,19 +12,21 @@ This project uses these C libraries: `curl`, `fuse`, and `sqlite3`. If you are u
 
 ### Ubuntu 12.04 64-bit
 
-Download package https://forge.ocamlcore.org/frs/download.php/1087/google-drive-ocamlfuse-0.3.1-bin-ubuntu12.04-64bit.tar.gz (note that this package contains google-drive-ocamlfuse version 0.3.1, while the other ones contain version 0.3.2)  
+Version 0.3.1: https://forge.ocamlcore.org/frs/download.php/1087/google-drive-ocamlfuse-0.3.1-bin-ubuntu12.04-64bit.tar.gz  
 
 ### Ubuntu 12.10 32-bit
 
-Download package https://forge.ocamlcore.org/frs/download.php/1164/google-drive-ocamlfuse-0.3.2-bin-ubuntu12.10-32bit.tar.gz
+Version 0.3.2: https://forge.ocamlcore.org/frs/download.php/1164/google-drive-ocamlfuse-0.3.2-bin-ubuntu12.10-32bit.tar.gz
 
 ### Ubuntu 12.10 64-bit
 
-Download package https://forge.ocamlcore.org/frs/download.php/1163/google-drive-ocamlfuse-0.3.2-bin-ubuntu12.10-64bit.tar.gz
+Version 0.3.2: https://forge.ocamlcore.org/frs/download.php/1163/google-drive-ocamlfuse-0.3.2-bin-ubuntu12.10-64bit.tar.gz
 
 ### Ubuntu 13.04 64-bit
 
-Download package https://forge.ocamlcore.org/frs/download.php/1177/google-drive-ocamlfuse-0.3.2-bin-ubuntu13.04-64bit.tar.gz
+Version 0.3.3: https://forge.ocamlcore.org/frs/download.php/1193/google-drive-ocamlfuse-0.3.3-bin-ubuntu13.04-64bit.tar.gz
+
+Version 0.3.2: https://forge.ocamlcore.org/frs/download.php/1177/google-drive-ocamlfuse-0.3.2-bin-ubuntu13.04-64bit.tar.gz
 
 ## Installing from source
 

@@ -54,6 +54,10 @@ OAuth2 client secret (optional):
 
     client_secret=
 
+OAuth2 verification code (optional). Useful when authorizing on a different machine.
+
+    verification_code=
+
 Conflict resolution strategy. In case of conflict (update on both sides), if
 we set the `client` value, the application will always update the server
 resource (client side wins). Otherwise, setting `server`, the application will
