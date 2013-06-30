@@ -48,6 +48,8 @@ type t = {
   client_id : string;
   (* OAuth2 Client secret *)
   client_secret : string;
+  (* OAuth2 verification code *)
+  verification_code : string;
   (* Conflict resolution strategy:
    * - client: (in case of conflict) always update server (client side wins)
    * - server: (in case of conflict) always maintain server version (server side
@@ -109,6 +111,10 @@ let client_secret = {
   GapiLens.get = (fun x -> x.client_secret);
   GapiLens.set = (fun v x -> { x with client_secret = v })
 }
+let verification_code = {
+  GapiLens.get = (fun x -> x.verification_code);
+  GapiLens.set = (fun v x -> { x with verification_code = v })
+}
 let conflict_resolution = {
   GapiLens.get = (fun x -> x.conflict_resolution);
   GapiLens.set = (fun v x -> { x with conflict_resolution = v })
@@ -137,6 +143,7 @@ let default = {
   spreadsheet_format = "ods";
   client_id = "";
   client_secret = "";
+  verification_code = "";
   conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
 }
@@ -155,6 +162,7 @@ let default_debug = {
   spreadsheet_format = "ods";
   client_id = "";
   client_secret = "";
+  verification_code = "";
   conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
 }
@@ -182,6 +190,8 @@ let of_table table =
         get "spreadsheet_format" Std.identity default.spreadsheet_format;
       client_id = get "client_id" Std.identity default.client_id;
       client_secret = get "client_secret" Std.identity default.client_secret;
+      verification_code =
+        get "verification_code" Std.identity default.verification_code;
       conflict_resolution =
         get "conflict_resolution" ConflictResolutionStrategy.of_string
           default.conflict_resolution;
@@ -205,6 +215,7 @@ let to_table data =
     add "spreadsheet_format" data.spreadsheet_format;
     add "client_id" data.client_id;
     add "client_secret" data.client_secret;
+    add "verification_code" data.verification_code;
     add "conflict_resolution"
       (data.conflict_resolution |> ConflictResolutionStrategy.to_string);
     add "keep_duplicates" (data.keep_duplicates |> string_of_bool);
