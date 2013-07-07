@@ -103,10 +103,14 @@ have problems, you can turn on debug logging:
 
 In `~/.gdfuse/default` you can find `curl.log` that will track every request
 to the Google Drive API, and `gdfuse.log` that will log FUSE operations and
-cache management. If something goes wrong, you can try cleaning the cache,
-removing all the files in `~/.gdfuse/default/cache`, to start from scratch (or
-you may remove everything in `~/.gdfuse/default` to restart with default
-configuration and reauthorize the application).
+cache management. If something goes wrong, you can try clearing the cache,
+with this command:
+
+    $ google-drive-ocamlfuse -cc
+
+If something still doesn't work, try starting from scratch removing everything
+in `~/.gdfuse/default`. In this case you will need to reauthorize the
+application.
 
 Note that in order to reduce latency, the application will query the server
 and check for changes only every 60 seconds (configurable). So, if you make a
