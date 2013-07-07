@@ -77,7 +77,10 @@ let flags_to_string flags =
          | Unix.O_NOCTTY -> "O_NOCTTY"
          | Unix.O_DSYNC -> "O_DSYNC"
          | Unix.O_SYNC -> "O_SYNC"
-         | Unix.O_RSYNC -> "O_RSYNC")
+         | Unix.O_RSYNC -> "O_RSYNC"
+         (* Only in OCaml 4
+         | Unix.O_SHARE_DELETE -> "O_SHARE_DELETE" *)
+         | _ -> "_")
       flags
   in
     String.concat "," flag_descriptions
