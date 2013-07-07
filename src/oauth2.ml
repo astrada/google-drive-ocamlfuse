@@ -26,10 +26,12 @@ let do_request interact =
           interact
     with
         Failure message as e ->
-          if ExtString.String.exists message "CURLE_OPERATION_TIMEOUTED" then
+          if ExtString.String.exists
+               message "CURLE_OPERATION_TIMEOUTED" then begin
+            GapiUtils.wait_exponential_backoff n;
             (* Retry on timeout *)
             try_request (n + 1)
-          else raise e
+          end else raise e
       | GapiRequest.RefreshTokenFailed _ ->
           if n > 0 then failwith "Cannot access resource: \
                                   Refreshing token was not enough";
