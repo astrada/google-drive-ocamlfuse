@@ -77,7 +77,16 @@ let get_state_store app_dir =
     create_empty_state_store app_dir
 (* END Application state *)
 
-let setup_application debug fs_label cid csecret mountpoint =
+type application_params = {
+  debug : bool;
+  filesystem_label : string;
+  client_id : string;
+  client_secret : string;
+  mountpoint : string;
+  clear_cache : bool;
+}
+
+let setup_application params =
   let get_auth_tokens_from_server () =
     let context = Context.get_ctx () in
     let request_id =
@@ -107,23 +116,29 @@ let setup_application debug fs_label cid csecret mountpoint =
             exit 1
   in
 
-  Utils.log_message "Starting application setup (label=%s).\n%!" fs_label;
-  let app_dir = AppDir.create fs_label in
+  Utils.log_message "Starting application setup (label=%s).\n%!"
+    params.filesystem_label;
+  let app_dir = AppDir.create params.filesystem_label in
   let () = AppDir.create_directories app_dir in
   let app_log_path = app_dir |. AppDir.app_log_path in
   Utils.log_message "Opening log file: %s\n%!" app_log_path;
   let log_channel = open_out app_log_path in
   Utils.log_channel := log_channel;
-  Utils.log_with_header "Setting up %s filesystem...\n%!" fs_label;
-  let config_store = get_config_store debug app_dir in
+  Utils.log_with_header "Setting up %s filesystem...\n%!"
+    params.filesystem_label;
+  let config_store = get_config_store params.debug app_dir in
   let current_config = config_store |. Context.ConfigFileStore.data in
   let client_id =
-    if cid = "" then current_config |. Config.client_id else cid in
+    if params.client_id = ""
+    then current_config |. Config.client_id
+    else params.client_id in
   let client_secret =
-    if csecret = "" then current_config |. Config.client_secret else csecret in
+    if params.client_secret = ""
+    then current_config |. Config.client_secret
+    else params.client_secret in
   let config =
     { current_config with
-          Config.debug;
+          Config.debug = params.debug;
           client_id;
           client_secret;
     } in
@@ -134,7 +149,13 @@ let setup_application debug fs_label cid csecret mountpoint =
   let state_store = get_state_store app_dir in
   let cache = Cache.create_cache app_dir config in
   let saved_version = state_store |. Context.saved_version_lens in
-  if saved_version <> Config.version then begin
+  if params.clear_cache then begin
+    Printf.printf "Clearing cache...%!";
+    Utils.log_message "Cleaning up cache...%!";
+    Cache.clean_up_cache cache;
+    Utils.log_message "done\n%!";
+    Printf.printf "done\n%!";
+  end else if saved_version <> Config.version then begin
     Utils.log_message
       "Version mismatch (saved=%s, current=%s): cleaning up cache...%!"
       saved_version Config.version;
@@ -156,7 +177,7 @@ let setup_application debug fs_label cid csecret mountpoint =
     state_store;
     cache;
     curl_state;
-    mountpoint_stats = Unix.LargeFile.stat mountpoint;
+    mountpoint_stats = Unix.LargeFile.stat params.mountpoint;
     metadata = None;
   } in
   Context.set_ctx context;
@@ -355,6 +376,7 @@ let () =
   let debug = ref false in
   let client_id = ref "" in
   let client_secret = ref "" in
+  let clear_cache = ref false in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -394,6 +416,9 @@ let () =
        Arg.Unit (fun _ -> fuse_args :=
                           List.filter (fun a -> a <> "-s") !fuse_args),
        " enable multi-threaded operation.";
+       "-cc",
+       Arg.Set clear_cache,
+       " clear cache";
       ]) in
   let () =
     Arg.parse
@@ -407,17 +432,23 @@ let () =
 
     if !show_version then begin
       Printf.printf "google-drive-ocamlfuse, version %s\n\
-                     Copyright (C) 2012 Alessandro Strada\n\
+                     Copyright (C) 2012-2013 Alessandro Strada\n\
                      License MIT\n"
         Config.version;
     end else begin
       try
+        let params = {
+          debug = !debug;
+          filesystem_label = !fs_label;
+          client_id = !client_id;
+          client_secret = !client_secret;
+          mountpoint = !mountpoint;
+          clear_cache = !clear_cache
+        } in
         if !mountpoint = "" then begin
-          setup_application
-            !debug !fs_label !client_id !client_secret ".";
+          setup_application { params with mountpoint = "." };
         end else begin
-          setup_application
-            !debug !fs_label !client_id !client_secret !mountpoint;
+          setup_application params;
           at_exit
             (fun () ->
                Utils.log_with_header "Exiting.\n";
