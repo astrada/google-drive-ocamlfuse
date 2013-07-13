@@ -24,6 +24,8 @@ Version 0.3.2: https://forge.ocamlcore.org/frs/download.php/1163/google-drive-oc
 
 ### Ubuntu 13.04 64-bit
 
+Version 0.3.4: https://forge.ocamlcore.org/frs/download.php/1213/google-drive-ocamlfuse-0.3.4-bin-ubuntu13.04-64bit.tar.gz
+
 Version 0.3.3: https://forge.ocamlcore.org/frs/download.php/1193/google-drive-ocamlfuse-0.3.3-bin-ubuntu13.04-64bit.tar.gz
 
 Version 0.3.2: https://forge.ocamlcore.org/frs/download.php/1177/google-drive-ocamlfuse-0.3.2-bin-ubuntu13.04-64bit.tar.gz

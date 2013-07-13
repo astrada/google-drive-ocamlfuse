@@ -91,9 +91,9 @@ configuration for each one.
 
 ### Troubleshooting
 
-This application is still to be tested thoroughly, so there are still probably
-bugs to discover and fix. To be extra sure, if you want, you can mount the
-filesystem in read-only mode, modifying the configuration (see the
+This application is still under testing, so there are probably bugs to
+discover and fix. To be extra sure, if you want, you can mount the filesystem
+in read-only mode, modifying the configuration (see the
 [documentation](https://github.com/astrada/google-drive-ocamlfuse/wiki/Configuration)),
 to avoid any write attempt to the server. Anyway, the `rm` command will simply
 trash your file, so you should always be able to rollback any changes. If you
