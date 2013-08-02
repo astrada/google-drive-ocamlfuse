@@ -20,6 +20,13 @@ written in OCaml. It lets you mount your Google Drive on Linux.
   installation instructions, and more details about configuration, and
   authorization
 
+### Authorization
+
+Please be sure to have a look at the
+[authorization](https://github.com/astrada/google-drive-ocamlfuse/wiki/Authorization)
+page, to understand how the authorization process works, and to discover all
+the available options.
+
 Getting started
 ---------------
 
