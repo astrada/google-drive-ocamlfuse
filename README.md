@@ -37,14 +37,6 @@ Getting started
 [gapi-ocaml]: http://forge.ocamlcore.org/projects/gapi-ocaml/
 [sqlite3-ocaml]: https://bitbucket.org/mmottl/sqlite3-ocaml
 
-It's better to use the last [CVS
-snapshot](http://sourceforge.net/scm/?type=cvs&group_id=121959) of
-`ocamlfuse`, because it contains some bugfixes. I've uploaded the snapshot on
-[OASIS DB](http://oasis.ocamlcore.org/dev/view/ocamlfuse/latest) and added
-OASIS support, to ease compilation and installation. Note that you will need
-`camlidl` package installed in the default library path (because standard
-`camlidl` packages don't use `findlib`.)
-
 ### Configuration and installation
 
 To build the executable, run
