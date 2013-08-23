@@ -87,6 +87,9 @@ type application_params = {
 }
 
 let setup_application params =
+  let mountpoint = params.mountpoint in
+  if not (Sys.file_exists mountpoint && Sys.is_directory mountpoint) then
+    failwith ("Mountpoint " ^ mountpoint ^ " should be an existing directory.");
   let get_auth_tokens_from_server () =
     let context = Context.get_ctx () in
     let request_id =
@@ -177,7 +180,7 @@ let setup_application params =
     state_store;
     cache;
     curl_state;
-    mountpoint_stats = Unix.LargeFile.stat params.mountpoint;
+    mountpoint_stats = Unix.LargeFile.stat mountpoint;
     metadata = None;
   } in
   Context.set_ctx context;
@@ -332,8 +335,6 @@ let chown path uid gid =
   Utils.log_with_header "chown %s %d %d\n%!" path uid gid
 
 let start_filesystem mountpoint fuse_args =
-  if not (Sys.file_exists mountpoint && Sys.is_directory mountpoint) then
-    failwith ("Mountpoint " ^ mountpoint ^ " should be an existing directory.");
   Utils.log_with_header "Starting filesystem %s\n%!" mountpoint;
   let fuse_argv =
     Sys.argv.(0) :: (fuse_args @ [mountpoint])
