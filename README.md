@@ -88,6 +88,10 @@ directory `~/.gdfuse/label` to host configuration, application state, and file
 cache. No file is shared among different accounts, so you can have a different
 configuration for each one.
 
+To unmount the filesystem, issue this command:
+
+    $ fusermount -u mountpoint
+
 ### Troubleshooting
 
 This application is still under testing, so there are probably bugs to
