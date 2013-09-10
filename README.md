@@ -30,6 +30,20 @@ the available options.
 Getting started
 ---------------
 
+### Installation
+
+I've uploaded .deb packages to my [PPA](https://launchpad.net/~alessandro-strada/+archive/ppa),
+for Ubuntu 13.04, 12.10, 12.04. In order to to install it, use the commands below:
+
+    $ sudo add-apt-repository ppa:alessandro-strada/ppa
+    $ sudo apt-get update
+    $ sudo apt-get install google-drive-ocamlfuse
+
+For other installation options, please refer to the [wiki](https://github.com/astrada/google-drive-ocamlfuse/wiki/Installation).
+
+How to build
+------------
+
 ### Requirements
 
 * [OCaml][] >= 3.12.0
@@ -58,8 +72,6 @@ To install it, run (as root, if your user doesn't have enough privileges)
 To uninstall anything that was previously installed, execute
 
     $ ocaml setup.ml -uninstall
-
-For further information, please refer to the [wiki](https://github.com/astrada/google-drive-ocamlfuse/wiki/Installation).
 
 ### Usage
 
