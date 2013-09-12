@@ -13,3 +13,7 @@ If you have more than one account, you can run:
         $ google-drive-ocamlfuse -label label [mountpoint]
 
 Using `label` to distinguish different accounts. The program will use the directory `~/.gdfuse/label` to host configuration, application state, and file cache. No file is shared among different accounts, so you can have a different configuration for each one.
+
+To unmount the filesystem, issue this command:
+
+        $ fusermount -u mountpoint
