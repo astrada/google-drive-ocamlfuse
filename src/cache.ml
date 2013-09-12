@@ -224,7 +224,8 @@ struct
        SET \
          state = 'ToDownload', \
          change_id = :change_id \
-       WHERE id = :id;"
+       WHERE id = :id \
+         AND state <> 'ToUpload';"
     in
       Sqlite3.prepare db sql
 
