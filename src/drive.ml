@@ -1158,7 +1158,18 @@ let upload_if_dirty path =
         let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
         let media_source =
           GapiMediaResource.create_file_resource content_path in
-        Utils.log_message "Uploading file (cache path=%s)...%!" content_path;
+        let resource_mime_type =
+          resource |. Cache.Resource.mime_type |> Option.get in
+        let content_type = media_source |. GapiMediaResource.content_type in
+        (* Workaround to set the correct MIME type *)
+        let mime_type =
+          if resource_mime_type <> "" then resource_mime_type
+          else content_type in
+        let media_source = media_source
+          |> GapiMediaResource.content_type ^= mime_type in
+        Utils.log_message
+          "Uploading file (cache path=%s, content type=%s)...%!"
+          content_path mime_type;
         FilesResource.get
           ~std_params:file_std_params
           ~fileId:remote_id >>= fun refreshed_file ->
@@ -1200,13 +1211,14 @@ let create_remote_resource is_folder path mode =
     in
     let parent_reference = ParentReference.empty
       |> ParentReference.id ^= parent_id in
+    let title = Filename.basename path_in_cache in
     let mimeType =
       if is_folder
       then folder_mime_type
-      else "" in
+      else Mime.map_filename_to_mime_type title in
     let file = {
       File.empty with
-          File.title = Filename.basename path_in_cache;
+          File.title;
           parents = [parent_reference];
           mimeType;
     } in
