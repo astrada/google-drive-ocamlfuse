@@ -417,6 +417,9 @@ let () =
        Arg.Unit (fun _ -> fuse_args :=
                           List.filter (fun a -> a <> "-s") !fuse_args),
        " enable multi-threaded operation.";
+       "-o",
+       Arg.String (fun o -> fuse_args := ("-o" ^ o) :: !fuse_args),
+       " specify FUSE mount options.";
        "-cc",
        Arg.Set clear_cache,
        " clear cache";
