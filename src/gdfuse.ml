@@ -322,7 +322,10 @@ let flush path file_descr =
   with e -> handle_exception e "flush" path
 
 let fsync path ds file_descr =
-  Utils.log_with_header "fsync %s %b %d\n%!" path ds file_descr
+  Utils.log_with_header "fsync %s %b %d\n%!" path ds file_descr;
+  try
+    Drive.fsync path ds file_descr
+  with e -> handle_exception e "fsync" path
 
 let setxattr path name value xflags =
   Utils.log_with_header "setxattr %s %s %s %s\n%!"

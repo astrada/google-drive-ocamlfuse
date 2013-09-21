@@ -1191,6 +1191,10 @@ let upload_if_dirty path =
 let flush path file_descr =
   do_request (upload_if_dirty path) |> ignore
 
+(* fsync *)
+let fsync path ds file_descr =
+  do_request (upload_if_dirty path) |> ignore
+
 (* release *)
 let release path flags hnd =
   do_request (upload_if_dirty path) |> ignore
