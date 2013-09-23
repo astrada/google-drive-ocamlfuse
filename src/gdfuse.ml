@@ -152,6 +152,7 @@ let setup_application params =
   let state_store = get_state_store app_dir in
   let cache = Cache.create_cache app_dir config in
   let saved_version = state_store |. Context.saved_version_lens in
+  Utils.log_message "Current version: %s\n%!" Config.version;
   if params.clear_cache then begin
     Printf.printf "Clearing cache...%!";
     Utils.log_message "Cleaning up cache...%!";
