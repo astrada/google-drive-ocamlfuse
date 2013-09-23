@@ -516,6 +516,27 @@ let statfs () =
 (* END Metadata *)
 
 (* Resources *)
+let refresh_remote_resource resource current_file =
+  let remote_id = resource.Cache.Resource.remote_id |> Option.get in
+  let etag = resource.Cache.Resource.etag in
+  Utils.log_message
+    "Refreshing remote resource (id=%s,etag=%s)...%!"
+    remote_id (Option.default "" etag);
+  with_try
+    (FilesResource.get
+       ~std_params:file_std_params
+       ?etag
+       ~fileId:remote_id)
+    (function
+        GapiRequest.NotModified session ->
+        Utils.log_message "Resource (remote_id=%s) not modified\n%!"
+          remote_id;
+        SessionM.put session >>= fun () ->
+        SessionM.return current_file
+      | e -> throw e) >>= fun file ->
+  Utils.log_message "done\n%!";
+  SessionM.return file
+
 let get_file_from_server parent_folder_id title trashed =
   Utils.log_message "Getting resource %s (in folder %s) from server...%!"
     title parent_folder_id;
@@ -1074,18 +1095,7 @@ let update_remote_resource path
                     go content_path
                 end;
           end;
-          let refresh_file =
-            let remote_id = resource.Cache.Resource.remote_id |> Option.get in
-            let etag = resource.Cache.Resource.etag in
-            Utils.log_message
-              "Forcing file refresh from server (id=%s,etag=%s)...%!"
-              remote_id (Option.default "" etag);
-            FilesResource.get
-              ~std_params:file_std_params
-              ?etag
-              ~fileId:remote_id >>= fun file ->
-            Utils.log_message "done\n%!";
-            SessionM.return file in
+          let refresh_file = refresh_remote_resource resource file in
           let refreshed_file =
             do_request refresh_file |> fst
           in
@@ -1196,7 +1206,8 @@ let upload_if_dirty path =
           ~std_params:file_std_params
           ~media_source
           ~fileId:remote_id
-          refreshed_file >>= fun file ->
+          refreshed_file >>= fun updated_file ->
+        refresh_remote_resource resource updated_file >>= fun file ->
         Utils.log_message "done\n%!";
         let updated_resource =
           update_resource_from_file
