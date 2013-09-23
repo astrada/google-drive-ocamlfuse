@@ -1054,6 +1054,10 @@ let update_remote_resource path
                    SessionM.return file
                | Config.ConflictResolutionStrategy.Server ->
                    Utils.log_message "Keeping server changes.\n%!";
+                   Utils.log_message
+                     "Deleting resource (id=%Ld) from cache...%!"
+                     resource.Cache.Resource.id;
+                   Cache.Resource.delete_resource cache resource;
                    throw Resource_busy
              end
          | e -> throw e) >>= fun file_option ->
@@ -1070,7 +1074,22 @@ let update_remote_resource path
                     go content_path
                 end;
           end;
-          save_to_db cache resource file
+          let refresh_file =
+            let remote_id = resource.Cache.Resource.remote_id |> Option.get in
+            let etag = resource.Cache.Resource.etag in
+            Utils.log_message
+              "Forcing file refresh from server (id=%s,etag=%s)...%!"
+              remote_id (Option.default "" etag);
+            FilesResource.get
+              ~std_params:file_std_params
+              ?etag
+              ~fileId:remote_id >>= fun file ->
+            Utils.log_message "done\n%!";
+            SessionM.return file in
+          let refreshed_file =
+            do_request refresh_file |> fst
+          in
+          save_to_db cache resource refreshed_file
     end;
     SessionM.return ()
   in
