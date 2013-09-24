@@ -159,16 +159,24 @@ let setup_application params =
     Cache.clean_up_cache cache;
     Utils.log_message "done\n%!";
     Printf.printf "done\n%!";
-  end else if saved_version <> Config.version then begin
-    Utils.log_message
-      "Version mismatch (saved=%s, current=%s): cleaning up cache...%!"
-      saved_version Config.version;
-    Cache.clean_up_cache cache;
-    let updated_state_store = state_store
-      |> Context.saved_version_lens ^= Config.version in
-    Context.save_state_store updated_state_store;
-    Utils.log_message "done\n%!";
   end;
+  let state_store =
+    if saved_version <> Config.version then begin
+      Utils.log_message
+        "Version mismatch (saved=%s, current=%s)%!"
+        saved_version Config.version;
+      if not params.clear_cache then begin
+        Utils.log_message "Cleaning up cache...%!";
+        Cache.clean_up_cache cache;
+        Utils.log_message "done%!";
+      end;
+      Utils.log_message "\n%!";
+      let updated_state_store = state_store
+        |> Context.saved_version_lens ^= Config.version in
+      Context.save_state_store updated_state_store;
+      updated_state_store
+    end else state_store
+  in
   Utils.log_message "Setting up cache db...%!";
   Cache.setup_db cache;
   Utils.log_message "done\nSetting up CURL...%!";
