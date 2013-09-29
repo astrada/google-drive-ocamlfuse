@@ -1,7 +1,7 @@
 OASISFormat: 0.3
 OCamlVersion: >= 3.12.0
 Name: google-drive-ocamlfuse
-Version: 0.4.5
+Version: 0.5
 LicenseFile: LICENSE
 License: MIT
 BuildType: ocamlbuild (0.3)
