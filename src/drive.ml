@@ -209,33 +209,33 @@ let update_resource_from_file ?state resource file =
           else resource.Cache.Resource.path
       | None -> resource.Cache.Resource.path
   in
-    { resource with
-          Cache.Resource.etag = Some file.File.etag;
-          remote_id = Some file.File.id;
-          title = Some file.File.title;
-          mime_type = Some file.File.mimeType;
-          created_date = Some (Netdate.since_epoch file.File.createdDate);
-          modified_date = Some (Netdate.since_epoch file.File.modifiedDate);
-          last_viewed_by_me_date =
-            Some (Netdate.since_epoch file.File.lastViewedByMeDate);
-          parent_remote_ids =
-            Some (Cache.Resource.render_parent_remote_ids file.File.parents);
-          download_url = Some file.File.downloadUrl;
-          export_links =
-            Some (Cache.Resource.render_export_links file.File.exportLinks);
-          file_extension = Some file.File.fileExtension;
-          md5_checksum = Some file.File.md5Checksum;
-          file_size = Some file.File.fileSize;
-          editable = Some file.File.editable;
-          trashed = Some file.File.labels.File.Labels.trashed;
-          change_id = largest_change_id;
-          last_update = Unix.gettimeofday ();
-          path;
-          state =
-            if file.File.labels.File.Labels.restricted then
-              Cache.Resource.State.Restricted
-            else Option.default resource.Cache.Resource.state state;
-    }
+  { resource with
+        Cache.Resource.etag = Some file.File.etag;
+        remote_id = Some file.File.id;
+        title = Some file.File.title;
+        mime_type = Some file.File.mimeType;
+        created_date = Some (Netdate.since_epoch file.File.createdDate);
+        modified_date = Some (Netdate.since_epoch file.File.modifiedDate);
+        last_viewed_by_me_date =
+          Some (Netdate.since_epoch file.File.lastViewedByMeDate);
+        parent_remote_ids =
+          Some (Cache.Resource.render_parent_remote_ids file.File.parents);
+        download_url = Some file.File.downloadUrl;
+        export_links =
+          Some (Cache.Resource.render_export_links file.File.exportLinks);
+        file_extension = Some file.File.fileExtension;
+        md5_checksum = Some file.File.md5Checksum;
+        file_size = Some file.File.fileSize;
+        editable = Some file.File.editable;
+        trashed = Some file.File.labels.File.Labels.trashed;
+        change_id = largest_change_id;
+        last_update = Unix.gettimeofday ();
+        path;
+        state =
+          if file.File.labels.File.Labels.restricted then
+            Cache.Resource.State.Restricted
+          else Option.default resource.Cache.Resource.state state;
+  }
 
 let get_parent_resource_ids file =
   List.map
@@ -698,6 +698,84 @@ let check_md5_checksum resource =
     end;
   end else false
 
+let get_resource_size resource =
+  (* TODO: refactor *)
+  let get_export_link fmt =
+    let mime_type = Cache.Resource.mime_type_of_format fmt in
+    let export_links =
+      Option.map_default
+        Cache.Resource.parse_export_links
+        []
+        resource.Cache.Resource.export_links
+    in
+      List.fold_left
+        (fun accu (m, l) ->
+           if m = mime_type then l else accu)
+        ""
+        export_links
+  in
+
+  let get_content_length headers =
+    List.fold_left
+      (fun u h ->
+         match h with
+             GapiCore.Header.ContentLength value -> Some (Int64.of_string value)
+           | _ -> u)
+      None
+      headers in
+
+  let context = Context.get_ctx () in
+  Utils.log_message "Getting resource size (id=%Ld)...%!"
+    resource.Cache.Resource.id;
+  let download_link =
+    if Cache.Resource.is_document resource then
+      let config = context |. Context.config_lens in
+      let fmt = Cache.Resource.get_format resource config in
+        get_export_link fmt
+    else
+      Option.default "" resource.Cache.Resource.download_url in
+  begin if download_link <> "" then
+    with_try
+      (GapiService.head download_link get_content_length)
+      (function
+           GapiRequest.PermissionDenied session ->
+             Utils.log_message "Server error: Permission denied.\n%!";
+             throw Permission_denied
+         | GapiRequest.RequestTimeout _ ->
+             Utils.log_message "Server error: Request Timeout.\n%!";
+             throw Resource_busy
+         | GapiRequest.PreconditionFailed _
+         | GapiRequest.Conflict _ ->
+             Utils.log_message "Server error: Conflict.\n%!";
+             throw Resource_busy
+         | e -> throw e)
+  else
+    SessionM.return None
+  end >>= fun content_length ->
+  Utils.log_message "done: Content-Length=%Ld\n%!"
+    (Option.default 0L content_length);
+  SessionM.return content_length
+
+(* TODO: refactor *)
+let get_resource_size_with_retry resource =
+  let rec loop n =
+    with_try
+      (get_resource_size resource)
+      (function
+           Resource_busy as e ->
+             if n > 4 then throw e
+             else begin
+               GapiUtils.wait_exponential_backoff n;
+               let n' = n + 1 in
+               Utils.log_message
+                 "Retry (%d) downloading resource (id=%Ld)...%!"
+                 n' resource.Cache.Resource.id;
+               loop n'
+             end
+         | e -> throw e)
+  in
+    loop 0
+
 let download_resource resource =
   let get_export_link fmt =
     let mime_type = Cache.Resource.mime_type_of_format fmt in
@@ -810,21 +888,26 @@ let is_file_read_only resource =
 let get_attr path =
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
+  let cache = context.Context.cache in
   let (path_in_cache, trashed) = get_path_in_cache path in
 
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
     begin if Cache.Resource.is_document resource &&
-             config.Config.download_docs then
+        config.Config.download_docs &&
+        resource.Cache.Resource.file_size = Some 0L then begin
       with_try
-        (download_resource_with_retry resource)
+        (get_resource_size_with_retry resource)
         (function
-             File_not_found -> SessionM.return ""
-           | e -> throw e)
-    else
-      SessionM.return ""
-    end >>= fun content_path ->
-    SessionM.return (resource, content_path)
+             File_not_found -> SessionM.return None
+           | e -> throw e) >>= fun file_size ->
+      let updated_resource = resource
+        |> Cache.Resource.file_size ^= file_size in
+      Cache.Resource.update_resource cache updated_resource;
+      SessionM.return updated_resource
+    end else
+      SessionM.return resource
+    end
   in
 
   if path = root_directory then
@@ -835,10 +918,7 @@ let get_attr path =
           Unix.LargeFile.st_perm = stats.Unix.LargeFile.st_perm land 0o555
     }
   else begin
-    let (resource, content_path) = do_request request_resource |> fst in
-    let stat =
-      if content_path <> "" then Some (Unix.LargeFile.stat content_path)
-      else None in
+    let resource = do_request request_resource |> fst in
     let st_nlink =
       if Cache.Resource.is_folder resource then 2
       else 1 in
@@ -859,42 +939,24 @@ let get_attr path =
       in
         perm land mask in
     let st_size =
-      match stat with
-          None ->
-            if Cache.Resource.is_folder resource then f_bsize
-            else resource |. Cache.Resource.file_size |. GapiLens.option_get
-        | Some st ->
-            st.Unix.LargeFile.st_size in
+      if Cache.Resource.is_folder resource then f_bsize
+      else resource |. Cache.Resource.file_size |. GapiLens.option_get in
     let st_atime =
-      match stat with
-          None ->
-            resource
-              |. Cache.Resource.last_viewed_by_me_date
-              |. GapiLens.option_get
-        | Some st ->
-            st.Unix.LargeFile.st_atime in
+      resource
+        |. Cache.Resource.last_viewed_by_me_date
+        |. GapiLens.option_get in
     let st_mtime =
-      match stat with
-          None ->
-            resource |. Cache.Resource.modified_date |. GapiLens.option_get
-        | Some st ->
-            st.Unix.LargeFile.st_mtime in
-    let st_ctime =
-      match stat with
-          None ->
-            st_mtime
-        | Some st ->
-            st.Unix.LargeFile.st_ctime
-    in
-      { context.Context.mountpoint_stats with 
-            Unix.LargeFile.st_nlink;
-            st_kind;
-            st_perm;
-            st_size;
-            st_atime;
-            st_mtime;
-            st_ctime;
-      }
+      resource |. Cache.Resource.modified_date |. GapiLens.option_get in
+    let st_ctime = st_mtime in
+    { context.Context.mountpoint_stats with 
+          Unix.LargeFile.st_nlink;
+          st_kind;
+          st_perm;
+          st_size;
+          st_atime;
+          st_mtime;
+          st_ctime;
+    }
   end
 (* END stat *)
 
