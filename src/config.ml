@@ -57,6 +57,8 @@ type t = {
   conflict_resolution : ConflictResolutionStrategy.t;
   (* Specifies whether to keep files with duplicated names (no overwrite) *)
   keep_duplicates : bool;
+  (* Specifies whether to put file extension to Google Docs *)
+  docs_file_extension : bool;
 }
 
 let debug = {
@@ -123,6 +125,10 @@ let keep_duplicates = {
   GapiLens.get = (fun x -> x.keep_duplicates);
   GapiLens.set = (fun v x -> { x with keep_duplicates = v })
 }
+let docs_file_extension = {
+  GapiLens.get = (fun x -> x.docs_file_extension);
+  GapiLens.set = (fun v x -> { x with docs_file_extension = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -146,6 +152,7 @@ let default = {
   verification_code = "";
   conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
+  docs_file_extension = false;
 }
 
 let default_debug = {
@@ -165,6 +172,7 @@ let default_debug = {
   verification_code = "";
   conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
+  docs_file_extension = false;
 }
 
 let of_table table =
@@ -197,6 +205,8 @@ let of_table table =
           default.conflict_resolution;
       keep_duplicates =
         get "keep_duplicates" bool_of_string default.keep_duplicates;
+      docs_file_extension =
+        get "docs_file_extension" bool_of_string default.docs_file_extension;
     }
 
 let to_table data =
@@ -219,6 +229,7 @@ let to_table data =
     add "conflict_resolution"
       (data.conflict_resolution |> ConflictResolutionStrategy.to_string);
     add "keep_duplicates" (data.keep_duplicates |> string_of_bool);
+    add "docs_file_extension" (data.docs_file_extension |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =
