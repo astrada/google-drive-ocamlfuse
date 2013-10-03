@@ -824,14 +824,15 @@ let download_resource resource =
     close_out (open_out content_path);
     SessionM.return () in
   let create_desktop_entry () =
-    Utils.with_out_channel content_path
+    Utils.with_out_channel
+      ~mode:[Open_creat; Open_trunc; Open_wronly] content_path
       (fun out_ch ->
         Printf.fprintf out_ch
           "[Desktop Entry]\n\
            Type=Link\n\
            Name=%s\n\
            URL=%s\n" 
-          (Filename.basename resource.Cache.Resource.path)
+          (Option.default "" resource.Cache.Resource.title)
           (Option.default "" resource.Cache.Resource.alternate_link);
         SessionM.return ()) in
   let do_download () =
