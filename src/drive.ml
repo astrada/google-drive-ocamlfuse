@@ -771,7 +771,7 @@ let download_resource resource =
            Type=Link\n\
            Name=%s\n\
            URL=%s\n" 
-          (Filename.basename resource.Cache.Resource.path)
+          (Option.default "" resource.Cache.Resource.title)
           (Option.default "" resource.Cache.Resource.alternate_link);
         SessionM.return ()) in
   let do_download () =
