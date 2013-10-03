@@ -16,8 +16,8 @@ let with_in_channel path f =
       (fun () -> f ch)
       (fun () -> close_in ch)
 
-let with_out_channel path f =
-  let ch = open_out_gen [Open_creat; Open_wronly] 0o600 path in
+let with_out_channel ?(mode = [Open_creat; Open_wronly]) path f =
+  let ch = open_out_gen mode 0o600 path in
     try_finally
       (fun () -> f ch)
       (fun () -> close_out ch)
