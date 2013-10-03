@@ -911,7 +911,10 @@ let get_attr path =
 
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
-    begin if Cache.Resource.is_document resource &&
+    let content_path = Cache.get_content_path cache resource in
+    if Sys.file_exists content_path then begin
+      SessionM.return (resource, content_path)
+    end else begin if Cache.Resource.is_document resource &&
         config.Config.download_docs &&
         resource.Cache.Resource.file_size = Some 0L then begin
       with_try
@@ -922,9 +925,9 @@ let get_attr path =
       let updated_resource = resource
         |> Cache.Resource.file_size ^= file_size in
       Cache.Resource.update_resource cache updated_resource;
-      SessionM.return updated_resource
+      SessionM.return (updated_resource, "")
     end else
-      SessionM.return resource
+      SessionM.return (resource, "")
     end
   in
 
@@ -936,7 +939,10 @@ let get_attr path =
           Unix.LargeFile.st_perm = stats.Unix.LargeFile.st_perm land 0o555
     }
   else begin
-    let resource = do_request request_resource |> fst in
+    let (resource, content_path) = do_request request_resource |> fst in
+    let stat =
+      if content_path <> "" then Some (Unix.LargeFile.stat content_path)
+      else None in
     let st_nlink =
       if Cache.Resource.is_folder resource then 2
       else 1 in
@@ -955,17 +961,35 @@ let get_attr path =
           then 0o555
           else 0o777)
       in
-        perm land mask in
+      perm land mask in
     let st_size =
-      if Cache.Resource.is_folder resource then f_bsize
-      else resource |. Cache.Resource.file_size |. GapiLens.option_get in
+      match stat with
+          None ->
+            if Cache.Resource.is_folder resource then f_bsize
+            else resource |. Cache.Resource.file_size |. GapiLens.option_get
+        | Some st ->
+            st.Unix.LargeFile.st_size in
     let st_atime =
-      resource
-        |. Cache.Resource.last_viewed_by_me_date
-        |. GapiLens.option_get in
+      match stat with
+          None ->
+            resource
+              |. Cache.Resource.last_viewed_by_me_date
+              |. GapiLens.option_get
+        | Some st ->
+            st.Unix.LargeFile.st_atime in
     let st_mtime =
-      resource |. Cache.Resource.modified_date |. GapiLens.option_get in
-    let st_ctime = st_mtime in
+      match stat with
+          None ->
+            resource |. Cache.Resource.modified_date |. GapiLens.option_get
+        | Some st ->
+            st.Unix.LargeFile.st_mtime in
+    let st_ctime =
+      match stat with
+          None ->
+            st_mtime
+        | Some st ->
+            st.Unix.LargeFile.st_ctime
+    in
     { context.Context.mountpoint_stats with 
           Unix.LargeFile.st_nlink;
           st_kind;
