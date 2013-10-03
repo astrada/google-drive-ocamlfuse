@@ -756,19 +756,38 @@ let with_retry f resource =
   in
     loop 0
 
+let is_desktop_format resource config =
+  Cache.Resource.get_format resource config = "desktop"
+
 let get_export_link fmt resource =
-  let mime_type = Cache.Resource.mime_type_of_format fmt in
-  let export_links =
-    Option.map_default
-      Cache.Resource.parse_export_links
-      []
-      resource.Cache.Resource.export_links
-  in
-  List.fold_left
-    (fun accu (m, l) ->
-       if m = mime_type then l else accu)
-    ""
-    export_links
+  if fmt = "desktop" then ""
+  else begin
+    let mime_type = Cache.Resource.mime_type_of_format fmt in
+    let export_links =
+      Option.map_default
+        Cache.Resource.parse_export_links
+        []
+        resource.Cache.Resource.export_links
+    in
+    List.fold_left
+      (fun accu (m, l) ->
+         if m = mime_type then l else accu)
+      ""
+      export_links
+  end
+
+let create_desktop_entry resource content_path =
+  Utils.with_out_channel
+    ~mode:[Open_creat; Open_trunc; Open_wronly] content_path
+    (fun out_ch ->
+      Printf.fprintf out_ch
+        "[Desktop Entry]\n\
+         Type=Link\n\
+         Name=%s\n\
+         URL=%s\n" 
+        (Option.default "" resource.Cache.Resource.title)
+        (Option.default "" resource.Cache.Resource.alternate_link);
+      SessionM.return ())
 
 let get_resource_size resource =
   let get_content_length headers =
@@ -782,13 +801,15 @@ let get_resource_size resource =
   in
 
   let context = Context.get_ctx () in
+  let cache = Context.get_cache () in
+  let config = context |. Context.config_lens in
   Utils.log_message "Getting resource size (id=%Ld)...%!"
     resource.Cache.Resource.id;
   let download_link =
     if Cache.Resource.is_document resource then
       let config = context |. Context.config_lens in
       let fmt = Cache.Resource.get_format resource config in
-        get_export_link fmt resource
+      get_export_link fmt resource
     else
       Option.default "" resource.Cache.Resource.download_url in
   begin if download_link <> "" then
@@ -806,7 +827,12 @@ let get_resource_size resource =
              Utils.log_message "Server error: Conflict.\n%!";
              throw Resource_busy
          | e -> throw e)
-  else
+  else if is_desktop_format resource config then begin
+    let content_path = Cache.get_content_path cache resource in
+    create_desktop_entry resource content_path >>= fun () ->
+    let stats = Unix.LargeFile.stat content_path in
+    SessionM.return (Some stats.Unix.LargeFile.st_size)
+  end else
     SessionM.return None
   end >>= fun content_length ->
   Utils.log_message "done: Content-Length=%Ld\n%!"
@@ -823,26 +849,13 @@ let download_resource resource =
       content_path;
     close_out (open_out content_path);
     SessionM.return () in
-  let create_desktop_entry () =
-    Utils.with_out_channel
-      ~mode:[Open_creat; Open_trunc; Open_wronly] content_path
-      (fun out_ch ->
-        Printf.fprintf out_ch
-          "[Desktop Entry]\n\
-           Type=Link\n\
-           Name=%s\n\
-           URL=%s\n" 
-          (Option.default "" resource.Cache.Resource.title)
-          (Option.default "" resource.Cache.Resource.alternate_link);
-        SessionM.return ()) in
   let do_download () =
     Utils.log_message "Downloading resource (id=%Ld)...%!"
       resource.Cache.Resource.id;
     let download_link =
       if Cache.Resource.is_document resource then
         let fmt = Cache.Resource.get_format resource config in
-        if fmt = "desktop" then ""
-        else get_export_link fmt resource
+        get_export_link fmt resource
       else
         Option.default "" resource.Cache.Resource.download_url in
     begin if download_link <> "" then
@@ -861,8 +874,8 @@ let download_resource resource =
                Utils.log_message "Server error: Conflict.\n%!";
                throw Resource_busy
            | e -> throw e)
-    else if Cache.Resource.get_format resource config = "desktop" then
-      create_desktop_entry ()
+    else if is_desktop_format resource config then
+      create_desktop_entry resource content_path
     else
       create_empty_file ()
     end >>= fun () ->
