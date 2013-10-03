@@ -163,7 +163,7 @@ let setup_application params =
   let state_store =
     if saved_version <> Config.version then begin
       Utils.log_message
-        "Version mismatch (saved=%s, current=%s)%!"
+        "Version mismatch (saved=%s, current=%s)%!\n"
         saved_version Config.version;
       if not params.clear_cache then begin
         Utils.log_message "Cleaning up cache...%!";

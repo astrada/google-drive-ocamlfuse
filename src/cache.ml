@@ -128,6 +128,7 @@ struct
      file_size, \
      editable, \
      trashed, \
+     alternate_link, \
      parent_path, \
      path, \
      state, \
@@ -155,6 +156,7 @@ struct
          :file_size, \
          :editable, \
          :trashed, \
+         :alternate_link, \
          :parent_path, \
          :path, \
          :state, \
@@ -183,6 +185,7 @@ struct
          file_size = :file_size, \
          editable = :editable, \
          trashed = :trashed, \
+         alternate_link = :alternate_link, \
          parent_path = :parent_path, \
          path = :path, \
          state = :state, \
@@ -460,6 +463,7 @@ struct
     file_size : int64 option;
     editable : bool option;
     trashed : bool option;
+    alternate_link : string option;
     (* local data *)
     parent_path : string;
     path : string;
@@ -531,6 +535,10 @@ struct
   let trashed = {
     GapiLens.get = (fun x -> x.trashed);
     GapiLens.set = (fun v x -> { x with trashed = v })
+  }
+  let alternate_link = {
+    GapiLens.get = (fun x -> x.alternate_link);
+    GapiLens.set = (fun v x -> { x with alternate_link = v })
   }
   let parent_path = {
     GapiLens.get = (fun x -> x.parent_path);
@@ -609,6 +617,7 @@ struct
     bind_int stmt ":file_size" resource.file_size;
     bind_bool stmt ":editable" resource.editable;
     bind_bool stmt ":trashed" resource.trashed;
+    bind_text stmt ":alternate_link" resource.alternate_link;
     bind_text stmt ":parent_path" (Some resource.parent_path);
     bind_text stmt ":path" (Some resource.path);
     bind_text stmt ":state" (Some (State.to_string resource.state));
@@ -773,11 +782,12 @@ struct
       file_size = row_data.(13) |> data_to_int64;
       editable = row_data.(14) |> data_to_bool;
       trashed = row_data.(15) |> data_to_bool;
-      parent_path = row_data.(16) |> data_to_string |> Option.get;
-      path = row_data.(17) |> data_to_string |> Option.get;
-      state = row_data.(18) |> data_to_string |> Option.get |> State.of_string;
-      change_id = row_data.(19) |> data_to_int64 |> Option.get;
-      last_update = row_data.(20) |> data_to_float |> Option.get;
+      alternate_link = row_data.(16) |> data_to_string;
+      parent_path = row_data.(17) |> data_to_string |> Option.get;
+      path = row_data.(18) |> data_to_string |> Option.get;
+      state = row_data.(19) |> data_to_string |> Option.get |> State.of_string;
+      change_id = row_data.(20) |> data_to_int64 |> Option.get;
+      last_update = row_data.(21) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -837,18 +847,23 @@ struct
   let is_valid resource largest_change_id =
     resource.change_id >= largest_change_id
 
+  let get_format_from_mime_type mime_type config =
+    match mime_type with
+        "application/vnd.google-apps.document" ->
+          config.Config.document_format
+      | "application/vnd.google-apps.drawing" ->
+          config.Config.drawing_format
+      | "application/vnd.google-apps.form" ->
+          config.Config.form_format
+      | "application/vnd.google-apps.presentation" ->
+          config.Config.presentation_format
+      | "application/vnd.google-apps.spreadsheet" ->
+          config.Config.spreadsheet_format
+      | _ -> "html"
+
   let get_format resource config =
     match resource.mime_type with
-        Some "application/vnd.google-apps.document" ->
-          config.Config.document_format
-      | Some "application/vnd.google-apps.drawing" ->
-          config.Config.drawing_format
-      | Some "application/vnd.google-apps.form" ->
-          config.Config.form_format
-      | Some "application/vnd.google-apps.presentation" ->
-          config.Config.presentation_format
-      | Some "application/vnd.google-apps.spreadsheet" ->
-          config.Config.spreadsheet_format
+        Some mime_type -> get_format_from_mime_type mime_type config
       | _ -> "html"
 
   let mime_type_of_format fmt =
@@ -1009,6 +1024,7 @@ let setup_db cache =
             file_size INTEGER NULL, \
             editable INTEGER NULL, \
             trashed INTEGER NULL, \
+            alternate_link TEXT NULL, \
             parent_path TEXT NOT NULL, \
             path TEXT NOT NULL, \
             state TEXT NOT NULL, \

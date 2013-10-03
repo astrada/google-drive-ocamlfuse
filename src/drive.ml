@@ -11,9 +11,9 @@ exception Resource_busy
 
 let folder_mime_type = "application/vnd.google-apps.folder"
 let file_fields =
-  "createdDate,downloadUrl,editable,etag,explicitlyTrashed,exportLinks,\
-   fileExtension,fileSize,id,labels,lastViewedByMeDate,md5Checksum,mimeType,\
-   modifiedDate,parents,title"
+  "alternateLink,createdDate,downloadUrl,editable,etag,explicitlyTrashed,\
+   exportLinks,fileExtension,fileSize,id,labels,lastViewedByMeDate,\
+   md5Checksum,mimeType,modifiedDate,parents,title"
 let file_std_params =
   { GapiService.StandardParameters.default with
         GapiService.StandardParameters.fields = file_fields
@@ -64,10 +64,10 @@ let split_filename filename =
   in
   (base_name, extension)
 
-let disambiguate_title title is_document filename_table  =
+let disambiguate_filename filename without_extension filename_table  =
   let rec find_first_unique_filename filename copy_number =
     let new_candidate =
-      if is_document then
+      if without_extension then
         Printf.sprintf "%s (%d)" filename copy_number
       else
         let (base_name, extension) = split_filename filename in
@@ -82,7 +82,6 @@ let disambiguate_title title is_document filename_table  =
       find_first_unique_filename filename (copy_number + 1)
     end
   in
-  let filename = clean_filename title in
   if Hashtbl.mem filename_table filename then begin
     Utils.log_message "Filename collision detected: %s\n%!" filename;
     let last_copy_number = Hashtbl.find filename_table filename in
@@ -125,6 +124,18 @@ let throw e _ =
   raise e
 
 (* Resource cache *)
+let get_filename title is_document get_document_format =
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  let clean_title = clean_filename title in
+  let document_format =
+    if is_document
+    then get_document_format config
+    else "" in
+  if is_document && config.Config.docs_file_extension
+  then (clean_title ^ "." ^ document_format, false)
+  else (clean_title, is_document)
+
 let build_resource_tables parent_path trashed =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
@@ -136,7 +147,12 @@ let build_resource_tables parent_path trashed =
   List.iter
     (fun resource ->
        let title = Option.get resource.Cache.Resource.title in
-       let clean_title = clean_filename title in
+       let (clean_title, _) =
+         get_filename
+           title
+           (Cache.Resource.is_document resource)
+           (fun config -> Cache.Resource.get_format resource config)
+       in
        let filename = Filename.basename resource.Cache.Resource.path in
        if clean_title <> filename then begin
          let copy_number =
@@ -169,6 +185,7 @@ let create_resource path change_id =
     file_size = None;
     editable = None;
     trashed = None;
+    alternate_link = None;
     parent_path = Filename.dirname path;
     path;
     state = Cache.Resource.State.ToDownload;
@@ -186,6 +203,27 @@ let create_root_resource root_folder_id change_id trashed =
           trashed = Some trashed;
     }
 
+let get_unique_filename title is_document get_document_format filename_table =
+  let (complete_title, without_extension) =
+    get_filename title is_document get_document_format
+  in
+  disambiguate_filename complete_title without_extension filename_table
+
+let get_unique_filename_from_resource resource title filename_table =
+  get_unique_filename
+    title
+    (Cache.Resource.is_document resource)
+    (fun config -> Cache.Resource.get_format resource config)
+    filename_table
+
+let get_unique_filename_from_file file filename_table =
+  get_unique_filename
+    file.File.title
+    (Cache.Resource.is_document_mime_type file.File.mimeType)
+    (fun config ->
+      Cache.Resource.get_format_from_mime_type file.File.mimeType config)
+    filename_table 
+
 let recompute_path resource title =
   (* TODO: make an optimized version of build_resource_tables that
    * doesn't create resource table (useful for large directories). *)
@@ -193,9 +231,9 @@ let recompute_path resource title =
     build_resource_tables
       resource.Cache.Resource.parent_path
       (Option.default false resource.Cache.Resource.trashed) in
-  let clean_title = clean_filename title in
-  let is_document = Cache.Resource.is_document resource in
-  let filename = disambiguate_title clean_title is_document filename_table in
+  let filename =
+    get_unique_filename_from_resource resource title filename_table
+  in
   Filename.concat resource.Cache.Resource.parent_path filename
 
 let update_resource_from_file ?state resource file =
@@ -228,6 +266,7 @@ let update_resource_from_file ?state resource file =
         file_size = Some file.File.fileSize;
         editable = Some file.File.editable;
         trashed = Some file.File.labels.File.Labels.trashed;
+        alternate_link = Some file.File.alternateLink;
         change_id = largest_change_id;
         last_update = Unix.gettimeofday ();
         path;
@@ -698,23 +737,40 @@ let check_md5_checksum resource =
     end;
   end else false
 
-let get_resource_size resource =
-  (* TODO: refactor *)
-  let get_export_link fmt =
-    let mime_type = Cache.Resource.mime_type_of_format fmt in
-    let export_links =
-      Option.map_default
-        Cache.Resource.parse_export_links
-        []
-        resource.Cache.Resource.export_links
-    in
-      List.fold_left
-        (fun accu (m, l) ->
-           if m = mime_type then l else accu)
-        ""
-        export_links
+let with_retry f resource =
+  let rec loop n =
+    with_try
+      (f resource)
+      (function
+           Resource_busy as e ->
+             if n > 4 then throw e
+             else begin
+               GapiUtils.wait_exponential_backoff n;
+               let n' = n + 1 in
+               Utils.log_message
+                 "Retry (%d) downloading resource (id=%Ld)...%!"
+                 n' resource.Cache.Resource.id;
+               loop n'
+             end
+         | e -> throw e)
   in
+    loop 0
 
+let get_export_link fmt resource =
+  let mime_type = Cache.Resource.mime_type_of_format fmt in
+  let export_links =
+    Option.map_default
+      Cache.Resource.parse_export_links
+      []
+      resource.Cache.Resource.export_links
+  in
+  List.fold_left
+    (fun accu (m, l) ->
+       if m = mime_type then l else accu)
+    ""
+    export_links
+
+let get_resource_size resource =
   let get_content_length headers =
     List.fold_left
       (fun u h ->
@@ -722,7 +778,8 @@ let get_resource_size resource =
              GapiCore.Header.ContentLength value -> Some (Int64.of_string value)
            | _ -> u)
       None
-      headers in
+      headers
+  in
 
   let context = Context.get_ctx () in
   Utils.log_message "Getting resource size (id=%Ld)...%!"
@@ -731,7 +788,7 @@ let get_resource_size resource =
     if Cache.Resource.is_document resource then
       let config = context |. Context.config_lens in
       let fmt = Cache.Resource.get_format resource config in
-        get_export_link fmt
+        get_export_link fmt resource
     else
       Option.default "" resource.Cache.Resource.download_url in
   begin if download_link <> "" then
@@ -756,58 +813,35 @@ let get_resource_size resource =
     (Option.default 0L content_length);
   SessionM.return content_length
 
-(* TODO: refactor *)
-let get_resource_size_with_retry resource =
-  let rec loop n =
-    with_try
-      (get_resource_size resource)
-      (function
-           Resource_busy as e ->
-             if n > 4 then throw e
-             else begin
-               GapiUtils.wait_exponential_backoff n;
-               let n' = n + 1 in
-               Utils.log_message
-                 "Retry (%d) downloading resource (id=%Ld)...%!"
-                 n' resource.Cache.Resource.id;
-               loop n'
-             end
-         | e -> throw e)
-  in
-    loop 0
-
 let download_resource resource =
-  let get_export_link fmt =
-    let mime_type = Cache.Resource.mime_type_of_format fmt in
-    let export_links =
-      Option.map_default
-        Cache.Resource.parse_export_links
-        []
-        resource.Cache.Resource.export_links
-    in
-      List.fold_left
-        (fun accu (m, l) ->
-           if m = mime_type then l else accu)
-        ""
-        export_links
-  in
-
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
+  let config = context |. Context.config_lens in
   let content_path = Cache.get_content_path cache resource in
   let create_empty_file () =
     Utils.log_message "Creating resource without content (path=%s)...\n%!"
       content_path;
     close_out (open_out content_path);
     SessionM.return () in
+  let create_desktop_entry () =
+    Utils.with_out_channel content_path
+      (fun out_ch ->
+        Printf.fprintf out_ch
+          "[Desktop Entry]\n\
+           Type=Link\n\
+           Name=%s\n\
+           URL=%s\n" 
+          (Filename.basename resource.Cache.Resource.path)
+          (Option.default "" resource.Cache.Resource.alternate_link);
+        SessionM.return ()) in
   let do_download () =
     Utils.log_message "Downloading resource (id=%Ld)...%!"
       resource.Cache.Resource.id;
     let download_link =
       if Cache.Resource.is_document resource then
-        let config = context |. Context.config_lens in
         let fmt = Cache.Resource.get_format resource config in
-          get_export_link fmt
+        if fmt = "desktop" then ""
+        else get_export_link fmt resource
       else
         Option.default "" resource.Cache.Resource.download_url in
     begin if download_link <> "" then
@@ -826,6 +860,8 @@ let download_resource resource =
                Utils.log_message "Server error: Conflict.\n%!";
                throw Resource_busy
            | e -> throw e)
+    else if Cache.Resource.get_format resource config = "desktop" then
+      create_desktop_entry ()
     else
       create_empty_file ()
     end >>= fun () ->
@@ -857,25 +893,6 @@ let download_resource resource =
         end >>
         SessionM.return content_path
 
-let download_resource_with_retry resource =
-  let rec loop n =
-    with_try
-      (download_resource resource)
-      (function
-           Resource_busy as e ->
-             if n > 4 then throw e
-             else begin
-               GapiUtils.wait_exponential_backoff n;
-               let n' = n + 1 in
-               Utils.log_message
-                 "Retry (%d) downloading resource (id=%Ld)...%!"
-                 n' resource.Cache.Resource.id;
-               loop n'
-             end
-         | e -> throw e)
-  in
-    loop 0
-
 let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only
 
@@ -897,7 +914,7 @@ let get_attr path =
         config.Config.download_docs &&
         resource.Cache.Resource.file_size = Some 0L then begin
       with_try
-        (get_resource_size_with_retry resource)
+        (with_retry get_resource_size resource)
         (function
              File_not_found -> SessionM.return None
            | e -> throw e) >>= fun file_size ->
@@ -1039,11 +1056,8 @@ let read_dir path =
              match resource with
                  Some r -> r
                | None ->
-                   let title = file.File.title in
-                   let is_document =
-                     Cache.Resource.is_document_mime_type file.File.mimeType in
                    let filename =
-                     disambiguate_title title is_document filename_table in
+                     get_unique_filename_from_file file filename_table in
                    let resource_path =
                      Filename.concat path_in_cache filename in
                    let resource = create_resource resource_path change_id in
@@ -1200,7 +1214,7 @@ let read path buf offset file_descr =
     
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
-    download_resource_with_retry resource
+    with_retry download_resource resource
   in
 
   let content_path = do_request request_resource |> fst in
@@ -1219,7 +1233,7 @@ let write path buf offset file_descr =
   let cache = context.Context.cache in
   let write_to_resource =
     get_resource path_in_cache trashed >>= fun resource ->
-    download_resource_with_retry resource >>= fun content_path ->
+    with_retry download_resource resource >>= fun content_path ->
     Utils.log_message "Writing local file (path=%s,trashed=%b)...%!"
       path_in_cache trashed;
     let bytes =
