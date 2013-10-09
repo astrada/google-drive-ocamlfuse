@@ -738,23 +738,33 @@ let check_md5_checksum resource =
   end else false
 
 let with_retry f resource =
-  let rec loop n =
+  let rec loop res n =
     with_try
-      (f resource)
+      (f res)
       (function
            Resource_busy as e ->
              if n > 4 then throw e
              else begin
                GapiUtils.wait_exponential_backoff n;
+               let fileId = res.Cache.Resource.remote_id |> Option.get in
+               FilesResource.get
+                 ~std_params:file_std_params
+                 ~fileId >>= fun file ->
+               let refreshed_resource =
+                 update_resource_from_file
+                   ~state:Cache.Resource.State.ToDownload res file in
+               let context = Context.get_ctx () in
+               let cache = context.Context.cache in
+               update_cached_resource cache refreshed_resource;
                let n' = n + 1 in
                Utils.log_message
-                 "Retry (%d) downloading resource (id=%Ld)...%!"
+                 "Retry (%d) downloading resource (id=%Ld)...\n%!"
                  n' resource.Cache.Resource.id;
-               loop n'
+               loop refreshed_resource n'
              end
          | e -> throw e)
   in
-    loop 0
+    loop resource 0
 
 let is_desktop_format resource config =
   Cache.Resource.get_format resource config = "desktop"
@@ -872,6 +882,9 @@ let download_resource resource =
            | GapiRequest.PreconditionFailed _
            | GapiRequest.Conflict _ ->
                Utils.log_message "Server error: Conflict.\n%!";
+               throw Resource_busy
+           | GapiRequest.Forbidden _ ->
+               Utils.log_message "Server error: Forbidden.\n%!";
                throw Resource_busy
            | e -> throw e)
     else if is_desktop_format resource config then
