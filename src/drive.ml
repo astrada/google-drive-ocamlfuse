@@ -34,8 +34,11 @@ let f_bsize = 4096L
 let change_id_limit = 50L
 
 (* Utilities *)
-let chars_blacklist_regexp = Str.regexp ("[/\000]")
+let chars_blacklist_regexp = Str.regexp "[/\000]"
 let clean_filename title = Str.global_replace chars_blacklist_regexp "_" title
+
+let apostrophe_regexp = Str.regexp (Str.quote "'")
+let escape_apostrophe title = Str.global_replace apostrophe_regexp "\\'" title
 
 let common_double_extension_suffixes = [".gz"; ".z"; ".bz2"]
 let split_filename filename =
@@ -581,7 +584,7 @@ let get_file_from_server parent_folder_id title trashed =
     title parent_folder_id;
   let q =
     Printf.sprintf "title = '%s' and '%s' in parents and trashed = %b"
-      title parent_folder_id trashed in
+      (escape_apostrophe title) parent_folder_id trashed in
   FilesResource.list
     ~std_params:file_list_std_params
     ~q
