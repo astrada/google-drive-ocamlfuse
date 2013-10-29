@@ -327,11 +327,59 @@ let get_root_resource trashed =
             Utils.log_message "done\n%!";
             inserted
       | Some resource -> resource
+
+let shrink_cache file_size max_cache_size_mb metadata cache =
+  let update_cache_size new_size metadata cache =
+    let updated_metadata = metadata
+      |> Cache.Metadata.cache_size ^= new_size in
+    Utils.log_message "Updating cache size (%Ld) in db...%!" new_size;
+    Cache.Metadata.insert_metadata cache updated_metadata;
+    Utils.log_message "done\nUpdating context...%!";
+    Context.update_ctx (Context.metadata ^= Some updated_metadata);
+    Utils.log_message "done\n%!";
+  in
+
+  let check_cache_size cache_size =
+    let mb = 1048576L in
+    let max_cache_size = Int64.mul (Int64.of_int max_cache_size_mb) mb in
+    cache_size <= max_cache_size
+  in
+
+  if file_size > 0L then begin
+    let target_size = Int64.add metadata.Cache.Metadata.cache_size file_size in
+    if check_cache_size target_size then begin
+      update_cache_size target_size metadata cache;
+    end else begin
+      let resources =
+        Cache.Resource.select_resources_order_by_last_update cache in
+      let (new_cache_size, resources_to_free) =
+        List.fold_left
+          (fun (new_cache_size, rs) resource ->
+            if check_cache_size new_cache_size then
+              (new_cache_size, rs)
+            else begin
+              let new_size = Int64.sub
+                new_cache_size
+                (Option.get resource.Cache.Resource.file_size) in
+              (new_size, resource :: rs)
+            end)
+          (target_size, [])
+          resources in
+      update_cache_size new_cache_size metadata cache;
+      List.iter
+        (fun resource ->
+           let updated_resource = resource
+             |> Cache.Resource.state ^= Cache.Resource.State.ToDownload in
+           update_cached_resource cache updated_resource)
+        resources_to_free;
+      Cache.delete_files_from_cache cache resources_to_free
+    end
+  end
 (* END Resource cache *)
 
 (* Metadata *)
 let get_metadata () =
-  let request_metadata last_change_id etag =
+  let request_metadata last_change_id etag cache_size =
     let std_params =
       { GapiService.StandardParameters.default with
             GapiService.StandardParameters.fields =
@@ -354,6 +402,7 @@ let get_metadata () =
       remaining_change_ids = about.About.remainingChangeIds;
       root_folder_id = about.About.rootFolderId;
       permission_id = about.About.permissionId;
+      cache_size;
       last_update = Unix.gettimeofday ();
     } in
     SessionM.return metadata
@@ -502,10 +551,13 @@ let get_metadata () =
       Option.map_default
         Cache.Metadata.largest_change_id.GapiLens.get 0L metadata in
     let etag = Option.map Cache.Metadata.etag.GapiLens.get metadata in
+    let cache_size =
+      Option.map_default
+        Cache.Metadata.cache_size.GapiLens.get 0L metadata in
     Utils.log_message "Refreshing metadata...%!";
     let updated_metadata =
       try
-        do_request (request_metadata last_change_id etag) |> fst
+        do_request (request_metadata last_change_id etag cache_size) |> fst
       with GapiRequest.NotModified _ ->
         Utils.log_message "not modified...%!";
         let m = Option.get metadata in
@@ -862,6 +914,17 @@ let download_resource resource =
       content_path;
     close_out (open_out content_path);
     SessionM.return () in
+  let shrink_cache () =
+    Option.may
+      (fun file_size ->
+         let metadata = context.Context.metadata |> Option.get in
+         shrink_cache
+           file_size 
+           config.Config.max_cache_size_mb
+           metadata
+           cache)
+      resource.Cache.Resource.file_size;
+    SessionM.return () in
   let do_download () =
     Utils.log_message "Downloading resource (id=%Ld)...%!"
       resource.Cache.Resource.id;
@@ -871,7 +934,8 @@ let download_resource resource =
         get_export_link fmt resource
       else
         Option.default "" resource.Cache.Resource.download_url in
-    begin if download_link <> "" then
+    begin if download_link <> "" then begin
+      shrink_cache () >>= fun () ->
       with_try
         (let media_destination = GapiMediaResource.TargetFile content_path in
          GapiService.download_resource download_link media_destination)
@@ -890,7 +954,7 @@ let download_resource resource =
                Utils.log_message "Server error: Forbidden.\n%!";
                throw Resource_busy
            | e -> throw e)
-    else if is_desktop_format resource config then
+    end else if is_desktop_format resource config then
       create_desktop_entry resource content_path
     else
       create_empty_file ()
@@ -1343,6 +1407,16 @@ let upload_if_dirty path =
           update_resource_from_file
             ~state:Cache.Resource.State.InSync resource file in
         update_cached_resource cache updated_resource;
+        let metadata = context.Context.metadata |> Option.get in
+        let config = context |. Context.config_lens in
+        Option.may
+          (fun file_size ->
+             shrink_cache
+               file_size 
+               config.Config.max_cache_size_mb
+               metadata
+               cache)
+          updated_resource.Cache.Resource.file_size;
         SessionM.return ()
     | _ ->
         SessionM.return ()

@@ -59,6 +59,8 @@ type t = {
   keep_duplicates : bool;
   (* Specifies whether to put file extension to Google Docs *)
   docs_file_extension : bool;
+  (* Maximum cache size in megabytes *)
+  max_cache_size_mb : int;
 }
 
 let debug = {
@@ -129,6 +131,10 @@ let docs_file_extension = {
   GapiLens.get = (fun x -> x.docs_file_extension);
   GapiLens.set = (fun v x -> { x with docs_file_extension = v })
 }
+let max_cache_size_mb = {
+  GapiLens.get = (fun x -> x.max_cache_size_mb);
+  GapiLens.set = (fun v x -> { x with max_cache_size_mb = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -153,6 +159,7 @@ let default = {
   conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
   docs_file_extension = true;
+  max_cache_size_mb = 50;
 }
 
 let default_debug = {
@@ -173,6 +180,7 @@ let default_debug = {
   conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
   docs_file_extension = true;
+  max_cache_size_mb = 1;
 }
 
 let of_table table =
@@ -207,6 +215,8 @@ let of_table table =
         get "keep_duplicates" bool_of_string default.keep_duplicates;
       docs_file_extension =
         get "docs_file_extension" bool_of_string default.docs_file_extension;
+      max_cache_size_mb =
+        get "max_cache_size_mb" int_of_string default.max_cache_size_mb;
     }
 
 let to_table data =
@@ -230,6 +240,7 @@ let to_table data =
       (data.conflict_resolution |> ConflictResolutionStrategy.to_string);
     add "keep_duplicates" (data.keep_duplicates |> string_of_bool);
     add "docs_file_extension" (data.docs_file_extension |> string_of_bool);
+    add "max_cache_size_mb" (data.max_cache_size_mb |> string_of_int);
     table
 
 let debug_print out_ch start_time curl info_type info =
