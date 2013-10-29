@@ -152,7 +152,7 @@ let default = {
   verification_code = "";
   conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
-  docs_file_extension = false;
+  docs_file_extension = true;
 }
 
 let default_debug = {
@@ -172,7 +172,7 @@ let default_debug = {
   verification_code = "";
   conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
-  docs_file_extension = false;
+  docs_file_extension = true;
 }
 
 let of_table table =
