@@ -312,8 +312,18 @@ struct
       "SELECT " ^ fields ^ " \
        FROM resource \
        WHERE parent_path = :parent_path \
-         AND trashed = :trashed
+         AND trashed = :trashed \
          AND state IN ('InSync', 'ToDownload');"
+    in
+      Sqlite3.prepare db sql
+
+  let prepare_select_order_by_last_update db =
+    let sql =
+      "SELECT " ^ fields ^ " \
+       FROM resource \
+       WHERE state = 'InSync' \
+         AND file_size > 0 \
+       ORDER BY last_update;"
     in
       Sqlite3.prepare db sql
 
@@ -330,6 +340,7 @@ struct
      remaining_change_ids, \
      root_folder_id, \
      permission_id, \
+     cache_size, \
      last_update"
 
   let fields =
@@ -348,6 +359,7 @@ struct
          :remaining_change_ids, \
          :root_folder_id, \
          :permission_id, \
+         :cache_size, \
          :last_update \
        );"
     in
@@ -387,15 +399,18 @@ let open_db cache =
 
 let close_db db =
   let rec try_close n =
-    if n > 4 then
+    if n > 4 then begin
       let thread_id = Utils.get_thread_id () in
-        Utils.log_message "Thread id=%d: Error: cannot close db\n%!" thread_id
-    else if not (Sqlite3.db_close db) then begin
+      Utils.log_message "Thread id=%d: Error: cannot close db\n%!" thread_id;
+      Printf.eprintf "Error: cannot close sqlite db.\n\
+        Please restart the program.\n%!";
+      exit 1
+    end else if not (Sqlite3.db_close db) then begin
       Unix.sleep 1;
       try_close (succ n)
     end
   in
-    try_close 0
+  try_close 0
 
 let with_db cache f =
   let db = open_db cache in
@@ -823,6 +838,17 @@ struct
              row_to_resource in
          finalize_stmt stmt;
          results)
+
+  let select_resources_order_by_last_update cache =
+    with_db cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_select_order_by_last_update db in
+         let results =
+           select_all_rows stmt
+             (fun _ -> ())
+             row_to_resource in
+         finalize_stmt stmt;
+         results)
   (* END Queries *)
 
   let is_folder resource =
@@ -895,6 +921,7 @@ struct
     remaining_change_ids : int64;
     root_folder_id : string;
     permission_id : string;
+    cache_size : int64;
     last_update : float;
   }
 
@@ -930,6 +957,10 @@ struct
     GapiLens.get = (fun x -> x.permission_id);
     GapiLens.set = (fun v x -> { x with permission_id = v })
   }
+  let cache_size = {
+    GapiLens.get = (fun x -> x.cache_size);
+    GapiLens.set = (fun v x -> { x with cache_size = v })
+  }
   let last_update = {
     GapiLens.get = (fun x -> x.last_update);
     GapiLens.set = (fun v x -> { x with last_update = v })
@@ -945,6 +976,7 @@ struct
     bind_int stmt ":remaining_change_ids" (Some metadata.remaining_change_ids);
     bind_text stmt ":root_folder_id" (Some metadata.root_folder_id);
     bind_text stmt ":permission_id" (Some metadata.permission_id);
+    bind_int stmt ":cache_size" (Some metadata.cache_size);
     bind_float stmt ":last_update" (Some metadata.last_update);
     final_step stmt
 
@@ -964,7 +996,8 @@ struct
       remaining_change_ids = row_data.(5) |> data_to_int64 |> Option.get;
       root_folder_id = row_data.(6) |> data_to_string |> Option.get;
       permission_id = row_data.(7) |> data_to_string |> Option.get;
-      last_update = row_data.(8) |> data_to_float |> Option.get;
+      cache_size = row_data.(8) |> data_to_int64 |> Option.get;
+      last_update = row_data.(9) |> data_to_float |> Option.get;
     }
 
   let select_metadata cache =
@@ -988,18 +1021,24 @@ let get_content_path cache resource =
   Filename.concat cache.cache_dir (Option.get resource.Resource.remote_id)
 (* END Resource content *)
 
-let delete_resources cache resources =
+let delete_files_from_cache cache resources =
   let remove_file path =
     try
       if Sys.file_exists path then Sys.remove path
     with e -> Utils.log_exception e
   in
-  Resource.delete_resources cache resources;
   List.iter
     (fun resource ->
        let content_path = get_content_path cache resource in
-       remove_file content_path)
+       Utils.log_message "Removing file (%s: resource %Ld) from cache...%!"
+         content_path resource.Resource.id;
+       remove_file content_path;
+       Utils.log_message "done\n%!")
     resources
+
+let delete_resources cache resources =
+  Resource.delete_resources cache resources;
+  delete_files_from_cache cache resources
 
 (* Setup *)
 let setup_db cache =
@@ -1034,6 +1073,7 @@ let setup_db cache =
          CREATE INDEX IF NOT EXISTS path_index ON resource (path, trashed); \
          CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path, trashed); \
          CREATE INDEX IF NOT EXISTS remote_id_index ON resource (remote_id); \
+         CREATE INDEX IF NOT EXISTS last_update_index ON resource (last_update); \
          CREATE TABLE IF NOT EXISTS metadata ( \
             id INTEGER PRIMARY KEY, \
             etag TEXT NOT NULL, \
@@ -1044,6 +1084,7 @@ let setup_db cache =
             remaining_change_ids INTEGER NOT NULL, \
             root_folder_id TEXT NOT NULL, \
             permission_id TEXT NOT NULL, \
+            cache_size INTEGER NOT NULL, \
             last_update REAL NOT NULL \
          ); \
          COMMIT TRANSACTION;" |> ignore)

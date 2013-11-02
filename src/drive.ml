@@ -225,7 +225,7 @@ let get_unique_filename_from_file file filename_table =
     (Cache.Resource.is_document_mime_type file.File.mimeType)
     (fun config ->
       Cache.Resource.get_format_from_mime_type file.File.mimeType config)
-    filename_table 
+    filename_table
 
 let recompute_path resource title =
   (* TODO: make an optimized version of build_resource_tables that
@@ -250,34 +250,34 @@ let update_resource_from_file ?state resource file =
           else resource.Cache.Resource.path
       | None -> resource.Cache.Resource.path
   in
-    { resource with
-          Cache.Resource.etag = Some file.File.etag;
-          remote_id = Some file.File.id;
-          title = Some file.File.title;
-          mime_type = Some file.File.mimeType;
-          created_date = Some (Netdate.since_epoch file.File.createdDate);
-          modified_date = Some (Netdate.since_epoch file.File.modifiedDate);
-          last_viewed_by_me_date =
-            Some (Netdate.since_epoch file.File.lastViewedByMeDate);
-          parent_remote_ids =
-            Some (Cache.Resource.render_parent_remote_ids file.File.parents);
-          download_url = Some file.File.downloadUrl;
-          export_links =
-            Some (Cache.Resource.render_export_links file.File.exportLinks);
-          file_extension = Some file.File.fileExtension;
-          md5_checksum = Some file.File.md5Checksum;
-          file_size = Some file.File.fileSize;
-          editable = Some file.File.editable;
-          trashed = Some file.File.labels.File.Labels.trashed;
-          alternate_link = Some file.File.alternateLink;
-          change_id = largest_change_id;
-          last_update = Unix.gettimeofday ();
-          path;
-          state =
-            if file.File.labels.File.Labels.restricted then
-              Cache.Resource.State.Restricted
-            else Option.default resource.Cache.Resource.state state;
-    }
+  { resource with
+        Cache.Resource.etag = Some file.File.etag;
+        remote_id = Some file.File.id;
+        title = Some file.File.title;
+        mime_type = Some file.File.mimeType;
+        created_date = Some (Netdate.since_epoch file.File.createdDate);
+        modified_date = Some (Netdate.since_epoch file.File.modifiedDate);
+        last_viewed_by_me_date =
+          Some (Netdate.since_epoch file.File.lastViewedByMeDate);
+        parent_remote_ids =
+          Some (Cache.Resource.render_parent_remote_ids file.File.parents);
+        download_url = Some file.File.downloadUrl;
+        export_links =
+          Some (Cache.Resource.render_export_links file.File.exportLinks);
+        file_extension = Some file.File.fileExtension;
+        md5_checksum = Some file.File.md5Checksum;
+        file_size = Some file.File.fileSize;
+        editable = Some file.File.editable;
+        trashed = Some file.File.labels.File.Labels.trashed;
+        alternate_link = Some file.File.alternateLink;
+        change_id = largest_change_id;
+        last_update = Unix.gettimeofday ();
+        path;
+        state =
+          if file.File.labels.File.Labels.restricted then
+            Cache.Resource.State.Restricted
+          else Option.default resource.Cache.Resource.state state;
+  }
 
 let get_parent_resource_ids file =
   List.map
@@ -327,11 +327,59 @@ let get_root_resource trashed =
             Utils.log_message "done\n%!";
             inserted
       | Some resource -> resource
+
+let shrink_cache file_size max_cache_size_mb metadata cache =
+  let update_cache_size new_size metadata cache =
+    let updated_metadata = metadata
+      |> Cache.Metadata.cache_size ^= new_size in
+    Utils.log_message "Updating cache size (%Ld) in db...%!" new_size;
+    Cache.Metadata.insert_metadata cache updated_metadata;
+    Utils.log_message "done\nUpdating context...%!";
+    Context.update_ctx (Context.metadata ^= Some updated_metadata);
+    Utils.log_message "done\n%!";
+  in
+
+  let check_cache_size cache_size =
+    let mb = 1048576L in
+    let max_cache_size = Int64.mul (Int64.of_int max_cache_size_mb) mb in
+    cache_size <= max_cache_size
+  in
+
+  if file_size > 0L then begin
+    let target_size = Int64.add metadata.Cache.Metadata.cache_size file_size in
+    if check_cache_size target_size then begin
+      update_cache_size target_size metadata cache;
+    end else begin
+      let resources =
+        Cache.Resource.select_resources_order_by_last_update cache in
+      let (new_cache_size, resources_to_free) =
+        List.fold_left
+          (fun (new_cache_size, rs) resource ->
+            if check_cache_size new_cache_size then
+              (new_cache_size, rs)
+            else begin
+              let new_size = Int64.sub
+                new_cache_size
+                (Option.get resource.Cache.Resource.file_size) in
+              (new_size, resource :: rs)
+            end)
+          (target_size, [])
+          resources in
+      update_cache_size new_cache_size metadata cache;
+      List.iter
+        (fun resource ->
+           let updated_resource = resource
+             |> Cache.Resource.state ^= Cache.Resource.State.ToDownload in
+           update_cached_resource cache updated_resource)
+        resources_to_free;
+      Cache.delete_files_from_cache cache resources_to_free
+    end
+  end
 (* END Resource cache *)
 
 (* Metadata *)
 let get_metadata () =
-  let request_metadata last_change_id etag =
+  let request_metadata last_change_id etag cache_size =
     let std_params =
       { GapiService.StandardParameters.default with
             GapiService.StandardParameters.fields =
@@ -354,6 +402,7 @@ let get_metadata () =
       remaining_change_ids = about.About.remainingChangeIds;
       root_folder_id = about.About.rootFolderId;
       permission_id = about.About.permissionId;
+      cache_size;
       last_update = Unix.gettimeofday ();
     } in
     SessionM.return metadata
@@ -502,10 +551,13 @@ let get_metadata () =
       Option.map_default
         Cache.Metadata.largest_change_id.GapiLens.get 0L metadata in
     let etag = Option.map Cache.Metadata.etag.GapiLens.get metadata in
+    let cache_size =
+      Option.map_default
+        Cache.Metadata.cache_size.GapiLens.get 0L metadata in
     Utils.log_message "Refreshing metadata...%!";
     let updated_metadata =
       try
-        do_request (request_metadata last_change_id etag) |> fst
+        do_request (request_metadata last_change_id etag cache_size) |> fst
       with GapiRequest.NotModified _ ->
         Utils.log_message "not modified...%!";
         let m = Option.get metadata in
@@ -740,8 +792,41 @@ let check_md5_checksum resource =
     end;
   end else false
 
-let download_resource resource =
-  let get_export_link fmt =
+let with_retry f resource =
+  let rec loop res n =
+    with_try
+      (f res)
+      (function
+           Resource_busy as e ->
+             if n > 4 then throw e
+             else begin
+               GapiUtils.wait_exponential_backoff n;
+               let fileId = res.Cache.Resource.remote_id |> Option.get in
+               FilesResource.get
+                 ~std_params:file_std_params
+                 ~fileId >>= fun file ->
+               let refreshed_resource =
+                 update_resource_from_file
+                   ~state:Cache.Resource.State.ToDownload res file in
+               let context = Context.get_ctx () in
+               let cache = context.Context.cache in
+               update_cached_resource cache refreshed_resource;
+               let n' = n + 1 in
+               Utils.log_message
+                 "Retry (%d) downloading resource (id=%Ld)...\n%!"
+                 n' resource.Cache.Resource.id;
+               loop refreshed_resource n'
+             end
+         | e -> throw e)
+  in
+    loop resource 0
+
+let is_desktop_format resource config =
+  Cache.Resource.get_format resource config = "desktop"
+
+let get_export_link fmt resource =
+  if fmt = "desktop" then ""
+  else begin
     let mime_type = Cache.Resource.mime_type_of_format fmt in
     let export_links =
       Option.map_default
@@ -749,13 +834,77 @@ let download_resource resource =
         []
         resource.Cache.Resource.export_links
     in
-      List.fold_left
-        (fun accu (m, l) ->
-           if m = mime_type then l else accu)
-        ""
-        export_links
+    List.fold_left
+      (fun accu (m, l) ->
+         if m = mime_type then l else accu)
+      ""
+      export_links
+  end
+
+let create_desktop_entry resource content_path =
+  Utils.with_out_channel
+    ~mode:[Open_creat; Open_trunc; Open_wronly] content_path
+    (fun out_ch ->
+      Printf.fprintf out_ch
+        "[Desktop Entry]\n\
+         Type=Link\n\
+         Name=%s\n\
+         URL=%s\n"
+        (Option.default "" resource.Cache.Resource.title)
+        (Option.default "" resource.Cache.Resource.alternate_link);
+      SessionM.return ())
+
+let get_resource_size resource =
+  let get_content_length headers =
+    List.fold_left
+      (fun u h ->
+         match h with
+             GapiCore.Header.ContentLength value -> Some (Int64.of_string value)
+           | _ -> u)
+      None
+      headers
   in
 
+  let context = Context.get_ctx () in
+  let cache = Context.get_cache () in
+  let config = context |. Context.config_lens in
+  Utils.log_message "Getting resource size (id=%Ld)...%!"
+    resource.Cache.Resource.id;
+  let download_link =
+    if Cache.Resource.is_document resource then
+      let config = context |. Context.config_lens in
+      let fmt = Cache.Resource.get_format resource config in
+      get_export_link fmt resource
+    else
+      Option.default "" resource.Cache.Resource.download_url in
+  begin if download_link <> "" then
+    with_try
+      (GapiService.head download_link get_content_length)
+      (function
+           GapiRequest.PermissionDenied session ->
+             Utils.log_message "Server error: Permission denied.\n%!";
+             throw Permission_denied
+         | GapiRequest.RequestTimeout _ ->
+             Utils.log_message "Server error: Request Timeout.\n%!";
+             throw Resource_busy
+         | GapiRequest.PreconditionFailed _
+         | GapiRequest.Conflict _ ->
+             Utils.log_message "Server error: Conflict.\n%!";
+             throw Resource_busy
+         | e -> throw e)
+  else if is_desktop_format resource config then begin
+    let content_path = Cache.get_content_path cache resource in
+    create_desktop_entry resource content_path >>= fun () ->
+    let stats = Unix.LargeFile.stat content_path in
+    SessionM.return (Some stats.Unix.LargeFile.st_size)
+  end else
+    SessionM.return None
+  end >>= fun content_length ->
+  Utils.log_message "done: Content-Length=%Ld\n%!"
+    (Option.default 0L content_length);
+  SessionM.return content_length
+
+let download_resource resource =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
@@ -765,29 +914,28 @@ let download_resource resource =
       content_path;
     close_out (open_out content_path);
     SessionM.return () in
-  let create_desktop_entry () =
-    Utils.with_out_channel
-      ~mode:[Open_creat; Open_trunc; Open_wronly] content_path
-      (fun out_ch ->
-        Printf.fprintf out_ch
-          "[Desktop Entry]\n\
-           Type=Link\n\
-           Name=%s\n\
-           URL=%s\n" 
-          (Option.default "" resource.Cache.Resource.title)
-          (Option.default "" resource.Cache.Resource.alternate_link);
-        SessionM.return ()) in
+  let shrink_cache () =
+    Option.may
+      (fun file_size ->
+         let metadata = context.Context.metadata |> Option.get in
+         shrink_cache
+           file_size
+           config.Config.max_cache_size_mb
+           metadata
+           cache)
+      resource.Cache.Resource.file_size;
+    SessionM.return () in
   let do_download () =
     Utils.log_message "Downloading resource (id=%Ld)...%!"
       resource.Cache.Resource.id;
     let download_link =
       if Cache.Resource.is_document resource then
         let fmt = Cache.Resource.get_format resource config in
-        if fmt = "desktop" then ""
-        else get_export_link fmt
+        get_export_link fmt resource
       else
         Option.default "" resource.Cache.Resource.download_url in
-    begin if download_link <> "" then
+    begin if download_link <> "" then begin
+      shrink_cache () >>= fun () ->
       with_try
         (let media_destination = GapiMediaResource.TargetFile content_path in
          GapiService.download_resource download_link media_destination)
@@ -806,8 +954,8 @@ let download_resource resource =
                Utils.log_message "Server error: Forbidden.\n%!";
                throw Resource_busy
            | e -> throw e)
-    else if Cache.Resource.get_format resource config = "desktop" then
-      create_desktop_entry ()
+    end else if is_desktop_format resource config then
+      create_desktop_entry resource content_path
     else
       create_empty_file ()
     end >>= fun () ->
@@ -839,35 +987,6 @@ let download_resource resource =
         end >>
         SessionM.return content_path
 
-let download_resource_with_retry resource =
-  let rec loop res n =
-    with_try
-      (download_resource res)
-      (function
-           Resource_busy as e ->
-             if n > 4 then throw e
-             else begin
-               GapiUtils.wait_exponential_backoff n;
-               let fileId = res.Cache.Resource.remote_id |> Option.get in
-               FilesResource.get
-                 ~std_params:file_std_params
-                 ~fileId >>= fun file ->
-               let refreshed_resource =
-                 update_resource_from_file
-                   ~state:Cache.Resource.State.ToDownload res file in
-               let context = Context.get_ctx () in
-               let cache = context.Context.cache in
-               update_cached_resource cache refreshed_resource;
-               let n' = n + 1 in
-               Utils.log_message
-                 "Retry (%d) downloading resource (id=%Ld)...\n%!"
-                 n' resource.Cache.Resource.id;
-               loop refreshed_resource n'
-             end
-         | e -> throw e)
-  in
-    loop resource 0
-
 let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only
 
@@ -880,21 +999,29 @@ let is_file_read_only resource =
 let get_attr path =
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
+  let cache = context.Context.cache in
   let (path_in_cache, trashed) = get_path_in_cache path in
 
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
-    begin if Cache.Resource.is_document resource &&
-             config.Config.download_docs then
+    let content_path = Cache.get_content_path cache resource in
+    if Sys.file_exists content_path then begin
+      SessionM.return (resource, content_path)
+    end else begin if Cache.Resource.is_document resource &&
+        config.Config.download_docs &&
+        resource.Cache.Resource.file_size = Some 0L then begin
       with_try
-        (download_resource_with_retry resource)
+        (with_retry get_resource_size resource)
         (function
-             File_not_found -> SessionM.return ""
-           | e -> throw e)
-    else
-      SessionM.return ""
-    end >>= fun content_path ->
-    SessionM.return (resource, content_path)
+             File_not_found -> SessionM.return None
+           | e -> throw e) >>= fun file_size ->
+      let updated_resource = resource
+        |> Cache.Resource.file_size ^= file_size in
+      Cache.Resource.update_resource cache updated_resource;
+      SessionM.return (updated_resource, "")
+    end else
+      SessionM.return (resource, "")
+    end
   in
 
   if path = root_directory then
@@ -927,7 +1054,7 @@ let get_attr path =
           then 0o555
           else 0o777)
       in
-        perm land mask in
+      perm land mask in
     let st_size =
       match stat with
           None ->
@@ -956,15 +1083,15 @@ let get_attr path =
         | Some st ->
             st.Unix.LargeFile.st_ctime
     in
-      { context.Context.mountpoint_stats with 
-            Unix.LargeFile.st_nlink;
-            st_kind;
-            st_perm;
-            st_size;
-            st_atime;
-            st_mtime;
-            st_ctime;
-      }
+    { context.Context.mountpoint_stats with
+          Unix.LargeFile.st_nlink;
+          st_kind;
+          st_perm;
+          st_size;
+          st_atime;
+          st_mtime;
+          st_ctime;
+    }
   end
 (* END stat *)
 
@@ -1202,10 +1329,10 @@ let utime path atime mtime =
 (* read *)
 let read path buf offset file_descr =
   let (path_in_cache, trashed) = get_path_in_cache path in
-    
+
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
-    download_resource_with_retry resource
+    with_retry download_resource resource
   in
 
   let content_path = do_request request_resource |> fst in
@@ -1224,7 +1351,7 @@ let write path buf offset file_descr =
   let cache = context.Context.cache in
   let write_to_resource =
     get_resource path_in_cache trashed >>= fun resource ->
-    download_resource_with_retry resource >>= fun content_path ->
+    with_retry download_resource resource >>= fun content_path ->
     Utils.log_message "Writing local file (path=%s,trashed=%b)...%!"
       path_in_cache trashed;
     let bytes =
@@ -1280,6 +1407,16 @@ let upload_if_dirty path =
           update_resource_from_file
             ~state:Cache.Resource.State.InSync resource file in
         update_cached_resource cache updated_resource;
+        let metadata = context.Context.metadata |> Option.get in
+        let config = context |. Context.config_lens in
+        Option.may
+          (fun file_size ->
+             shrink_cache
+               file_size
+               config.Config.max_cache_size_mb
+               metadata
+               cache)
+          updated_resource.Cache.Resource.file_size;
         SessionM.return ()
     | _ ->
         SessionM.return ()
