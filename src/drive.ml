@@ -328,17 +328,16 @@ let get_root_resource trashed =
             inserted
       | Some resource -> resource
 
-let shrink_cache file_size max_cache_size_mb metadata cache =
-  let update_cache_size new_size metadata cache =
-    let updated_metadata = metadata
-      |> Cache.Metadata.cache_size ^= new_size in
-    Utils.log_message "Updating cache size (%Ld) in db...%!" new_size;
-    Cache.Metadata.insert_metadata cache updated_metadata;
-    Utils.log_message "done\nUpdating context...%!";
-    Context.update_ctx (Context.metadata ^= Some updated_metadata);
-    Utils.log_message "done\n%!";
-  in
+let update_cache_size new_size metadata cache =
+  let updated_metadata = metadata
+    |> Cache.Metadata.cache_size ^= new_size in
+  Utils.log_message "Updating cache size (%Ld) in db...%!" new_size;
+  Cache.Metadata.insert_metadata cache updated_metadata;
+  Utils.log_message "done\nUpdating context...%!";
+  Context.update_ctx (Context.metadata ^= Some updated_metadata);
+  Utils.log_message "done\n%!"
 
+let shrink_cache file_size max_cache_size_mb metadata cache =
   let check_cache_size cache_size =
     let mb = 1048576L in
     let max_cache_size = Int64.mul (Int64.of_int max_cache_size_mb) mb in
@@ -372,9 +371,17 @@ let shrink_cache file_size max_cache_size_mb metadata cache =
              |> Cache.Resource.state ^= Cache.Resource.State.ToDownload in
            update_cached_resource cache updated_resource)
         resources_to_free;
-      Cache.delete_files_from_cache cache resources_to_free
+      Cache.delete_files_from_cache cache resources_to_free |> ignore
     end
   end
+
+let delete_resources metadata cache resources =
+  Cache.Resource.delete_resources cache resources;
+  let total_size =
+    Cache.delete_files_from_cache cache resources in
+  let new_cache_size =
+    Int64.sub metadata.Cache.Metadata.cache_size total_size in
+  update_cache_size new_cache_size metadata cache
 (* END Resource cache *)
 
 (* Metadata *)
@@ -538,7 +545,7 @@ let get_metadata () =
           update_resource_cache
             (fun change -> change.Change.deleted)
             get_file_id_from_change
-            Cache.delete_resources;
+            (delete_resources new_metadata);
           if List.length changes > 0 then begin
             Utils.log_message "done\nInvalidating trash bin resource...%!";
             Cache.Resource.invalidate_trash_bin cache change_id;

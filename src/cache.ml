@@ -1024,21 +1024,25 @@ let get_content_path cache resource =
 let delete_files_from_cache cache resources =
   let remove_file path =
     try
-      if Sys.file_exists path then Sys.remove path
-    with e -> Utils.log_exception e
+      if Sys.file_exists path then begin
+        let stats = Unix.LargeFile.stat path in
+        let size = stats.Unix.LargeFile.st_size in
+        Sys.remove path;
+        size
+      end else 0L
+    with e -> Utils.log_exception e; 0L
   in
-  List.iter
-    (fun resource ->
+  List.fold_left
+    (fun total_size resource ->
        let content_path = get_content_path cache resource in
        Utils.log_message "Removing file (%s: resource %Ld) from cache...%!"
          content_path resource.Resource.id;
-       remove_file content_path;
-       Utils.log_message "done\n%!")
+       let size = remove_file content_path in
+       let new_size = Int64.add total_size size in
+       Utils.log_message "done\n%!";
+       new_size)
+    0L
     resources
-
-let delete_resources cache resources =
-  Resource.delete_resources cache resources;
-  delete_files_from_cache cache resources
 
 (* Setup *)
 let setup_db cache =
