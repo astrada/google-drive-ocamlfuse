@@ -51,7 +51,12 @@ let get_config_store debug app_dir =
 
 (* Application state *)
 let generate_request_id () =
-  Cryptokit.Random.string rng 32 |> Base64.str_encode
+  Cryptokit.Random.string rng 32
+    |> Base64.str_encode
+    |> ExtString.String.replace_chars
+      (function
+        | '+' -> "-"
+        | c -> ExtString.String.of_char c)
 
 let create_empty_state_store app_dir =
   let request_id = generate_request_id () in
