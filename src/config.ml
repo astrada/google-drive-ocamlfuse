@@ -159,7 +159,7 @@ let default = {
   conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
   docs_file_extension = true;
-  max_cache_size_mb = 50;
+  max_cache_size_mb = 512;
 }
 
 let default_debug = {
@@ -180,7 +180,7 @@ let default_debug = {
   conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
   docs_file_extension = true;
-  max_cache_size_mb = 1;
+  max_cache_size_mb = 512;
 }
 
 let of_table table =
