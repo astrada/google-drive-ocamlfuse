@@ -402,7 +402,9 @@ let close_db db =
     if n > 4 then begin
       let thread_id = Utils.get_thread_id () in
       Utils.log_message "Thread id=%d: Error: cannot close db\n%!" thread_id;
-      failwith "Error: cannot close db"
+      Printf.eprintf "Error: cannot close sqlite db.\n\
+        Please restart the program.\n%!";
+      exit 1
     end else if not (Sqlite3.db_close db) then begin
       Unix.sleep 1;
       try_close (succ n)
