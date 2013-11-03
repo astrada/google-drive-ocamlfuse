@@ -273,10 +273,7 @@ let update_resource_from_file ?state resource file =
         change_id = largest_change_id;
         last_update = Unix.gettimeofday ();
         path;
-        state =
-          if file.File.labels.File.Labels.restricted then
-            Cache.Resource.State.Restricted
-          else Option.default resource.Cache.Resource.state state;
+        state = Option.default resource.Cache.Resource.state state;
   }
 
 let get_parent_resource_ids file =
@@ -972,7 +969,7 @@ let download_resource resource =
     Cache.Resource.update_resource cache updated_resource;
     SessionM.return content_path
   in
-  match resource.Cache.Resource.state with
+  begin match resource.Cache.Resource.state with
       Cache.Resource.State.InSync
     | Cache.Resource.State.ToUpload ->
         if Sys.file_exists content_path then
@@ -986,13 +983,8 @@ let download_resource resource =
           do_download ()
     | Cache.Resource.State.NotFound ->
         throw File_not_found
-    | Cache.Resource.State.Restricted ->
-        begin if not (Sys.file_exists content_path) then
-          create_empty_file ()
-        else
-          SessionM.return ()
-        end >>
-        SessionM.return content_path
+  end >>
+  SessionM.return content_path
 
 let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only

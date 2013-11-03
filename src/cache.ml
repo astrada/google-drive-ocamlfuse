@@ -440,21 +440,18 @@ struct
       | ToDownload
       | ToUpload
       | NotFound
-      | Restricted
 
     let to_string = function
         InSync -> "InSync"
       | ToDownload -> "ToDownload"
       | ToUpload -> "ToUpload"
       | NotFound -> "NotFound"
-      | Restricted -> "Restricted"
 
     let of_string = function
         "InSync" -> InSync
       | "ToDownload" -> ToDownload
       | "ToUpload" -> ToUpload
       | "NotFound" -> NotFound
-      | "Restricted" -> Restricted
       | s -> failwith ("Resource state unexpected: " ^ s)
 
   end
