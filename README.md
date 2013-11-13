@@ -33,7 +33,7 @@ Getting started
 ### Installation
 
 I've uploaded .deb packages to my [PPA](https://launchpad.net/~alessandro-strada/+archive/ppa),
-for Ubuntu 13.04, 12.10, 12.04. In order to to install it, use the commands below:
+for Ubuntu 13.10, 13.04, 12.10, 12.04. In order to to install it, use the commands below:
 
     $ sudo add-apt-repository ppa:alessandro-strada/ppa
     $ sudo apt-get update
@@ -132,7 +132,7 @@ and check for changes only every 60 seconds (configurable). So, if you make a
 change to your documents (server side), you won't see it immediately in the
 mounted filesystem.
 
-Note also that, at least for now, Google Documents will be exported read-only.
+Note also that Google Documents will be exported read-only.
 
 ### Support
 
@@ -141,4 +141,3 @@ to this [mailing
 list](https://lists.forge.ocamlcore.org/mailman/listinfo/gdfuse-devel). Or you
 may want to open an
 [issue](https://github.com/astrada/google-drive-ocamlfuse/issues) on github.
-
