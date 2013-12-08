@@ -341,7 +341,7 @@ let shrink_cache file_size max_cache_size_mb metadata cache =
     cache_size <= max_cache_size
   in
 
-  if file_size > 0L then begin
+  if file_size <> 0L then begin
     let target_size = Int64.add metadata.Cache.Metadata.cache_size file_size in
     if check_cache_size target_size then begin
       update_cache_size target_size metadata cache;
@@ -1373,6 +1373,7 @@ let upload_if_dirty path =
 
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
+  let config = context |. Context.config_lens in
   get_resource path_in_cache trashed >>= fun resource ->
   match resource.Cache.Resource.state with
       Cache.Resource.State.ToUpload ->
@@ -1395,8 +1396,10 @@ let upload_if_dirty path =
         FilesResource.get
           ~std_params:file_std_params
           ~fileId:remote_id >>= fun refreshed_file ->
+        let newRevision = config |. Config.new_revision in
         FilesResource.update
           ~std_params:file_std_params
+          ~newRevision
           ~media_source
           ~fileId:remote_id
           refreshed_file >>= fun updated_file ->
@@ -1667,28 +1670,28 @@ let rename path new_path =
 
 (* truncate *)
 let truncate path size =
-  let update =
-    let truncate_file resource =
-      let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-      let etag = Option.default "" resource.Cache.Resource.etag in
-      Utils.log_message "Truncating file (id=%s)...%!" remote_id;
-      FilesResource.patch
-        ~std_params:file_std_params
-        ~fileId:remote_id
-        { File.empty with
-              File.etag;
-              fileSize = size; } >>= fun file ->
-      Utils.log_message "done\n%!";
-      SessionM.return (Some file)
-    in
-    update_remote_resource
-      ~update_file_in_cache:(
-        fun content_path ->
-          Unix.LargeFile.truncate content_path size)
-      path
-      truncate_file
-      truncate_file
+  let (path_in_cache, trashed) = get_path_in_cache path in
+  let truncate_resource =
+    get_resource path_in_cache trashed >>= fun resource ->
+    with_retry download_resource resource >>= fun content_path ->
+    let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+    Utils.log_message "Truncating file (id=%s)...%!" remote_id;
+    let context = Context.get_ctx () in
+    let cache = context.Context.cache in
+    let metadata = context.Context.metadata |> Option.get in
+    let config = context |. Context.config_lens in
+    let updated_resource = resource
+      |> Cache.Resource.file_size ^= Some size
+      |> Cache.Resource.state ^= Cache.Resource.State.ToUpload in
+    update_cached_resource cache updated_resource;
+    shrink_cache
+      (Int64.sub size (Option.default 0L resource.Cache.Resource.file_size))
+      config.Config.max_cache_size_mb
+      metadata cache;
+    Unix.LargeFile.truncate content_path size;
+    Utils.log_message "done\n%!";
+    SessionM.return ()
   in
-    do_request update |> ignore
+  do_request truncate_resource |> ignore
 (* END truncate *)
 
