@@ -61,6 +61,8 @@ type t = {
   docs_file_extension : bool;
   (* Maximum cache size in megabytes *)
   max_cache_size_mb : int;
+  (* Specifies whether a file overwrite should instead create a new revision *)
+  new_revision : bool;
 }
 
 let debug = {
@@ -135,6 +137,10 @@ let max_cache_size_mb = {
   GapiLens.get = (fun x -> x.max_cache_size_mb);
   GapiLens.set = (fun v x -> { x with max_cache_size_mb = v })
 }
+let new_revision = {
+  GapiLens.get = (fun x -> x.new_revision);
+  GapiLens.set = (fun v x -> { x with new_revision = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -160,6 +166,7 @@ let default = {
   keep_duplicates = false;
   docs_file_extension = true;
   max_cache_size_mb = 512;
+  new_revision = true;
 }
 
 let default_debug = {
@@ -181,6 +188,7 @@ let default_debug = {
   keep_duplicates = false;
   docs_file_extension = true;
   max_cache_size_mb = 512;
+  new_revision = true;
 }
 
 let of_table table =
@@ -217,6 +225,8 @@ let of_table table =
         get "docs_file_extension" bool_of_string default.docs_file_extension;
       max_cache_size_mb =
         get "max_cache_size_mb" int_of_string default.max_cache_size_mb;
+      new_revision =
+        get "new_revision" bool_of_string default.new_revision;
     }
 
 let to_table data =
@@ -241,6 +251,7 @@ let to_table data =
     add "keep_duplicates" (data.keep_duplicates |> string_of_bool);
     add "docs_file_extension" (data.docs_file_extension |> string_of_bool);
     add "max_cache_size_mb" (data.max_cache_size_mb |> string_of_int);
+    add "new_revision" (data.new_revision |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =
