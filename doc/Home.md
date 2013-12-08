@@ -5,3 +5,5 @@ Welcome to the google-drive-ocamlfuse wiki!
 * [[Authorization]]
 * [[Configuration]]
 * [[Troubleshooting]]
+* [[Headless Usage & Authorization]]
+* [[Automounting]]

@@ -4,7 +4,7 @@ The configuration file is saved in `~/.gdfuse/default/config` (or `~/.gdfuse/lab
 
 Specifies if debug mode is turned on: if `true`, logs verbose output to `~/.gdfuse/default/gdfuse.log`, and logs every curl request to `~/.gdfuse/default/curl.log`:
 
-    debug=true
+    debug=false
 
 Specifies the interval in seconds between queries to detect server-side changes:
 
@@ -26,23 +26,23 @@ Specifies whether to download Google Docs (these files are read-only, even if `r
 
     download_docs=true
 
-Text document [export format](https://developers.google.com/google-apps/documents-list/#valid_download_formats_for_text_documents):
+Text document [export format](https://developers.google.com/google-apps/documents-list/#valid_download_formats_for_text_documents). `desktop` format creates a shortcut to the document that will be opened in the web browser for edit:
 
     document_format=odt
     
-Drawings [export format](https://developers.google.com/google-apps/documents-list/#valid_download_formats_for_drawings):
+Drawings [export format](https://developers.google.com/google-apps/documents-list/#valid_download_formats_for_drawings). `desktop` format creates a shortcut to the document that will be opened in the web browser for edit:
 
     drawing_format=png
 
-Forms [export format](https://developers.google.com/google-apps/documents-list/#valid_formats_for_spreadsheets):
+Forms [export format](https://developers.google.com/google-apps/documents-list/#valid_formats_for_spreadsheets). `desktop` format creates a shortcut to the document that will be opened in the web browser for edit:
 
     form_format=ods
 
-Presentations [export format](https://developers.google.com/google-apps/documents-list/#valid_formats_for_presentations):
+Presentations [export format](https://developers.google.com/google-apps/documents-list/#valid_formats_for_presentations). `desktop` format creates a shortcut to the document that will be opened in the web browser for edit:
 
     presentation_format=pdf
 
-Spreadsheets [export format](https://developers.google.com/google-apps/documents-list/#valid_formats_for_spreadsheets):
+Spreadsheets [export format](https://developers.google.com/google-apps/documents-list/#valid_formats_for_spreadsheets). `desktop` format creates a shortcut to the document that will be opened in the web browser for edit:
 
     spreadsheet_format=ods
 
@@ -72,3 +72,14 @@ will always keep the target file:
 
     keep_duplicates=false
 
+Specifies whether to display file extensions for Google Docs:
+
+    docs_file_extension=true
+
+Specifies the maximum cache size in MB:
+
+    max_cache_size_mb=512
+
+Specifies whether overwriting a file generates a new revision:
+
+    new_revision = true

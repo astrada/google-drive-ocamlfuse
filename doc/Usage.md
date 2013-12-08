@@ -17,3 +17,8 @@ Using `label` to distinguish different accounts. The program will use the direct
 To unmount the filesystem, issue this command:
 
         $ fusermount -u mountpoint
+
+Options
+-------
+
+Run `google-drive-ocamlfuse -help` to get all the command options available. To find more details about `-o` mount options, you can refer to this [page](http://blog.woralelandia.com/2012/07/16/fuse-mount-options/).
