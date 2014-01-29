@@ -89,6 +89,7 @@ type application_params = {
   client_secret : string;
   mountpoint : string;
   clear_cache : bool;
+  headless : bool;
 }
 
 let setup_application params =
@@ -144,6 +145,7 @@ let setup_application params =
     if params.client_secret = ""
     then current_config |. Config.client_secret
     else params.client_secret in
+  let headless = params.headless in
   let config =
     { current_config with
           Config.debug = params.debug;
@@ -201,9 +203,13 @@ let setup_application params =
   let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
       if client_id = "" || client_secret = "" then
-        get_auth_tokens_from_server ()
+        if headless then
+          failwith ("In headless mode, you should specify a client id and a \
+                     client secret")
+        else
+          get_auth_tokens_from_server ()
       else
-        Oauth2.get_access_token ()
+        Oauth2.get_access_token headless
     else
       Utils.log_message "Refresh token already present.\n%!"
 (* END setup *)
@@ -395,6 +401,7 @@ let () =
   let client_id = ref "" in
   let client_secret = ref "" in
   let clear_cache = ref false in
+  let headless = ref false in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -440,6 +447,9 @@ let () =
        "-cc",
        Arg.Set clear_cache,
        " clear cache";
+       "-headless",
+       Arg.Set headless,
+       " enable headless mode. Default is false.";
       ]) in
   let () =
     Arg.parse
@@ -464,7 +474,8 @@ let () =
           client_id = !client_id;
           client_secret = !client_secret;
           mountpoint = !mountpoint;
-          clear_cache = !clear_cache
+          clear_cache = !clear_cache;
+          headless = !headless;
         } in
         if !mountpoint = "" then begin
           setup_application { params with mountpoint = "." };

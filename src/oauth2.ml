@@ -49,8 +49,9 @@ let do_request interact =
   in
     try_request 0
 
-(* Get access token using the installed apps flow *)
-let get_access_token () =
+(* Get access token using the installed apps flow or print authorization URL
+ * if headleass mode is on *)
+let get_access_token headless =
   let context = Context.get_ctx () in
   let config_lens = context |. Context.config_lens in
   let client_id = config_lens |. Config.client_id in
@@ -64,7 +65,11 @@ let get_access_token () =
                   ~scope
                   ~response_type:"code"
                   client_id in
-      Utils.start_browser url;
+      if headless then begin
+        Printf.printf
+          "Please, open the following URL in a web browser: %s\n%!"
+          url;
+      end else Utils.start_browser url;
       Printf.printf "Please enter the verification code: %!";
       input_line stdin
     else
