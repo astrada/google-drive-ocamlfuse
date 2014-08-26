@@ -152,9 +152,9 @@ let setup_application params =
           client_id;
           client_secret;
     } in
-  Context.save_config_store config_store;
   let config_store = config_store
     |> Context.ConfigFileStore.data ^= config in
+  Context.save_config_store config_store;
   let gapi_config = Config.create_gapi_config config app_dir in
   let state_store = get_state_store app_dir in
   let cache = Cache.create_cache app_dir config in
