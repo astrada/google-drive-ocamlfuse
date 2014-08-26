@@ -63,6 +63,9 @@ type t = {
   max_cache_size_mb : int;
   (* Specifies whether a file overwrite should instead create a new revision *)
   new_revision : bool;
+  (* Specifies whether not to log requests/responses (CURL). Set to true to
+   * avoid a segmentation fault on some architectures. *)
+  curl_debug_off : bool;
 }
 
 let debug = {
@@ -141,6 +144,14 @@ let new_revision = {
   GapiLens.get = (fun x -> x.new_revision);
   GapiLens.set = (fun v x -> { x with new_revision = v })
 }
+let new_revision = {
+  GapiLens.get = (fun x -> x.new_revision);
+  GapiLens.set = (fun v x -> { x with new_revision = v })
+}
+let curl_debug_off = {
+  GapiLens.get = (fun x -> x.curl_debug_off);
+  GapiLens.set = (fun v x -> { x with curl_debug_off = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -167,6 +178,7 @@ let default = {
   docs_file_extension = true;
   max_cache_size_mb = 512;
   new_revision = true;
+  curl_debug_off = false;
 }
 
 let default_debug = {
@@ -189,6 +201,7 @@ let default_debug = {
   docs_file_extension = true;
   max_cache_size_mb = 512;
   new_revision = true;
+  curl_debug_off = false;
 }
 
 let of_table table =
@@ -227,6 +240,8 @@ let of_table table =
         get "max_cache_size_mb" int_of_string default.max_cache_size_mb;
       new_revision =
         get "new_revision" bool_of_string default.new_revision;
+      curl_debug_off =
+        get "curl_debug_off" bool_of_string default.curl_debug_off;
     }
 
 let to_table data =
@@ -252,6 +267,7 @@ let to_table data =
     add "docs_file_extension" (data.docs_file_extension |> string_of_bool);
     add "max_cache_size_mb" (data.max_cache_size_mb |> string_of_int);
     add "new_revision" (data.new_revision |> string_of_bool);
+    add "curl_debug_off" (data.curl_debug_off |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =
@@ -270,7 +286,7 @@ let debug_print out_ch start_time curl info_type info =
 
 let create_gapi_config config app_dir =
   let gapi_config =
-    if config.debug then
+    if config.debug && (not config.curl_debug_off) then
       let out_ch = open_out (app_dir |. AppDir.curl_log_path) in
       let debug_function = debug_print out_ch (Unix.gettimeofday ()) in
         GapiConfig.default_debug
