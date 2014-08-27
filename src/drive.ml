@@ -1069,18 +1069,20 @@ let get_attr path =
               |. GapiLens.option_get
         | Some st ->
             st.Unix.LargeFile.st_atime in
+    let is_to_upload =
+      resource.Cache.Resource.state = Cache.Resource.State.ToUpload in
     let st_mtime =
       match stat with
-          None ->
-            resource |. Cache.Resource.modified_date |. GapiLens.option_get
-        | Some st ->
-            st.Unix.LargeFile.st_mtime in
+          Some st when is_to_upload ->
+            st.Unix.LargeFile.st_mtime
+        | _ ->
+            resource |. Cache.Resource.modified_date |. GapiLens.option_get in
     let st_ctime =
       match stat with
-          None ->
-            st_mtime
-        | Some st ->
+          Some st when is_to_upload ->
             st.Unix.LargeFile.st_ctime
+        | _ ->
+            st_mtime
     in
     { context.Context.mountpoint_stats with
           Unix.LargeFile.st_nlink;
