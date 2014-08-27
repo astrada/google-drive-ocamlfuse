@@ -22,6 +22,8 @@ type t = {
   mountpoint_stats : Unix.LargeFile.stats;
   (* Current metadata *)
   metadata : Cache.Metadata.t option;
+  (* Whether permanently delete files *)
+  skip_trash : bool;
 }
 
 let app_dir = {
@@ -55,6 +57,10 @@ let mountpoint_stats = {
 let metadata = {
   GapiLens.get = (fun x -> x.metadata);
   GapiLens.set = (fun v x -> { x with metadata = v })
+}
+let skip_trash = {
+  GapiLens.get = (fun x -> x.skip_trash);
+  GapiLens.set = (fun v x -> { x with skip_trash = v })
 }
 
 let config_lens =

@@ -90,6 +90,7 @@ type application_params = {
   mountpoint : string;
   clear_cache : bool;
   headless : bool;
+  skip_trash : bool;
 }
 
 let setup_application params =
@@ -198,6 +199,7 @@ let setup_application params =
     curl_state;
     mountpoint_stats = Unix.LargeFile.stat mountpoint;
     metadata = None;
+    skip_trash = params.skip_trash;
   } in
   Context.set_ctx context;
   let refresh_token = context |. Context.refresh_token_lens in
@@ -223,6 +225,9 @@ let handle_exception e label param =
     | Drive.Permission_denied ->
         Utils.log_message "Permission denied: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.EACCES, label, param))
+    | Drive.Directory_not_empty ->
+        Utils.log_message "Directory not empty: %s %s\n%!" label param;
+        raise (Unix.Unix_error (Unix.ENOTEMPTY, label, param))
     | Drive.Resource_busy ->
         Utils.log_message "Resource busy: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.EBUSY, label, param))
@@ -402,6 +407,7 @@ let () =
   let client_secret = ref "" in
   let clear_cache = ref false in
   let headless = ref false in
+  let skip_trash = ref false in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -450,6 +456,10 @@ let () =
        "-headless",
        Arg.Set headless,
        " enable headless mode. Default is false.";
+       "-skiptrash",
+       Arg.Set skip_trash,
+       " enable permanent deletion mode. Default is false. Activate at your \
+        own risk. Files deleted with this option *cannot* be restored.";
       ]) in
   let () =
     Arg.parse
@@ -476,6 +486,7 @@ let () =
           mountpoint = !mountpoint;
           clear_cache = !clear_cache;
           headless = !headless;
+          skip_trash = !skip_trash;
         } in
         if !mountpoint = "" then begin
           setup_application { params with mountpoint = "." };

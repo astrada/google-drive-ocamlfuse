@@ -66,6 +66,9 @@ type t = {
   (* Specifies whether not to log requests/responses (CURL). Set to true to
    * avoid a segmentation fault on some architectures. *)
   curl_debug_off : bool;
+  (* Files removed from trash folder are permanently deleted (no recovery
+   * possible) *)
+  delete_forever_in_trash_folder : bool;
 }
 
 let debug = {
@@ -152,6 +155,10 @@ let curl_debug_off = {
   GapiLens.get = (fun x -> x.curl_debug_off);
   GapiLens.set = (fun v x -> { x with curl_debug_off = v })
 }
+let delete_forever_in_trash_folder = {
+  GapiLens.get = (fun x -> x.delete_forever_in_trash_folder);
+  GapiLens.set = (fun v x -> { x with delete_forever_in_trash_folder = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -179,6 +186,7 @@ let default = {
   max_cache_size_mb = 512;
   new_revision = true;
   curl_debug_off = false;
+  delete_forever_in_trash_folder = false;
 }
 
 let default_debug = {
@@ -202,6 +210,7 @@ let default_debug = {
   max_cache_size_mb = 512;
   new_revision = true;
   curl_debug_off = false;
+  delete_forever_in_trash_folder = false;
 }
 
 let of_table table =
@@ -242,6 +251,9 @@ let of_table table =
         get "new_revision" bool_of_string default.new_revision;
       curl_debug_off =
         get "curl_debug_off" bool_of_string default.curl_debug_off;
+      delete_forever_in_trash_folder =
+        get "delete_forever_in_trash_folder" bool_of_string
+          default.delete_forever_in_trash_folder;
     }
 
 let to_table data =
@@ -268,6 +280,8 @@ let to_table data =
     add "max_cache_size_mb" (data.max_cache_size_mb |> string_of_int);
     add "new_revision" (data.new_revision |> string_of_bool);
     add "curl_debug_off" (data.curl_debug_off |> string_of_bool);
+    add "delete_forever_in_trash_folder"
+      (data.delete_forever_in_trash_folder |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =

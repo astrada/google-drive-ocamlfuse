@@ -8,6 +8,7 @@ open GapiDriveV2Service
 exception File_not_found
 exception Permission_denied
 exception Resource_busy
+exception Directory_not_empty
 
 let folder_mime_type = "application/vnd.google-apps.folder"
 let file_fields =
@@ -1245,6 +1246,7 @@ let default_save_resource_to_db cache resource file =
 let update_remote_resource path
       ?update_file_in_cache
       ?(save_to_db = default_save_resource_to_db)
+      ?(purge_cache = fun cache resource -> ())
       do_remote_update
       retry_update =
   let context = Context.get_ctx () in
@@ -1278,7 +1280,8 @@ let update_remote_resource path
              end
          | e -> throw e) >>= fun file_option ->
     begin match file_option with
-        None -> ()
+        None ->
+          purge_cache cache resource
       | Some file ->
           begin match update_file_in_cache with
               None -> ()
@@ -1506,13 +1509,31 @@ let mkdir path mode =
   create_remote_resource true path mode
 (* END mkdir *)
 
+(* Check if a folder is empty or not *)
+let check_if_empty remote_id is_folder trashed =
+  if is_folder then begin
+    let q = Printf.sprintf "trashed = %b" trashed in
+    ChildrenResource.list
+      ~maxResults:1
+      ~q
+      ~folderId:remote_id >>= fun children ->
+    if children.ChildList.items = [] then begin
+      Utils.log_message "Folder (id=%s) is empty\n%!" remote_id;
+      SessionM.return ()
+    end else begin
+      Utils.log_message "Folder (id=%s) is not empty\n%!" remote_id;
+      raise Directory_not_empty
+    end
+  end else
+    SessionM.return ()
+
 (* Delete (trash) resources *)
-let trash_resource is_folder path =
-  let (_, trashed) = get_path_in_cache path in
+let trash_resource is_folder trashed path =
   if trashed then raise Permission_denied;
 
   let trash resource =
     let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+    check_if_empty remote_id is_folder trashed >>= fun () ->
     Utils.log_message "Trashing file (id=%s)...%!" remote_id;
     FilesResource.trash
       ~std_params:file_std_params
@@ -1539,9 +1560,48 @@ let trash_resource is_folder path =
     trash
     trash
 
+(* Permanently delete resources *)
+let delete_resource is_folder path =
+  let (path_in_cache, trashed) = get_path_in_cache path in
+
+  let delete resource =
+    let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+    check_if_empty remote_id is_folder trashed >>= fun () ->
+    Utils.log_message "Permanently deleting file (id=%s)...%!" remote_id;
+    FilesResource.delete
+      ~std_params:file_std_params
+      ~fileId:remote_id >>= fun () ->
+    Utils.log_message "done\n%!";
+    SessionM.return None
+  in
+  update_remote_resource
+    ~purge_cache:(
+      fun cache resource ->
+        Cache.Resource.delete_resource cache resource;
+        if is_folder then begin
+          Utils.log_message
+            "Deleting folder old content (path=%s,trashed=%b) from cache...%!"
+            path_in_cache trashed;
+          Cache.Resource.delete_all_with_parent_path
+            cache path_in_cache trashed;
+          Utils.log_message "done\n%!";
+        end)
+    path
+    delete
+    delete
+
 let delete_remote_resource is_folder path =
-  let trash_file = trash_resource is_folder path in
-  do_request trash_file |> ignore
+  let (_, trashed) = get_path_in_cache path in
+
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  let trash_or_delete_file =
+    if context.Context.skip_trash ||
+        trashed && config.Config.delete_forever_in_trash_folder then
+      delete_resource is_folder path
+    else
+      trash_resource is_folder trashed path in
+  do_request trash_or_delete_file |> ignore
 (* END Delete (trash) resources *)
 
 (* unlink *)
@@ -1567,7 +1627,8 @@ let rename path new_path =
   let delete_target_path =
     let trash_target_path () =
       get_resource new_path_in_cache target_trashed >>= fun new_resource ->
-      trash_resource (Cache.Resource.is_folder new_resource) new_path
+      trash_resource
+        (Cache.Resource.is_folder new_resource) target_trashed new_path
     in
     begin if not target_trashed &&
        not (Context.get_ctx ()
