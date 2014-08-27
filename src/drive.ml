@@ -1314,7 +1314,17 @@ let utime path atime mtime =
         ~std_params:file_std_params
         ~fileId:remote_id >>= fun touched_file ->
       Utils.log_message "done\n%!";
-      SessionM.return (Some touched_file)
+      Utils.log_message "Updating file mtime (id=%s,mtime=%f)...%!"
+        remote_id mtime;
+      let file_patch = File.empty
+            |> File.modifiedDate ^= Netdate.create mtime in
+      FilesResource.patch
+        ~std_params:file_std_params
+        ~setModifiedDate:true
+        ~fileId:remote_id
+        file_patch >>= fun patched_file ->
+      Utils.log_message "done\n%!";
+      SessionM.return (Some patched_file)
     in
     update_remote_resource
       ~update_file_in_cache:(
