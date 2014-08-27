@@ -83,3 +83,11 @@ Specifies the maximum cache size in MB:
 Specifies whether overwriting a file generates a new revision:
 
     new_revision = true
+
+Specifies whether to permanently turn off CURL logging (even in debug mode). Set it to `true` to avoid a segmentation fault on some architectures:
+
+    curl_debug_off = false
+
+Specifies whether files removed from trash folder are permanently deleted (**WARNING**: permanently deleted files *cannot be recovered*, set it to `true` at your own risk):
+
+    delete_forever_in_trash_folder = false

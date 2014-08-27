@@ -20,10 +20,29 @@ Caveat: I do not know whether this is the "optimal" way to do this.  I was in a 
 
 1. Authorization: Back in your headless server, run `google-drive-ocamlfuse` for the first time. I used labels (in this document, I use the label "me") because I plan on using multiple accounts. However you can also run it without the `-label` parameter and it will use a default name for the label called "default". You will need the Client ID and secret you got from google above.
 
-          $ google-drive-ocamlfuse -label me -id ##yourClientID##.apps.googleusercontent.com -secret ###yoursecret##### 
+    From version 0.5.3, you should use the `-headless` option:
+
+          $ google-drive-ocamlfuse -headless -label me -id ##yourClientID##.apps.googleusercontent.com -secret ###yoursecret##### 
+
+    You will get an output like this:
+
+          Please, open the following URL in a web browser: https://accounts.google.com/o/oauth2/auth?client_id=##yourClientID##.apps.googleusercontent.com&redirect_uri=urn%3Aietf%3Awg%3Aoauth%3A2.0%3Aoob&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive&response_type=code&access_type=offline&approval_prompt=force
+
+    Then, you should open the URL above in a graphical web browser, get the verification code from Google
+    and put it here:
+
+          Please enter the verification code: 
+
+    Then go to point 6.
+
+    Otherwise, if you are using an older version, you should use this command:
+
+          $ PATH= google-drive-ocamlfuse -label me -id ##yourClientID##.apps.googleusercontent.com -secret ###yoursecret##### 
 
     Note:
     * the arguments are -id and -secret.  Elsewhere in the documentation outdated arguments are mentioned.
+    * `PATH=` is used to force the error below (to avoid calling an xdg-open that's configured to open a
+      textual browser)
 
     This command will create the default application directory (`~/.gdfuse/me/`), containing the configuration file `config` (see the [[Configuration]] page). And it will try to start a web browser to obtain authorization.  Since there is no web browser present, you will get an error such as:
 
@@ -40,11 +59,11 @@ Caveat: I do not know whether this is the "optimal" way to do this.  I was in a 
     You will get a dialog asking for authorization, and it will then respond with the verification code, which you will paste into the config file in the next step.
  
 1. Now back on your headless computer, add your Client ID, secret, and verification code, to the following three lines in the `~/.gdfuse/label/config` file:
-```
-    verification_code=
-    client_id=
-    client_secret=
-```
+
+        verification_code=
+        client_id=
+        client_secret=
+
     You may want to edit other lines in the config file as per [[Configuration]].
 
 1. That's it.  You should be ready to mount.

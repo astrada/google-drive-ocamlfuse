@@ -13,6 +13,8 @@ I needed the following as well:
     sudo apt-get install opam ocaml
     sudo apt-get install make
     sudo apt-get install fuse
+    sudo apt-get install camlp4-extra
+
 
 Debian has a special user group to allow fuse access. Log out, and log back in after this to make change effective:
 
