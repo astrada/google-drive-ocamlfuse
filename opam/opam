@@ -1,0 +1,23 @@
+opam-version: "1"
+maintainer: "alessandro.strada@gmail.com"
+authors: [ "Alessandro Strada" ]
+license: "MIT"
+homepage: "http://gdfuse.forge.ocamlcore.org/"
+build: [
+  ["ocaml" "setup.ml" "-configure" "--prefix" prefix]
+  ["ocaml" "setup.ml" "-build"]
+  ["ocaml" "setup.ml" "-install"]
+]
+depends: [
+  "base-threads"
+  "camlidl"
+  "gapi-ocaml" {>= "0.2.1"}
+  "ocamlfind"
+  "ocamlfuse"
+  "sqlite3-ocaml"
+]
+depexts: [
+  [["debian"] ["libcurl4-gnutls-dev"]]
+  [["ubuntu"] ["libcurl4-gnutls-dev"]]
+]
+ocaml-version: [ >= "3.12.0" ]
