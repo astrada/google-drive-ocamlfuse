@@ -560,14 +560,19 @@ let get_metadata () =
       Option.map_default
         Cache.Metadata.cache_size.GapiLens.get 0L metadata in
     Utils.log_message "Refreshing metadata...%!";
-    let updated_metadata =
-      try
-        do_request (request_metadata last_change_id etag cache_size) |> fst
-      with GapiRequest.NotModified _ ->
-        Utils.log_message "not modified...%!";
-        let m = Option.get metadata in
-          m |> Cache.Metadata.last_update ^= Unix.gettimeofday ()
-    in
+    let update_metadata =
+      with_try
+        (request_metadata last_change_id etag cache_size)
+        (function
+            GapiRequest.NotModified session ->
+              Utils.log_message "not modified...%!";
+              SessionM.put session >>= fun () ->
+              let m = Option.get metadata in
+              let m' =
+                m |> Cache.Metadata.last_update ^= Unix.gettimeofday () in
+              SessionM.return m'
+          | e -> throw e) in
+    let updated_metadata = do_request update_metadata |> fst in
     Utils.log_message "done\nUpdating metadata in db...%!";
     Cache.Metadata.insert_metadata context.Context.cache updated_metadata;
     Utils.log_message "done\nUpdating context...%!";

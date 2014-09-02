@@ -6,7 +6,24 @@ open GapiMonad.SessionM.Infix
 let scope = [GapiDriveV2Service.Scope.drive]
 
 (* Gapi request wrapper *)
-let do_request interact =
+let do_request go =
+  let update_state session =
+    let context = Context.get_ctx () in
+    let state = context |. Context.state_lens in
+    let access_token = session
+      |. GapiConversation.Session.auth
+      |. GapiConversation.Session.oauth2
+      |. GapiLens.option_get
+      |. GapiConversation.Session.oauth2_token in
+    if state.State.last_access_token <> access_token then begin
+      context
+      |> (Context.state_lens |-- State.last_access_token) ^= access_token
+      |> Context.save_state_from_context
+    end in
+  let interact session =
+    let (_, session') as result = go session in
+    update_state session';
+    result in
   let rec try_request n =
     try
       let context = Context.get_ctx () in
