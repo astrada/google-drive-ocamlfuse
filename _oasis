@@ -22,7 +22,7 @@ Executable "google-drive-ocamlfuse"
   MainIs: gdfuse.ml
   Install: true
   CompiledObject: best
-  BuildDepends: gapi-ocaml (>= 0.2.1), Fuse, sqlite3, threads, camlidl
+  BuildDepends: gapi-ocaml (>= 0.2.4), Fuse, sqlite3, threads, camlidl
 
 # VCS
 SourceRepository head
