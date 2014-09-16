@@ -2,7 +2,7 @@ open GapiUtils.Infix
 open GapiLens.Infix
 
 let application_name = "google-drive-ocamlfuse"
-let version = "0.5.6"
+let version = "0.5.7"
 
 module ConflictResolutionStrategy =
 struct
@@ -314,5 +314,6 @@ let create_gapi_config config app_dir =
      * be handled by the GAE proxy *)
     |> GapiConfig.auth ^= GapiConfig.OAuth2
                             { GapiConfig.client_id = config.client_id;
-                              client_secret = config.client_secret }
+                              client_secret = config.client_secret;
+                              refresh_access_token = None }
 
