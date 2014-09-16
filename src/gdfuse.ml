@@ -157,6 +157,19 @@ let setup_application params =
     |> Context.ConfigFileStore.data ^= config in
   Context.save_config_store config_store;
   let gapi_config = Config.create_gapi_config config app_dir in
+  let oauth2_config =
+    match gapi_config |. GapiConfig.auth with
+        GapiConfig.OAuth2 oauth2 ->
+          oauth2 |> GapiConfig.refresh_access_token ^= Some (
+            fun () ->
+              GaeProxy.refresh_access_token ();
+              Context.get_ctx ()
+                |. Context.state_lens
+                |. State.last_access_token
+          )
+      | _ -> assert false in
+  let gapi_config =
+    gapi_config |> GapiConfig.auth ^= GapiConfig.OAuth2 oauth2_config in
   let state_store = get_state_store app_dir in
   let cache = Cache.create_cache app_dir config in
   let saved_version = state_store |. Context.saved_version_lens in

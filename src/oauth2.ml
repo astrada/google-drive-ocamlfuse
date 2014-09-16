@@ -34,7 +34,8 @@ let do_request go =
         GapiConversation.Session.OAuth2
           { GapiConversation.Session.oauth2_token =
               state.State.last_access_token;
-            refresh_token = state.State.refresh_token }
+            refresh_token = state.State.refresh_token
+          }
       in
         GapiConversation.with_session
           ~auth_context
@@ -49,6 +50,7 @@ let do_request go =
             (* Retry on timeout *)
             try_request (n + 1)
           end else raise e
+      | GapiRequest.Unauthorized _
       | GapiRequest.RefreshTokenFailed _ ->
           if n > 0 then failwith "Cannot access resource: \
                                   Refreshing token was not enough";
