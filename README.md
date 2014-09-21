@@ -33,7 +33,7 @@ Getting started
 ### Installation
 
 I've uploaded .deb packages to my [PPA](https://launchpad.net/~alessandro-strada/+archive/ppa),
-for Ubuntu 13.10, 13.04, 12.10, 12.04. In order to to install it, use the commands below:
+for Ubuntu 14.04, 12.04. In order to to install it, use the commands below:
 
     $ sudo add-apt-repository ppa:alessandro-strada/ppa
     $ sudo apt-get update
@@ -49,7 +49,7 @@ How to build
 * [OCaml][] >= 3.12.0
 * [Findlib][] >= 1.2.7
 * [ocamlfuse][] >= 2.7.1
-* [gapi-ocaml][] >= 0.2.4
+* [gapi-ocaml][] >= 0.2.5
 * [sqlite3-ocaml][] >= 1.6.1
 
 [OCaml]: http://caml.inria.fr/ocaml/release.en.html
