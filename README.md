@@ -49,7 +49,7 @@ How to build
 * [OCaml][] >= 3.12.0
 * [Findlib][] >= 1.2.7
 * [ocamlfuse][] >= 2.7.1
-* [gapi-ocaml][] >= 0.2.5
+* [gapi-ocaml][] >= 0.2.6
 * [sqlite3-ocaml][] >= 1.6.1
 
 [OCaml]: http://caml.inria.fr/ocaml/release.en.html
