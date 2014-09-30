@@ -33,6 +33,7 @@ let trash_directory_name_length = String.length trash_directory
 let trash_directory_base_path = "/.Trash/"
 let f_bsize = 4096L
 let change_id_limit = 50L
+let mb = 1048576L
 
 (* Utilities *)
 let chars_blacklist_regexp = Str.regexp "[/\000]"
@@ -337,7 +338,6 @@ let update_cache_size new_size metadata cache =
 
 let shrink_cache file_size max_cache_size_mb metadata cache =
   let check_cache_size cache_size =
-    let mb = 1048576L in
     let max_cache_size = Int64.mul (Int64.of_int max_cache_size_mb) mb in
     cache_size <= max_cache_size
   in
@@ -992,6 +992,38 @@ let download_resource resource =
   end >>
   SessionM.return content_path
 
+let stream_resource offset buffer resource =
+  let download_link = Option.get resource.Cache.Resource.download_url in
+  let length = Bigarray.Array1.dim buffer in
+  let finish = Int64.add offset (Int64.of_int (length - 1)) in
+  Utils.log_message
+    "Stream resource (id=%Ld,offset=%Ld,finish=%Ld,length=%d)...%!"
+    resource.Cache.Resource.id offset finish length;
+  with_try
+    (let media_destination = GapiMediaResource.ArrayBuffer buffer in
+     GapiService.download_resource
+       ~ranges:[(Some offset, Some finish)]
+       download_link
+       media_destination)
+    (function
+         GapiRequest.PermissionDenied session ->
+           Utils.log_message "Server error: Permission denied.\n%!";
+           throw Permission_denied
+       | GapiRequest.RequestTimeout _ ->
+           Utils.log_message "Server error: Request Timeout.\n%!";
+           throw Resource_busy
+       | GapiRequest.PreconditionFailed _
+       | GapiRequest.Conflict _ ->
+           Utils.log_message "Server error: Conflict.\n%!";
+           throw Resource_busy
+       | GapiRequest.Forbidden _ ->
+           Utils.log_message "Server error: Forbidden.\n%!";
+           throw Resource_busy
+       | e -> throw e)
+    >>= fun () ->
+  Utils.log_message "done\n%!";
+  SessionM.return ()
+
 let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only
 
@@ -1348,18 +1380,34 @@ let utime path atime mtime =
 (* read *)
 let read path buf offset file_descr =
   let (path_in_cache, trashed) = get_path_in_cache path in
+  let config = Context.get_ctx () |. Context.config_lens in
+  let large_file_threshold_mb = config |. Config.large_file_threshold_mb in
+  let large_file_threshold =
+    Int64.mul (Int64.of_int large_file_threshold_mb) mb in
 
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
-    with_retry download_resource resource
+    let to_stream = config |. Config.stream_large_files &&
+      not (Cache.Resource.is_document resource) &&
+      resource.Cache.Resource.state = Cache.Resource.State.ToDownload &&
+      (Option.default 0L resource.Cache.Resource.file_size) >
+        large_file_threshold in
+    if to_stream then
+      with_retry (stream_resource offset buf) resource >>= fun () ->
+      SessionM.return ""
+    else
+      with_retry download_resource resource
   in
 
   let content_path = do_request request_resource |> fst in
+  if content_path <> "" then
     Utils.with_in_channel content_path
       (fun ch ->
          let file_descr = Unix.descr_of_in_channel ch in
          Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
          Unix_util.read file_descr buf)
+  else
+    Bigarray.Array1.dim buf
 (* END read *)
 
 (* write *)

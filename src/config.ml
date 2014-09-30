@@ -69,6 +69,11 @@ type t = {
   (* Files removed from trash folder are permanently deleted (no recovery
    * possible) *)
   delete_forever_in_trash_folder : bool;
+  (* Specifies whether large files should not be cached (they will be directly
+   * streamed) *)
+  stream_large_files : bool;
+  (* Specifies the minimum size (in megabytes) of large files *)
+  large_file_threshold_mb : int;
 }
 
 let debug = {
@@ -147,10 +152,6 @@ let new_revision = {
   GapiLens.get = (fun x -> x.new_revision);
   GapiLens.set = (fun v x -> { x with new_revision = v })
 }
-let new_revision = {
-  GapiLens.get = (fun x -> x.new_revision);
-  GapiLens.set = (fun v x -> { x with new_revision = v })
-}
 let curl_debug_off = {
   GapiLens.get = (fun x -> x.curl_debug_off);
   GapiLens.set = (fun v x -> { x with curl_debug_off = v })
@@ -158,6 +159,14 @@ let curl_debug_off = {
 let delete_forever_in_trash_folder = {
   GapiLens.get = (fun x -> x.delete_forever_in_trash_folder);
   GapiLens.set = (fun v x -> { x with delete_forever_in_trash_folder = v })
+}
+let stream_large_files = {
+  GapiLens.get = (fun x -> x.stream_large_files);
+  GapiLens.set = (fun v x -> { x with stream_large_files = v })
+}
+let large_file_threshold_mb = {
+  GapiLens.get = (fun x -> x.large_file_threshold_mb);
+  GapiLens.set = (fun v x -> { x with large_file_threshold_mb = v })
 }
 
 let umask =
@@ -187,6 +196,8 @@ let default = {
   new_revision = true;
   curl_debug_off = false;
   delete_forever_in_trash_folder = false;
+  stream_large_files = false;
+  large_file_threshold_mb = 16;
 }
 
 let default_debug = {
@@ -211,6 +222,8 @@ let default_debug = {
   new_revision = true;
   curl_debug_off = false;
   delete_forever_in_trash_folder = false;
+  stream_large_files = false;
+  large_file_threshold_mb = 16;
 }
 
 let of_table table =
@@ -254,6 +267,12 @@ let of_table table =
       delete_forever_in_trash_folder =
         get "delete_forever_in_trash_folder" bool_of_string
           default.delete_forever_in_trash_folder;
+      stream_large_files =
+        get "stream_large_files" bool_of_string
+          default.stream_large_files;
+      large_file_threshold_mb =
+        get "large_file_threshold_mb" int_of_string
+          default.large_file_threshold_mb;
     }
 
 let to_table data =
@@ -282,6 +301,10 @@ let to_table data =
     add "curl_debug_off" (data.curl_debug_off |> string_of_bool);
     add "delete_forever_in_trash_folder"
       (data.delete_forever_in_trash_folder |> string_of_bool);
+    add "stream_large_files"
+      (data.stream_large_files |> string_of_bool);
+    add "large_file_threshold_mb"
+      (data.large_file_threshold_mb |> string_of_int);
     table
 
 let debug_print out_ch start_time curl info_type info =
