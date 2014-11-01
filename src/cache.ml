@@ -898,6 +898,7 @@ struct
       | "odt" -> "application/vnd.oasis.opendocument.text"
       | "pdf" -> "application/pdf"
       | "png" -> "image/png"
+      | "ppt"
       | "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
       | "rtf" -> "application/rtf"
       | "svg" -> "image/svg+xml"
