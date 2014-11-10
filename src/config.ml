@@ -2,7 +2,7 @@ open GapiUtils.Infix
 open GapiLens.Infix
 
 let application_name = "google-drive-ocamlfuse"
-let version = "0.5.11"
+let version = "0.5.12"
 
 module ConflictResolutionStrategy =
 struct
