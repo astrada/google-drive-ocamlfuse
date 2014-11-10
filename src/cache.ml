@@ -892,8 +892,10 @@ struct
   let mime_type_of_format fmt =
     match fmt with
         "doc"
-      | "docx" -> "application/msword"
+      | "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      | "htm"
       | "html" -> "text/html"
+      | "jpg"
       | "jpeg" -> "image/jpeg"
       | "ods" -> "application/x-vnd.oasis.opendocument.spreadsheet"
       | "odt" -> "application/vnd.oasis.opendocument.text"
@@ -905,7 +907,7 @@ struct
       | "svg" -> "image/svg+xml"
       | "txt" -> "text/plain"
       | "xls"
-      | "xlsx" -> "application/vnd.ms-excel"
+      | "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       | _ -> failwith ("Unsupported format: " ^ fmt)
 
 end
