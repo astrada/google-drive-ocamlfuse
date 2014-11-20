@@ -128,6 +128,26 @@ let with_try f handle_exception s =
 let throw e _ =
   raise e
 
+(* with_try with a default exception handler
+ *)
+let try_with_default f s =
+  with_try f
+    (function
+         GapiRequest.PermissionDenied session ->
+           Utils.log_message "Server error: Permission denied.\n%!";
+           throw Permission_denied
+       | GapiRequest.RequestTimeout _ ->
+           Utils.log_message "Server error: Request Timeout.\n%!";
+           throw Resource_busy
+       | GapiRequest.PreconditionFailed _
+       | GapiRequest.Conflict _ ->
+           Utils.log_message "Server error: Conflict.\n%!";
+           throw Resource_busy
+       | GapiRequest.Forbidden _ ->
+           Utils.log_message "Server error: Forbidden.\n%!";
+           throw Resource_busy
+       | e -> throw e) s
+
 (* Resource cache *)
 let get_filename title is_document get_document_format =
   let context = Context.get_ctx () in
@@ -888,20 +908,8 @@ let get_resource_size resource =
     else
       Option.default "" resource.Cache.Resource.download_url in
   begin if download_link <> "" then
-    with_try
+    try_with_default
       (GapiService.head download_link get_content_length)
-      (function
-           GapiRequest.PermissionDenied session ->
-             Utils.log_message "Server error: Permission denied.\n%!";
-             throw Permission_denied
-         | GapiRequest.RequestTimeout _ ->
-             Utils.log_message "Server error: Request Timeout.\n%!";
-             throw Resource_busy
-         | GapiRequest.PreconditionFailed _
-         | GapiRequest.Conflict _ ->
-             Utils.log_message "Server error: Conflict.\n%!";
-             throw Resource_busy
-         | e -> throw e)
   else if is_desktop_format resource config then begin
     let content_path = Cache.get_content_path cache resource in
     create_desktop_entry resource content_path >>= fun () ->
@@ -946,24 +954,9 @@ let download_resource resource =
         Option.default "" resource.Cache.Resource.download_url in
     begin if download_link <> "" then begin
       shrink_cache () >>= fun () ->
-      with_try
+      try_with_default
         (let media_destination = GapiMediaResource.TargetFile content_path in
          GapiService.download_resource download_link media_destination)
-        (function
-             GapiRequest.PermissionDenied session ->
-               Utils.log_message "Server error: Permission denied.\n%!";
-               throw Permission_denied
-           | GapiRequest.RequestTimeout _ ->
-               Utils.log_message "Server error: Request Timeout.\n%!";
-               throw Resource_busy
-           | GapiRequest.PreconditionFailed _
-           | GapiRequest.Conflict _ ->
-               Utils.log_message "Server error: Conflict.\n%!";
-               throw Resource_busy
-           | GapiRequest.Forbidden _ ->
-               Utils.log_message "Server error: Forbidden.\n%!";
-               throw Resource_busy
-           | e -> throw e)
     end else if is_desktop_format resource config then
       create_desktop_entry resource content_path
     else
@@ -999,27 +992,12 @@ let stream_resource offset buffer resource =
   Utils.log_message
     "Stream resource (id=%Ld,offset=%Ld,finish=%Ld,length=%d)...%!"
     resource.Cache.Resource.id offset finish length;
-  with_try
+  try_with_default
     (let media_destination = GapiMediaResource.ArrayBuffer buffer in
      GapiService.download_resource
        ~ranges:[(Some offset, Some finish)]
        download_link
        media_destination)
-    (function
-         GapiRequest.PermissionDenied session ->
-           Utils.log_message "Server error: Permission denied.\n%!";
-           throw Permission_denied
-       | GapiRequest.RequestTimeout _ ->
-           Utils.log_message "Server error: Request Timeout.\n%!";
-           throw Resource_busy
-       | GapiRequest.PreconditionFailed _
-       | GapiRequest.Conflict _ ->
-           Utils.log_message "Server error: Conflict.\n%!";
-           throw Resource_busy
-       | GapiRequest.Forbidden _ ->
-           Utils.log_message "Server error: Forbidden.\n%!";
-           throw Resource_busy
-       | e -> throw e)
     >>= fun () ->
   Utils.log_message "done\n%!";
   SessionM.return ()
@@ -1436,13 +1414,10 @@ let write path buf offset file_descr =
   do_request write_to_resource |> fst
 (* END write *)
 
-let upload_if_dirty path =
-  let (path_in_cache, trashed) = get_path_in_cache path in
-
+let upload_if_dirty resource =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
-  get_resource path_in_cache trashed >>= fun resource ->
   match resource.Cache.Resource.state with
       Cache.Resource.State.ToUpload ->
         let content_path = Cache.get_content_path cache resource in
@@ -1491,17 +1466,25 @@ let upload_if_dirty path =
     | _ ->
         SessionM.return ()
 
+let upload_if_dirty_with_retry path =
+  let try_upload_if_dirty resource =
+    try_with_default (upload_if_dirty resource)
+  in
+  let (path_in_cache, trashed) = get_path_in_cache path in
+  get_resource path_in_cache trashed >>= fun resource ->
+  with_retry try_upload_if_dirty resource
+
 (* flush *)
 let flush path file_descr =
-  do_request (upload_if_dirty path) |> ignore
+  do_request (upload_if_dirty_with_retry path) |> ignore
 
 (* fsync *)
 let fsync path ds file_descr =
-  do_request (upload_if_dirty path) |> ignore
+  do_request (upload_if_dirty_with_retry path) |> ignore
 
 (* release *)
 let release path flags hnd =
-  do_request (upload_if_dirty path) |> ignore
+  do_request (upload_if_dirty_with_retry path) |> ignore
 
 (* Create resources *)
 let create_remote_resource is_folder path mode =
