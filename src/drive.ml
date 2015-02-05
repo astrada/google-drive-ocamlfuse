@@ -854,7 +854,7 @@ let with_retry f resource =
 let is_desktop_format resource config =
   Cache.Resource.get_format resource config = "desktop"
 
-let get_export_link fmt resource =
+let get_export_link fmt resource config =
   if fmt = "desktop" then ""
   else begin
     let mime_type = Cache.Resource.mime_type_of_format fmt in
@@ -864,10 +864,22 @@ let get_export_link fmt resource =
         []
         resource.Cache.Resource.export_links
     in
+    let first_export_link =
+      if config.Config.force_docs_export && List.length export_links > 0 then
+        List.hd export_links |> snd
+      else
+        "" in
+    let custom_export_link =
+      try
+        let last_equal_char = String.rindex first_export_link '=' in
+        let export_link_without_format =
+          String.sub first_export_link 0 last_equal_char in
+        export_link_without_format ^ "=" ^ fmt
+      with Not_found -> first_export_link in
     List.fold_left
       (fun accu (m, l) ->
          if m = mime_type then l else accu)
-      ""
+      custom_export_link
       export_links
   end
 
@@ -883,44 +895,6 @@ let create_desktop_entry resource content_path =
         (Option.default "" resource.Cache.Resource.title)
         (Option.default "" resource.Cache.Resource.alternate_link);
       SessionM.return ())
-
-let get_resource_size resource =
-  let get_content_length headers =
-    List.fold_left
-      (fun u h ->
-         match h with
-             GapiCore.Header.ContentLength value -> Some (Int64.of_string value)
-           | _ -> u)
-      None
-      headers
-  in
-
-  let context = Context.get_ctx () in
-  let cache = Context.get_cache () in
-  let config = context |. Context.config_lens in
-  Utils.log_message "Getting resource size (id=%Ld)...%!"
-    resource.Cache.Resource.id;
-  let download_link =
-    if Cache.Resource.is_document resource then
-      let config = context |. Context.config_lens in
-      let fmt = Cache.Resource.get_format resource config in
-      get_export_link fmt resource
-    else
-      Option.default "" resource.Cache.Resource.download_url in
-  begin if download_link <> "" then
-    try_with_default
-      (GapiService.head download_link get_content_length)
-  else if is_desktop_format resource config then begin
-    let content_path = Cache.get_content_path cache resource in
-    create_desktop_entry resource content_path >>= fun () ->
-    let stats = Unix.LargeFile.stat content_path in
-    SessionM.return (Some stats.Unix.LargeFile.st_size)
-  end else
-    SessionM.return None
-  end >>= fun content_length ->
-  Utils.log_message "done: Content-Length=%Ld\n%!"
-    (Option.default 0L content_length);
-  SessionM.return content_length
 
 let download_resource resource =
   let context = Context.get_ctx () in
@@ -949,7 +923,7 @@ let download_resource resource =
     let download_link =
       if Cache.Resource.is_document resource then
         let fmt = Cache.Resource.get_format resource config in
-        get_export_link fmt resource
+        get_export_link fmt resource config
       else
         Option.default "" resource.Cache.Resource.download_url in
     begin if download_link <> "" then begin
@@ -1014,29 +988,21 @@ let is_file_read_only resource =
 let get_attr path =
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
-  let cache = context.Context.cache in
   let (path_in_cache, trashed) = get_path_in_cache path in
 
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
-    let content_path = Cache.get_content_path cache resource in
-    if Sys.file_exists content_path then begin
-      SessionM.return (resource, content_path)
-    end else begin if Cache.Resource.is_document resource &&
-        config.Config.download_docs &&
-        resource.Cache.Resource.file_size = Some 0L then begin
+    begin if Cache.Resource.is_document resource &&
+             config.Config.download_docs then
       with_try
-        (with_retry get_resource_size resource)
+        (with_retry download_resource resource)
         (function
-             File_not_found -> SessionM.return None
-           | e -> throw e) >>= fun file_size ->
-      let updated_resource = resource
-        |> Cache.Resource.file_size ^= file_size in
-      Cache.Resource.update_resource cache updated_resource;
-      SessionM.return (updated_resource, "")
-    end else
-      SessionM.return (resource, "")
-    end
+             File_not_found -> SessionM.return ""
+           | e -> throw e)
+    else
+      SessionM.return ""
+    end >>= fun content_path ->
+    SessionM.return (resource, content_path)
   in
 
   if path = root_directory then

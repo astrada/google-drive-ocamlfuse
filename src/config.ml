@@ -74,6 +74,9 @@ type t = {
   stream_large_files : bool;
   (* Specifies the minimum size (in megabytes) of large files *)
   large_file_threshold_mb : int;
+  (* Specifies whether to force document export even if the requested format
+   * is not available *)
+  force_docs_export : bool;
 }
 
 let debug = {
@@ -168,6 +171,10 @@ let large_file_threshold_mb = {
   GapiLens.get = (fun x -> x.large_file_threshold_mb);
   GapiLens.set = (fun v x -> { x with large_file_threshold_mb = v })
 }
+let force_docs_export = {
+  GapiLens.get = (fun x -> x.force_docs_export);
+  GapiLens.set = (fun v x -> { x with force_docs_export = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -198,6 +205,7 @@ let default = {
   delete_forever_in_trash_folder = false;
   stream_large_files = false;
   large_file_threshold_mb = 16;
+  force_docs_export = true;
 }
 
 let default_debug = {
@@ -224,6 +232,7 @@ let default_debug = {
   delete_forever_in_trash_folder = false;
   stream_large_files = false;
   large_file_threshold_mb = 16;
+  force_docs_export = true;
 }
 
 let of_table table =
@@ -273,6 +282,9 @@ let of_table table =
       large_file_threshold_mb =
         get "large_file_threshold_mb" int_of_string
           default.large_file_threshold_mb;
+      force_docs_export =
+        get "force_docs_export" bool_of_string
+          default.force_docs_export;
     }
 
 let to_table data =
@@ -301,10 +313,10 @@ let to_table data =
     add "curl_debug_off" (data.curl_debug_off |> string_of_bool);
     add "delete_forever_in_trash_folder"
       (data.delete_forever_in_trash_folder |> string_of_bool);
-    add "stream_large_files"
-      (data.stream_large_files |> string_of_bool);
+    add "stream_large_files" (data.stream_large_files |> string_of_bool);
     add "large_file_threshold_mb"
       (data.large_file_threshold_mb |> string_of_int);
+    add "force_docs_export" (data.force_docs_export |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =
