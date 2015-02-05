@@ -1074,7 +1074,7 @@ let get_attr path =
       match stat with
           None ->
             if Cache.Resource.is_folder resource then f_bsize
-            else resource |. Cache.Resource.file_size |. GapiLens.option_get
+            else Option.default 0L (resource |. Cache.Resource.file_size )
         | Some st ->
             st.Unix.LargeFile.st_size in
     let st_atime =
