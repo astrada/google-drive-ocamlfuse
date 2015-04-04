@@ -154,12 +154,14 @@ let get_filename title is_document get_document_format =
   let config = context |. Context.config_lens in
   let clean_title = clean_filename title in
   let document_format =
-    if is_document
-    then get_document_format config
+    if is_document then get_document_format config
     else "" in
-  if is_document && config.Config.docs_file_extension
-  then (clean_title ^ "." ^ document_format, false)
-  else (clean_title, is_document)
+  if is_document &&
+      config.Config.docs_file_extension &&
+      document_format <> "" then
+    (clean_title ^ "." ^ document_format, false)
+  else
+    (clean_title, is_document)
 
 let build_resource_tables parent_path trashed =
   let context = Context.get_ctx () in
@@ -222,7 +224,7 @@ let create_root_resource root_folder_id change_id trashed =
   let resource = create_resource root_directory change_id in
     { resource with
           Cache.Resource.remote_id = Some root_folder_id;
-          mime_type = Some "application/vnd.google-apps.folder";
+          mime_type = Some folder_mime_type;
           file_size = Some 0L;
           parent_path = "";
           trashed = Some trashed;
@@ -855,7 +857,7 @@ let is_desktop_format resource config =
   Cache.Resource.get_format resource config = "desktop"
 
 let get_export_link fmt resource config =
-  if fmt = "desktop" then ""
+  if fmt = "desktop" || fmt = "" then ""
   else begin
     let mime_type = Cache.Resource.mime_type_of_format fmt in
     let export_links =

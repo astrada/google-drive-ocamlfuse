@@ -859,7 +859,8 @@ struct
       | "application/vnd.google-apps.drawing"
       | "application/vnd.google-apps.form"
       | "application/vnd.google-apps.presentation"
-      | "application/vnd.google-apps.spreadsheet" -> true
+      | "application/vnd.google-apps.spreadsheet"
+      | "application/vnd.google-apps.map" -> true
       | _ -> false
 
   let is_document resource =
@@ -882,6 +883,8 @@ struct
           config.Config.presentation_format
       | "application/vnd.google-apps.spreadsheet" ->
           config.Config.spreadsheet_format
+      | "application/vnd.google-apps.map" ->
+          config.Config.map_format
       | _ -> "html"
 
   let get_format resource config =

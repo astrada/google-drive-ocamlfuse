@@ -44,6 +44,8 @@ type t = {
   presentation_format : string;
   (* Spreadsheets export format *)
   spreadsheet_format : string;
+  (* Map export format *)
+  map_format : string;
   (* OAuth2 Client ID *)
   client_id : string;
   (* OAuth2 Client secret *)
@@ -123,6 +125,10 @@ let spreadsheet_format = {
   GapiLens.get = (fun x -> x.spreadsheet_format);
   GapiLens.set = (fun v x -> { x with spreadsheet_format = v })
 }
+let map_format = {
+  GapiLens.get = (fun x -> x.map_format);
+  GapiLens.set = (fun v x -> { x with map_format = v })
+}
 let client_id = {
   GapiLens.get = (fun x -> x.client_id);
   GapiLens.set = (fun v x -> { x with client_id = v })
@@ -193,6 +199,7 @@ let default = {
   form_format = "ods";
   presentation_format = "pdf";
   spreadsheet_format = "ods";
+  map_format = "desktop";
   client_id = "";
   client_secret = "";
   verification_code = "";
@@ -220,6 +227,7 @@ let default_debug = {
   form_format = "ods";
   presentation_format = "pdf";
   spreadsheet_format = "ods";
+  map_format = "desktop";
   client_id = "";
   client_secret = "";
   verification_code = "";
@@ -256,6 +264,7 @@ let of_table table =
         get "presentation_format" Std.identity default.presentation_format;
       spreadsheet_format =
         get "spreadsheet_format" Std.identity default.spreadsheet_format;
+      map_format = get "map_format" Std.identity default.map_format;
       client_id = get "client_id" Std.identity default.client_id;
       client_secret = get "client_secret" Std.identity default.client_secret;
       verification_code =
@@ -301,6 +310,7 @@ let to_table data =
     add "form_format" data.form_format;
     add "presentation_format" data.presentation_format;
     add "spreadsheet_format" data.spreadsheet_format;
+    add "map_format" data.map_format;
     add "client_id" data.client_id;
     add "client_secret" data.client_secret;
     add "verification_code" data.verification_code;
