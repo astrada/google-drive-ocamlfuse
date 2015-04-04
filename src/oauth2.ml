@@ -44,12 +44,25 @@ let do_request go =
           interact
     with
         Failure message as e ->
-          if ExtString.String.exists
-               message "CURLE_OPERATION_TIMEOUTED" then begin
+          let check_curl_error () =
+            ExtString.String.exists message "CURLE_OPERATION_TIMEOUTED" ||
+            ExtString.String.exists message "CURLE_COULDNT_RESOLVE_HOST" ||
+            ExtString.String.exists message "CURLE_COULDNT_RESOLVE_PROXY" ||
+            ExtString.String.exists message "CURLE_COULDNT_CONNECT" ||
+            ExtString.String.exists message "CURLE_SSL_CONNECT_ERROR" ||
+            ExtString.String.exists message "CURLE_SEND_ERROR" ||
+            ExtString.String.exists message "CURLE_RECV_ERROR"
+          in
+          Utils.log_message "Error during request: %s\n%!" message;
+          if check_curl_error () && n < 5 then begin
+            Utils.log_message "Retrying (%d/5)\n%!" (n + 1);
             GapiUtils.wait_exponential_backoff n;
             (* Retry on timeout *)
             try_request (n + 1)
-          end else raise e
+          end else begin
+            Utils.log_message "Giving up\n%!";
+            raise e
+          end
       | GapiRequest.Unauthorized _
       | GapiRequest.RefreshTokenFailed _ ->
           if n > 0 then failwith "Cannot access resource: \
