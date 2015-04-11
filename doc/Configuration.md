@@ -26,25 +26,29 @@ Specifies whether to download Google Docs (these files are read-only, even if `r
 
     download_docs=true
 
-Text document [export format](https://developers.google.com/google-apps/documents-list/#valid_download_formats_for_text_documents). `desktop` format creates a shortcut to the document that will be opened in the web browser for edit:
+Text document [[export format|Exportable-formats#valid-download-formats-for-text-documents]]:
 
     document_format=odt
-    
-Drawings [export format](https://developers.google.com/google-apps/documents-list/#valid_download_formats_for_drawings). `desktop` format creates a shortcut to the document that will be opened in the web browser for edit:
+
+Drawings [[export format|Exportable-formats#valid-download-formats-for-drawings]]:
 
     drawing_format=png
 
-Forms [export format](https://developers.google.com/google-apps/documents-list/#valid_formats_for_spreadsheets). `desktop` format creates a shortcut to the document that will be opened in the web browser for edit:
+Forms [[export format|Exportable-formats#valid-formats-for-spreadsheets]]:
 
     form_format=ods
 
-Presentations [export format](https://developers.google.com/google-apps/documents-list/#valid_formats_for_presentations). `desktop` format creates a shortcut to the document that will be opened in the web browser for edit:
+Presentations [[export format|Exportable-formats#valid-formats-for-presentations]]:
 
     presentation_format=pdf
 
-Spreadsheets [export format](https://developers.google.com/google-apps/documents-list/#valid_formats_for_spreadsheets). `desktop` format creates a shortcut to the document that will be opened in the web browser for edit:
+Spreadsheets [[export format|Exportable-formats#valid-formats-for-spreadsheets]]:
 
     spreadsheet_format=ods
+
+Maps export format (the only valid format is `desktop`):
+
+    map_format=desktop
 
 OAuth2 client ID (optional):
 
@@ -99,3 +103,19 @@ Specifies whether to directly stream large files (so that are no more cached):
 Specifies the threshold (in megabytes) to detect large files:
 
     large_file_threshold_mb=16
+
+Force export of Google Docs in the format specified above. Introduced as a workaround for [this bug](https://code.google.com/a/google.com/p/apps-api-issues/issues/detail?id=3713):
+
+    force_docs_export=true
+
+### Document export formats
+
+`desktop` format creates a shortcut to the document that will be opened in the web browser for edit.
+
+If you don't want to export a specific kind of docs, just remove the format portion. For example, if you have this line in your `config` file:
+
+    drawing_format=
+
+no drawings will be exported.
+
+Note that if you change any export format, you will have to clear the cache (using `-cc` command line option).

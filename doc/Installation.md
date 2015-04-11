@@ -2,7 +2,7 @@ Here you can find instructions on how to install `google-drive-ocamlfuse`. You c
 
 ## PPA repository
 
-I've set up a [PPA repository](https://launchpad.net/~alessandro-strada/+archive/ppa) where I've uploaded the .deb packages for Ubuntu 12.04, 12.10, 13.04, and 13.10 (i386 and amd64). To install the software using this method, run the following commands:
+I've set up a [PPA repository](https://launchpad.net/~alessandro-strada/+archive/ppa) where I've uploaded  .deb packages for Ubuntu 12.04, 14.04, and 14.10 (i386 and amd64). To install the software using this method, run the following commands:
 
         $ sudo add-apt-repository ppa:alessandro-strada/ppa
         $ sudo apt-get update
@@ -25,10 +25,14 @@ If you are using a different distribution or you want to build the package from 
 
         $ sudo apt-get install m4 libcurl4-gnutls-dev libfuse-dev libsqlite3-dev
 
-3. Update OPAM
+3. Starting OPAM
+
+        $ opam init
+
+4. Update OPAM
 
         $ opam update
 
-4. Install `google-drive-ocamlfuse`
+5. Install `google-drive-ocamlfuse`
 
         $ opam install google-drive-ocamlfuse

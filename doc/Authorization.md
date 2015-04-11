@@ -31,7 +31,7 @@ the application, that doesn't involve external services. If you have your own
 OAuth2 client ID and client secret, you may pass them on the command line (the
 first time you issue the application), e.g.:
 
-    $ google-drive-ocamlfuse -client_id 12345678.apps.googleusercontent.com -client_secret abcde12345
+    $ google-drive-ocamlfuse -id 12345678.apps.googleusercontent.com -secret abcde12345
 
 This way, the application will use your credentials, and will not connect to
 the GAE service. A browser will be started pointing to an authorization page,
@@ -49,8 +49,8 @@ the tokens from Google.
 You can create OAuth2 credentials from the Google APIs Console.
 [Here](https://developers.google.com/console/help/#creatingdeletingprojects)
 you can find how to create a new application and how to set up OAuth 2.0
-credentials. When creating a new client ID, you must select "Installed
-applications" as Application type and "Other" as Installed application type
+credentials. When activating APIs, you must select the Drive API. When creating a new client ID, you must select "Installed applications"
+as Application type and "Other" as Installed application type
 (Redirect URI should be `urn:ietf:wg:oauth:2.0:oob`).
 
 ### Revoking access
