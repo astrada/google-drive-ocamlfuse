@@ -59,7 +59,8 @@ let safe_find table key =
   with Not_found -> None
 
 let get_from_string_table table (key : string) conv default =
-  safe_find table key |> Option.map_default conv default
+  safe_find table key
+    |> Option.map_default (conv -| ExtString.String.strip) default
 
 (* Unix *)
 let flags_to_string flags =
