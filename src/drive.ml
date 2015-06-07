@@ -1390,17 +1390,20 @@ let upload_if_dirty resource =
       Cache.Resource.State.ToUpload ->
         let content_path = Cache.get_content_path cache resource in
         let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-        let media_source =
+        let file_source =
           GapiMediaResource.create_file_resource content_path in
         let resource_mime_type =
           resource |. Cache.Resource.mime_type |> Option.get in
-        let content_type = media_source |. GapiMediaResource.content_type in
+        let content_type = file_source |. GapiMediaResource.content_type in
         (* Workaround to set the correct MIME type *)
         let mime_type =
           if resource_mime_type <> "" then resource_mime_type
           else content_type in
-        let media_source = media_source
+        let file_source = file_source
           |> GapiMediaResource.content_type ^= mime_type in
+        let media_source =
+          if file_source.GapiMediaResource.content_length = 0L then None
+          else Some file_source in
         Utils.log_message
           "Uploading file (cache path=%s, content type=%s)...%!"
           content_path mime_type;
@@ -1411,7 +1414,7 @@ let upload_if_dirty resource =
         FilesResource.update
           ~std_params:file_std_params
           ~newRevision
-          ~media_source
+          ?media_source
           ~fileId:remote_id
           refreshed_file >>= fun updated_file ->
         refresh_remote_resource resource updated_file >>= fun file ->
