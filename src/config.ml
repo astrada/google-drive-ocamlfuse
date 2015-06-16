@@ -36,16 +36,28 @@ type t = {
   download_docs : bool;
   (* Text documents export format *)
   document_format : string;
+  (* Text documents icon *)
+  document_icon : string;
   (* Drawings export format *)
   drawing_format : string;
+  (* Drawings icon *)
+  drawing_icon : string;
   (* Forms export format *)
   form_format : string;
+  (* Forms icon *)
+  form_icon : string;
   (* Presentations export format *)
   presentation_format : string;
+  (* Presentations icon *)
+  presentation_icon : string;
   (* Spreadsheets export format *)
   spreadsheet_format : string;
+  (* Spreadsheets icon *)
+  spreadsheet_icon : string;
   (* Map export format *)
   map_format : string;
+  (* Map icon *)
+  map_icon : string;
   (* OAuth2 Client ID *)
   client_id : string;
   (* OAuth2 Client secret *)
@@ -109,25 +121,49 @@ let document_format = {
   GapiLens.get = (fun x -> x.document_format);
   GapiLens.set = (fun v x -> { x with document_format = v })
 }
+let document_icon = {
+  GapiLens.get = (fun x -> x.document_icon);
+  GapiLens.set = (fun v x -> { x with document_icon = v })
+}
 let drawing_format = {
   GapiLens.get = (fun x -> x.drawing_format);
   GapiLens.set = (fun v x -> { x with drawing_format = v })
+}
+let drawing_icon = {
+  GapiLens.get = (fun x -> x.drawing_icon);
+  GapiLens.set = (fun v x -> { x with drawing_icon = v })
 }
 let form_format = {
   GapiLens.get = (fun x -> x.form_format);
   GapiLens.set = (fun v x -> { x with form_format = v })
 }
+let form_icon = {
+  GapiLens.get = (fun x -> x.form_icon);
+  GapiLens.set = (fun v x -> { x with form_icon = v })
+}
 let presentation_format = {
   GapiLens.get = (fun x -> x.presentation_format);
   GapiLens.set = (fun v x -> { x with presentation_format = v })
+}
+let presentation_icon = {
+  GapiLens.get = (fun x -> x.presentation_icon);
+  GapiLens.set = (fun v x -> { x with presentation_icon = v })
 }
 let spreadsheet_format = {
   GapiLens.get = (fun x -> x.spreadsheet_format);
   GapiLens.set = (fun v x -> { x with spreadsheet_format = v })
 }
+let spreadsheet_icon = {
+  GapiLens.get = (fun x -> x.spreadsheet_icon);
+  GapiLens.set = (fun v x -> { x with spreadsheet_icon = v })
+}
 let map_format = {
   GapiLens.get = (fun x -> x.map_format);
   GapiLens.set = (fun v x -> { x with map_format = v })
+}
+let map_icon = {
+  GapiLens.get = (fun x -> x.map_icon);
+  GapiLens.set = (fun v x -> { x with map_icon = v })
 }
 let client_id = {
   GapiLens.get = (fun x -> x.client_id);
@@ -195,11 +231,17 @@ let default = {
   sqlite3_busy_timeout = 500;
   download_docs = true;
   document_format = "odt";
+  document_icon = "";
   drawing_format = "png";
+  drawing_icon = "";
   form_format = "ods";
+  form_icon = "";
   presentation_format = "pdf";
+  presentation_icon = "";
   spreadsheet_format = "ods";
+  spreadsheet_icon = "";
   map_format = "desktop";
+  map_icon = "";
   client_id = "";
   client_secret = "";
   verification_code = "";
@@ -223,11 +265,17 @@ let default_debug = {
   sqlite3_busy_timeout = 500;
   download_docs = true;
   document_format = "odt";
+  document_icon = "";
   drawing_format = "png";
+  drawing_icon = "";
   form_format = "ods";
+  form_icon = "";
   presentation_format = "pdf";
+  presentation_icon = "";
   spreadsheet_format = "ods";
+  spreadsheet_icon = "";
   map_format = "desktop";
+  map_icon = "";
   client_id = "";
   client_secret = "";
   verification_code = "";
@@ -256,15 +304,26 @@ let of_table table =
         get "download_docs" bool_of_string default.download_docs;
       document_format =
         get "document_format" Std.identity default.document_format;
+      document_icon =
+        get "document_icon" Std.identity default.document_icon;
       drawing_format =
         get "drawing_format" Std.identity default.drawing_format;
+      drawing_icon =
+        get "drawing_icon" Std.identity default.drawing_icon;
       form_format =
         get "form_format" Std.identity default.form_format;
+      form_icon =
+        get "form_icon" Std.identity default.form_icon;
       presentation_format =
         get "presentation_format" Std.identity default.presentation_format;
+      presentation_icon =
+        get "presentation_icon" Std.identity default.presentation_icon;
       spreadsheet_format =
         get "spreadsheet_format" Std.identity default.spreadsheet_format;
+      spreadsheet_icon =
+        get "spreadsheet_icon" Std.identity default.spreadsheet_icon;
       map_format = get "map_format" Std.identity default.map_format;
+      map_icon = get "map_icon" Std.identity default.map_icon;
       client_id = get "client_id" Std.identity default.client_id;
       client_secret = get "client_secret" Std.identity default.client_secret;
       verification_code =
@@ -306,11 +365,17 @@ let to_table data =
     add "sqlite3_busy_timeout" (data.sqlite3_busy_timeout |> string_of_int);
     add "download_docs" (data.download_docs |> string_of_bool);
     add "document_format" data.document_format;
+    add "document_icon" data.document_icon;
     add "drawing_format" data.drawing_format;
+    add "drawing_icon" data.drawing_icon;
     add "form_format" data.form_format;
+    add "form_icon" data.form_icon;
     add "presentation_format" data.presentation_format;
+    add "presentation_icon" data.presentation_icon;
     add "spreadsheet_format" data.spreadsheet_format;
+    add "spreadsheet_icon" data.spreadsheet_icon;
     add "map_format" data.map_format;
+    add "map_icon" data.map_icon;
     add "client_id" data.client_id;
     add "client_secret" data.client_secret;
     add "verification_code" data.verification_code;

@@ -892,6 +892,27 @@ struct
         Some mime_type -> get_format_from_mime_type mime_type config
       | _ -> "html"
 
+  let get_icon_from_mime_type mime_type config =
+    match mime_type with
+        "application/vnd.google-apps.document" ->
+          config.Config.document_icon
+      | "application/vnd.google-apps.drawing" ->
+          config.Config.drawing_icon
+      | "application/vnd.google-apps.form" ->
+          config.Config.form_icon
+      | "application/vnd.google-apps.presentation" ->
+          config.Config.presentation_icon
+      | "application/vnd.google-apps.spreadsheet" ->
+          config.Config.spreadsheet_icon
+      | "application/vnd.google-apps.map" ->
+          config.Config.map_icon
+      | _ -> ""
+
+  let get_icon resource config =
+    match resource.mime_type with
+        Some mime_type -> get_icon_from_mime_type mime_type config
+      | _ -> "html"
+
   let mime_type_of_format fmt =
     match fmt with
         "doc"

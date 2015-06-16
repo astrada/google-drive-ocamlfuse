@@ -885,17 +885,23 @@ let get_export_link fmt resource config =
       export_links
   end
 
-let create_desktop_entry resource content_path =
+let create_desktop_entry resource content_path config =
   Utils.with_out_channel
     ~mode:[Open_creat; Open_trunc; Open_wronly] content_path
     (fun out_ch ->
+      let icon_entry =
+        let icon = Cache.Resource.get_icon resource config in
+        if icon = "" then ""
+        else "Icon=" ^ icon ^ "\n"
+      in
       Printf.fprintf out_ch
         "[Desktop Entry]\n\
          Type=Link\n\
          Name=%s\n\
-         URL=%s\n"
+         URL=%s\n%s"
         (Option.default "" resource.Cache.Resource.title)
-        (Option.default "" resource.Cache.Resource.alternate_link);
+        (Option.default "" resource.Cache.Resource.alternate_link)
+        icon_entry;
       SessionM.return ())
 
 let download_resource resource =
@@ -934,7 +940,7 @@ let download_resource resource =
         (let media_destination = GapiMediaResource.TargetFile content_path in
          GapiService.download_resource download_link media_destination)
     end else if is_desktop_format resource config then
-      create_desktop_entry resource content_path
+      create_desktop_entry resource content_path config
     else
       create_empty_file ()
     end >>= fun () ->
