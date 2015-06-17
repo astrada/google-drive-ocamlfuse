@@ -16,6 +16,6 @@ depends: [
   "gapi-ocaml" {>= "0.2.6"}
   "ocamlfind"
   "ocamlfuse"
-  "sqlite3-ocaml"
+  "sqlite3"
 ]
 available: [ocaml-version >= "3.12.0"]
