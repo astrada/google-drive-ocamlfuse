@@ -83,14 +83,15 @@ let get_state_store app_dir =
 (* END Application state *)
 
 type application_params = {
-  debug : bool;
-  filesystem_label : string;
-  client_id : string;
-  client_secret : string;
-  mountpoint : string;
-  clear_cache : bool;
-  headless : bool;
-  skip_trash : bool;
+  debug: bool;
+  filesystem_label: string;
+  client_id: string;
+  client_secret: string;
+  mountpoint: string;
+  clear_cache: bool;
+  headless: bool;
+  skip_trash: bool;
+  base_dir: string;
 }
 
 let setup_application params =
@@ -126,9 +127,10 @@ let setup_application params =
             exit 1
   in
 
-  Utils.log_message "Starting application setup (label=%s).\n%!"
-    params.filesystem_label;
-  let app_dir = AppDir.create params.filesystem_label in
+  Utils.log_message "Starting application setup (label=%s, base_dir=%s).\n%!"
+    params.filesystem_label
+    params.base_dir;
+  let app_dir = AppDir.create params.filesystem_label params.base_dir in
   let () = AppDir.create_directories app_dir in
   let app_log_path = app_dir |. AppDir.app_log_path in
   Utils.log_message "Opening log file: %s\n%!" app_log_path;
@@ -423,11 +425,34 @@ let () =
   let clear_cache = ref false in
   let headless = ref false in
   let skip_trash = ref false in
+  let base_dir =
+    let dir = Filename.concat (Sys.getenv "HOME") ".gdfuse" in
+    ref dir in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
       "Usage: %s [options] [mountpoint]"
       program in
+  let parse_mount_options opt_string =
+    let opts = Str.split (Str.regexp " *, *") opt_string in
+    let base_dir_opt =
+      List.filter
+        (fun o -> ExtString.String.starts_with o "gdfroot") opts in
+    List.iter
+      (fun o ->
+        try
+          let (_, bd) = ExtString.String.split o "=" in
+          base_dir := bd
+        with ExtString.Invalid_string ->
+          raise (Failure "Invalid mount option gdfroot"))
+      base_dir_opt;
+    let fuse_mount_opts =
+      List.filter
+        (fun o -> not (ExtString.String.starts_with o "gdfroot")) opts in
+    let fuse_mount_opt_string = String.concat "," fuse_mount_opts in
+    fuse_args := ("-o" ^ fuse_mount_opt_string) :: !fuse_args
+  in
+
   let arg_specs =
     Arg.align (
       ["-version",
@@ -463,7 +488,7 @@ let () =
                           List.filter (fun a -> a <> "-s") !fuse_args),
        " enable multi-threaded operation.";
        "-o",
-       Arg.String (fun o -> fuse_args := ("-o" ^ o) :: !fuse_args),
+       Arg.String parse_mount_options,
        " specify FUSE mount options.";
        "-cc",
        Arg.Set clear_cache,
@@ -486,43 +511,44 @@ let () =
     exit 1
   in
 
-    if !show_version then begin
-      Printf.printf "google-drive-ocamlfuse, version %s\n\
-                     Copyright (C) 2012-2015 Alessandro Strada\n\
-                     License MIT\n"
-        Config.version;
-    end else begin
-      try
-        let params = {
-          debug = !debug;
-          filesystem_label = !fs_label;
-          client_id = !client_id;
-          client_secret = !client_secret;
-          mountpoint = !mountpoint;
-          clear_cache = !clear_cache;
-          headless = !headless;
-          skip_trash = !skip_trash;
-        } in
-        if !mountpoint = "" then begin
-          setup_application { params with mountpoint = "." };
-        end else begin
-          setup_application params;
-          at_exit
-            (fun () ->
-               Utils.log_with_header "Exiting.\n";
-               let context = Context.get_ctx () in
-               Utils.log_message "CURL cleanup...";
-               ignore (GapiCurl.global_cleanup context.Context.curl_state);
-               Utils.log_message "done\nClearing context...";
-               Context.clear_ctx ();
-               Utils.log_message "done\n%!");
-          start_filesystem !mountpoint !fuse_args
-        end
-      with
-          Failure error_message -> quit error_message
-        | e ->
-            let error_message = Printexc.to_string e in
-              quit error_message
-    end
+  if !show_version then begin
+    Printf.printf "google-drive-ocamlfuse, version %s\n\
+                   Copyright (C) 2012-2015 Alessandro Strada\n\
+                   License MIT\n"
+      Config.version;
+  end else begin
+    try
+      let params = {
+        debug = !debug;
+        filesystem_label = !fs_label;
+        client_id = !client_id;
+        client_secret = !client_secret;
+        mountpoint = !mountpoint;
+        clear_cache = !clear_cache;
+        headless = !headless;
+        skip_trash = !skip_trash;
+        base_dir = !base_dir;
+      } in
+      if !mountpoint = "" then begin
+        setup_application { params with mountpoint = "." };
+      end else begin
+        setup_application params;
+        at_exit
+          (fun () ->
+             Utils.log_with_header "Exiting.\n";
+             let context = Context.get_ctx () in
+             Utils.log_message "CURL cleanup...";
+             ignore (GapiCurl.global_cleanup context.Context.curl_state);
+             Utils.log_message "done\nClearing context...";
+             Context.clear_ctx ();
+             Utils.log_message "done\n%!");
+        start_filesystem !mountpoint !fuse_args
+      end
+    with
+        Failure error_message -> quit error_message
+      | e ->
+          let error_message = Printexc.to_string e in
+            quit error_message
+  end
 (* END Main program *)
 

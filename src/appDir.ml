@@ -42,8 +42,7 @@ let cache_dir = {
   GapiLens.set = (fun v x -> { x with cache_dir = v })
 }
 
-let create fs_label =
-  let base_dir = Filename.concat (Sys.getenv "HOME") ".gdfuse" in
+let create fs_label base_dir =
   let app_dir = Filename.concat base_dir fs_label in
     { fs_label;
       base_dir;
