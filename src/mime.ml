@@ -772,5 +772,6 @@ let map_filename_to_mime_type filename =
     | "smv" -> "video/x-smv"
     | "ice" -> "x-conference/x-cooltalk"
     | "nef" -> "image/x-nikon-nef"
+    | "gz" -> "application/x-gzip"
     | _ -> "application/octet-stream"
 
