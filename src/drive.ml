@@ -837,16 +837,20 @@ let with_retry f resource =
                FilesResource.get
                  ~std_params:file_std_params
                  ~fileId >>= fun file ->
+               let (state, verb) =
+                 if resource.Cache.Resource.state = Cache.Resource.State.ToUpload then
+                   (Cache.Resource.State.ToUpload, "uploading")
+                 else
+                   (Cache.Resource.State.ToDownload, "downloading") in
                let refreshed_resource =
-                 update_resource_from_file
-                   ~state:Cache.Resource.State.ToDownload res file in
+                 update_resource_from_file ~state res file in
                let context = Context.get_ctx () in
                let cache = context.Context.cache in
                update_cached_resource cache refreshed_resource;
                let n' = n + 1 in
                Utils.log_message
-                 "Retry (%d) downloading resource (id=%Ld)...\n%!"
-                 n' resource.Cache.Resource.id;
+                 "Retry (%d) %s resource (id=%Ld)...\n%!"
+                 n' verb resource.Cache.Resource.id;
                loop refreshed_resource n'
              end
          | e -> throw e)
