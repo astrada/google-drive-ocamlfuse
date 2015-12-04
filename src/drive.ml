@@ -830,8 +830,22 @@ let with_retry f resource =
       (f res)
       (function
            Resource_busy as e ->
-             if n > 4 then throw e
-             else begin
+             if n > 4 then begin
+               let context = Context.get_ctx () in
+               let conflict_resolution = context
+                 |. Context.config_lens
+                 |. Config.conflict_resolution in
+               if resource.Cache.Resource.state =
+                     Cache.Resource.State.ToUpload
+                   && conflict_resolution =
+                     Config.ConflictResolutionStrategy.Server then begin
+                 let cache = context.Context.cache in
+                 let updated_resource = resource
+                   |> Cache.Resource.state ^= Cache.Resource.State.ToDownload in
+                 update_cached_resource cache updated_resource;
+               end;
+               throw e
+             end else begin
                GapiUtils.wait_exponential_backoff n;
                let fileId = res.Cache.Resource.remote_id |> Option.get in
                FilesResource.get
