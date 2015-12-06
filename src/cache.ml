@@ -228,7 +228,7 @@ struct
          state = 'ToDownload', \
          change_id = :change_id \
        WHERE id = :id \
-         AND state <> 'ToUpload';"
+         AND state <> 'ToUpload' AND state <> 'Uploading';"
     in
       Sqlite3.prepare db sql
 
@@ -439,18 +439,21 @@ struct
         InSync
       | ToDownload
       | ToUpload
+      | Uploading
       | NotFound
 
     let to_string = function
         InSync -> "InSync"
       | ToDownload -> "ToDownload"
       | ToUpload -> "ToUpload"
+      | Uploading -> "Uploading"
       | NotFound -> "NotFound"
 
     let of_string = function
         "InSync" -> InSync
       | "ToDownload" -> ToDownload
       | "ToUpload" -> ToUpload
+      | "Uploading" -> Uploading
       | "NotFound" -> NotFound
       | s -> failwith ("Resource state unexpected: " ^ s)
 

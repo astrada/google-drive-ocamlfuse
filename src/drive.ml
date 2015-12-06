@@ -26,6 +26,10 @@ let file_list_std_params =
   }
 
 let do_request = Oauth2.do_request
+let async_do_request f =
+  let thread = Thread.create (fun go -> do_request go) f in
+  let thread_id = Thread.id thread in
+  Utils.log_message "Spawning new thread id=%d\n%!" thread_id
 
 let root_directory = "/"
 let trash_directory = "/.Trash"
@@ -134,17 +138,17 @@ let try_with_default f s =
   with_try f
     (function
          GapiRequest.PermissionDenied session ->
-           Utils.log_message "Server error: Permission denied.\n%!";
+           Utils.log_with_header "Server error: Permission denied.\n%!";
            throw Permission_denied
        | GapiRequest.RequestTimeout _ ->
-           Utils.log_message "Server error: Request Timeout.\n%!";
+           Utils.log_with_header "Server error: Request Timeout.\n%!";
            throw Resource_busy
        | GapiRequest.PreconditionFailed _
        | GapiRequest.Conflict _ ->
-           Utils.log_message "Server error: Conflict.\n%!";
+           Utils.log_with_header "Server error: Conflict.\n%!";
            throw Resource_busy
        | GapiRequest.Forbidden _ ->
-           Utils.log_message "Server error: Forbidden.\n%!";
+           Utils.log_with_header "Server error: Forbidden.\n%!";
            throw Resource_busy
        | e -> throw e) s
 
@@ -862,8 +866,8 @@ let with_retry f resource =
                let cache = context.Context.cache in
                update_cached_resource cache refreshed_resource;
                let n' = n + 1 in
-               Utils.log_message
-                 "Retry (%d) %s resource (id=%Ld)...\n%!"
+               Utils.log_with_header
+                 "Retry (%d) %s resource (id=%Ld).\n%!"
                  n' verb resource.Cache.Resource.id;
                loop refreshed_resource n'
              end
@@ -970,7 +974,8 @@ let download_resource resource =
   in
   begin match resource.Cache.Resource.state with
       Cache.Resource.State.InSync
-    | Cache.Resource.State.ToUpload ->
+    | Cache.Resource.State.ToUpload
+    | Cache.Resource.State.Uploading ->
         if Sys.file_exists content_path then
           SessionM.return content_path
         else
@@ -1406,80 +1411,107 @@ let write path buf offset file_descr =
   do_request write_to_resource |> fst
 (* END write *)
 
-let upload_if_dirty resource =
+let start_uploading_if_dirty path =
+  let (path_in_cache, trashed) = get_path_in_cache path in
+  let resource = lookup_resource path_in_cache trashed in
+  match resource with
+      None ->
+        false
+    | Some r ->
+        if r.Cache.Resource.state == Cache.Resource.State.ToUpload then begin
+          let cache = Context.get_cache () in
+          let uploading_resource = r
+            |> Cache.Resource.state ^= Cache.Resource.State.Uploading in
+          update_cached_resource cache uploading_resource;
+          true
+        end else false
+
+let upload resource =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
-  match resource.Cache.Resource.state with
-      Cache.Resource.State.ToUpload ->
-        let content_path = Cache.get_content_path cache resource in
-        let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-        let file_source =
-          GapiMediaResource.create_file_resource content_path in
-        let resource_mime_type =
-          resource |. Cache.Resource.mime_type |> Option.get in
-        let content_type = file_source |. GapiMediaResource.content_type in
-        (* Workaround to set the correct MIME type *)
-        let mime_type =
-          if resource_mime_type <> "" then resource_mime_type
-          else content_type in
-        let file_source = file_source
-          |> GapiMediaResource.content_type ^= mime_type in
-        let media_source =
-          if file_source.GapiMediaResource.content_length = 0L then None
-          else Some file_source in
-        Utils.log_message
-          "Uploading file (cache path=%s, content type=%s)...%!"
-          content_path mime_type;
-        FilesResource.get
-          ~std_params:file_std_params
-          ~fileId:remote_id >>= fun refreshed_file ->
-        let newRevision = config |. Config.new_revision in
-        FilesResource.update
-          ~std_params:file_std_params
-          ~newRevision
-          ?media_source
-          ~fileId:remote_id
-          refreshed_file >>= fun updated_file ->
-        refresh_remote_resource resource updated_file >>= fun file ->
-        Utils.log_message "done\n%!";
-        let updated_resource =
-          update_resource_from_file
-            ~state:Cache.Resource.State.InSync resource file in
-        update_cached_resource cache updated_resource;
-        let metadata = context.Context.metadata |> Option.get in
-        let config = context |. Context.config_lens in
-        Option.may
-          (fun file_size ->
-             shrink_cache
-               file_size
-               config.Config.max_cache_size_mb
-               metadata
-               cache)
-          updated_resource.Cache.Resource.file_size;
-        SessionM.return ()
-    | _ ->
-        SessionM.return ()
+  let uploading_resource =
+    resource |> Cache.Resource.state ^= Cache.Resource.State.Uploading in
+  update_cached_resource cache uploading_resource;
+  let content_path = Cache.get_content_path cache resource in
+  let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+  let file_source =
+    GapiMediaResource.create_file_resource content_path in
+  let resource_mime_type =
+    resource |. Cache.Resource.mime_type |> Option.get in
+  let content_type = file_source |. GapiMediaResource.content_type in
+  (* Workaround to set the correct MIME type *)
+  let mime_type =
+    if resource_mime_type <> "" then resource_mime_type
+    else content_type in
+  let file_source = file_source
+    |> GapiMediaResource.content_type ^= mime_type in
+  let media_source =
+    if file_source.GapiMediaResource.content_length = 0L then None
+    else Some file_source in
+  Utils.log_with_header
+    "Start uploading file (id=%Ld, path=%s, cache path=%s, content type=%s).\n%!"
+    resource.Cache.Resource.id resource.Cache.Resource.path content_path mime_type;
+  FilesResource.get
+    ~std_params:file_std_params
+    ~fileId:remote_id >>= fun refreshed_file ->
+  let newRevision = config |. Config.new_revision in
+  FilesResource.update
+    ~std_params:file_std_params
+    ~newRevision
+    ?media_source
+    ~fileId:remote_id
+    refreshed_file >>= fun updated_file ->
+  let updated_resource =
+    update_resource_from_file resource updated_file in
+  refresh_remote_resource updated_resource updated_file >>= fun file ->
+  Utils.log_with_header
+    "Finished uploading file (id=%Ld, path=%s, cache path=%s, content type=%s).\n%!"
+    resource.Cache.Resource.id resource.Cache.Resource.path content_path mime_type;
+  let updated_resource =
+    update_resource_from_file
+      ~state:Cache.Resource.State.InSync resource file in
+  update_cached_resource cache updated_resource;
+  let metadata = context.Context.metadata |> Option.get in
+  let config = context |. Context.config_lens in
+  Option.may
+    (fun file_size ->
+       shrink_cache
+         file_size
+         config.Config.max_cache_size_mb
+         metadata
+         cache)
+    updated_resource.Cache.Resource.file_size;
+  SessionM.return ()
 
-let upload_if_dirty_with_retry path =
-  let try_upload_if_dirty resource =
-    try_with_default (upload_if_dirty resource)
+let upload_with_retry path =
+  let try_upload resource =
+    try_with_default (upload resource)
   in
   let (path_in_cache, trashed) = get_path_in_cache path in
   get_resource path_in_cache trashed >>= fun resource ->
-  with_retry try_upload_if_dirty resource
+  with_retry try_upload resource
+
+let upload_if_dirty path =
+  if start_uploading_if_dirty path then
+    let config = Context.get_ctx () |. Context.config_lens in
+    if config.Config.async_upload then begin
+      async_do_request (upload_with_retry path)
+    end else begin
+      do_request (upload_with_retry path) |> ignore
+    end
 
 (* flush *)
 let flush path file_descr =
-  do_request (upload_if_dirty_with_retry path) |> ignore
+  upload_if_dirty path
 
 (* fsync *)
 let fsync path ds file_descr =
-  do_request (upload_if_dirty_with_retry path) |> ignore
+  upload_if_dirty path
 
 (* release *)
 let release path flags hnd =
-  do_request (upload_if_dirty_with_retry path) |> ignore
+  upload_if_dirty path
 
 (* Create resources *)
 let create_remote_resource is_folder path mode =

@@ -91,6 +91,11 @@ type t = {
   (* Specifies whether to force document export even if the requested format
    * is not available *)
   force_docs_export : bool;
+  (* Specifies whether to start uploading in a parallel thread. Warning! This
+   * flag is EXPERIMENTAL *)
+  async_upload : bool;
+  (* Specifies connection timeout in milliseconds *)
+  connect_timeout_ms : int;
 }
 
 let debug = {
@@ -217,6 +222,14 @@ let force_docs_export = {
   GapiLens.get = (fun x -> x.force_docs_export);
   GapiLens.set = (fun v x -> { x with force_docs_export = v })
 }
+let async_upload = {
+  GapiLens.get = (fun x -> x.async_upload);
+  GapiLens.set = (fun v x -> { x with async_upload = v })
+}
+let connect_timeout_ms = {
+  GapiLens.get = (fun x -> x.connect_timeout_ms);
+  GapiLens.set = (fun v x -> { x with connect_timeout_ms = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -255,6 +268,8 @@ let default = {
   stream_large_files = false;
   large_file_threshold_mb = 16;
   force_docs_export = true;
+  async_upload = false;
+  connect_timeout_ms = 5000;
 }
 
 let default_debug = {
@@ -289,6 +304,8 @@ let default_debug = {
   stream_large_files = false;
   large_file_threshold_mb = 16;
   force_docs_export = true;
+  async_upload = false;
+  connect_timeout_ms = 5000;
 }
 
 let of_table table =
@@ -351,8 +368,11 @@ let of_table table =
         get "large_file_threshold_mb" int_of_string
           default.large_file_threshold_mb;
       force_docs_export =
-        get "force_docs_export" bool_of_string
-          default.force_docs_export;
+        get "force_docs_export" bool_of_string default.force_docs_export;
+      async_upload =
+        get "async_upload" bool_of_string default.async_upload;
+      connect_timeout_ms =
+        get "connect_timeout_ms" int_of_string default.connect_timeout_ms;
     }
 
 let to_table data =
@@ -392,6 +412,8 @@ let to_table data =
     add "large_file_threshold_mb"
       (data.large_file_threshold_mb |> string_of_int);
     add "force_docs_export" (data.force_docs_export |> string_of_bool);
+    add "async_upload" (data.async_upload |> string_of_bool);
+    add "connect_timeout_ms" (data.connect_timeout_ms |> string_of_int);
     table
 
 let debug_print out_ch start_time curl info_type info =
@@ -414,16 +436,17 @@ let create_gapi_config config app_dir =
       let out_ch = open_out (app_dir |. AppDir.curl_log_path) in
       let debug_function = debug_print out_ch (Unix.gettimeofday ()) in
         GapiConfig.default_debug
-        |> GapiConfig.debug ^= Some (GapiConfig.Custom debug_function)
+          |> GapiConfig.debug ^= Some (GapiConfig.Custom debug_function)
     else
       GapiConfig.default
   in
     gapi_config
-    |> GapiConfig.application_name ^= application_name ^ " (" ^ version ^ ")"
-    (* If client_id and client_secret are not set, the authorization will
-     * be handled by the GAE proxy *)
-    |> GapiConfig.auth ^= GapiConfig.OAuth2
-                            { GapiConfig.client_id = config.client_id;
-                              client_secret = config.client_secret;
-                              refresh_access_token = None }
+      |> GapiConfig.application_name ^= application_name ^ " (" ^ version ^ ")"
+      |> GapiConfig.connect_timeout ^= Some config.connect_timeout_ms
+      (* If client_id and client_secret are not set, the authorization will
+       * be handled by the GAE proxy *)
+      |> GapiConfig.auth ^= GapiConfig.OAuth2
+                              { GapiConfig.client_id = config.client_id;
+                                client_secret = config.client_secret;
+                                refresh_access_token = None }
 
