@@ -13,7 +13,7 @@ build: [
 depends: [
   "base-threads"
   "camlidl"
-  "gapi-ocaml" {>= "0.2.6"}
+  "gapi-ocaml" {>= "0.2.7"}
   "ocamlfind"
   "ocamlfuse"
   "sqlite3"
