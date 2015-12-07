@@ -96,6 +96,15 @@ type t = {
   async_upload : bool;
   (* Specifies connection timeout in milliseconds *)
   connect_timeout_ms : int;
+  max_download_speed : int64;
+  (* Max download speed (on a single transfer) in bytes/second. *)
+  max_upload_speed : int64;
+  (* Max upload speed (on a single transfer) in bytes/second. *)
+  low_speed_limit : int;
+  low_speed_time : int;
+  (* If speed (in bytes/second) is under low_speed_limit for low_speed_time
+   * (in seconds), the file transfer is considered too slow and therefore
+   * terminated. *)
 }
 
 let debug = {
@@ -230,6 +239,22 @@ let connect_timeout_ms = {
   GapiLens.get = (fun x -> x.connect_timeout_ms);
   GapiLens.set = (fun v x -> { x with connect_timeout_ms = v })
 }
+let max_download_speed = {
+  GapiLens.get = (fun x -> x.max_download_speed);
+  GapiLens.set = (fun v x -> { x with max_download_speed = v })
+}
+let max_upload_speed = {
+  GapiLens.get = (fun x -> x.max_upload_speed);
+  GapiLens.set = (fun v x -> { x with max_upload_speed = v })
+}
+let low_speed_limit = {
+  GapiLens.get = (fun x -> x.low_speed_limit);
+  GapiLens.set = (fun v x -> { x with low_speed_limit = v })
+}
+let low_speed_time = {
+  GapiLens.get = (fun x -> x.low_speed_time);
+  GapiLens.set = (fun v x -> { x with low_speed_time = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -270,6 +295,10 @@ let default = {
   force_docs_export = true;
   async_upload = false;
   connect_timeout_ms = 5000;
+  max_download_speed = 0L;
+  max_upload_speed = 0L;
+  low_speed_limit = 0;
+  low_speed_time = 0;
 }
 
 let default_debug = {
@@ -306,6 +335,10 @@ let default_debug = {
   force_docs_export = true;
   async_upload = false;
   connect_timeout_ms = 5000;
+  max_download_speed = 0L;
+  max_upload_speed = 0L;
+  low_speed_limit = 0;
+  low_speed_time = 0;
 }
 
 let of_table table =
@@ -373,6 +406,14 @@ let of_table table =
         get "async_upload" bool_of_string default.async_upload;
       connect_timeout_ms =
         get "connect_timeout_ms" int_of_string default.connect_timeout_ms;
+      max_download_speed =
+        get "max_download_speed" Int64.of_string default.max_download_speed;
+      max_upload_speed =
+        get "max_upload_speed" Int64.of_string default.max_upload_speed;
+      low_speed_limit =
+        get "low_speed_limit" int_of_string default.low_speed_limit;
+      low_speed_time =
+        get "low_speed_time" int_of_string default.low_speed_time;
     }
 
 let to_table data =
@@ -414,6 +455,10 @@ let to_table data =
     add "force_docs_export" (data.force_docs_export |> string_of_bool);
     add "async_upload" (data.async_upload |> string_of_bool);
     add "connect_timeout_ms" (data.connect_timeout_ms |> string_of_int);
+    add "max_download_speed" (data.max_download_speed |> Int64.to_string);
+    add "max_upload_speed" (data.max_upload_speed |> Int64.to_string);
+    add "low_speed_limit" (data.low_speed_limit |> string_of_int);
+    add "low_speed_time" (data.low_speed_time |> string_of_int);
     table
 
 let debug_print out_ch start_time curl info_type info =
@@ -443,6 +488,10 @@ let create_gapi_config config app_dir =
     gapi_config
       |> GapiConfig.application_name ^= application_name ^ " (" ^ version ^ ")"
       |> GapiConfig.connect_timeout ^= Some config.connect_timeout_ms
+      |> GapiConfig.max_recv_speed ^= config.max_download_speed
+      |> GapiConfig.max_send_speed ^= config.max_upload_speed
+      |> GapiConfig.low_speed_limit ^= config.low_speed_limit
+      |> GapiConfig.low_speed_time ^= config.low_speed_time
       (* If client_id and client_secret are not set, the authorization will
        * be handled by the GAE proxy *)
       |> GapiConfig.auth ^= GapiConfig.OAuth2

@@ -32,8 +32,9 @@ Getting started
 
 ### Installation
 
-I've uploaded .deb packages to my [PPA](https://launchpad.net/~alessandro-strada/+archive/ppa),
-for Ubuntu 14.04, 12.04. In order to to install it, use the commands below:
+I've uploaded .deb packages to my
+[PPA](https://launchpad.net/~alessandro-strada/+archive/ppa). In order to to
+install it, use the commands below:
 
     $ sudo add-apt-repository ppa:alessandro-strada/ppa
     $ sudo apt-get update
@@ -49,7 +50,7 @@ How to build
 * [OCaml][] >= 3.12.0
 * [Findlib][] >= 1.2.7
 * [ocamlfuse][] >= 2.7.1
-* [gapi-ocaml][] >= 0.2.6
+* [gapi-ocaml][] >= 0.2.7
 * [sqlite3-ocaml][] >= 1.6.1
 
 [OCaml]: http://caml.inria.fr/ocaml/release.en.html
