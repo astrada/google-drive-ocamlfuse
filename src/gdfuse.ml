@@ -92,6 +92,7 @@ type application_params = {
   headless: bool;
   skip_trash: bool;
   base_dir: string;
+  multi_threading: bool;
 }
 
 let setup_application params =
@@ -149,11 +150,15 @@ let setup_application params =
     then current_config |. Config.client_secret
     else params.client_secret in
   let headless = params.headless in
+  (* Turn off async_upload if multi_threading is true. *)
+  let async_upload =
+    current_config.Config.async_upload && not params.multi_threading in
   let config =
     { current_config with
           Config.debug = params.debug;
           client_id;
           client_secret;
+          async_upload;
     } in
   let config_store = config_store
     |> Context.ConfigFileStore.data ^= config in
@@ -425,6 +430,7 @@ let () =
   let clear_cache = ref false in
   let headless = ref false in
   let skip_trash = ref false in
+  let multi_threading = ref false in
   let base_dir =
     let dir = Filename.concat (Sys.getenv "HOME") ".gdfuse" in
     ref dir in
@@ -484,8 +490,11 @@ let () =
        Arg.Unit (fun _ -> fuse_args := "-d" :: !fuse_args),
        " enable FUSE debug output (implies -f).";
        "-m",
-       Arg.Unit (fun _ -> fuse_args :=
-                          List.filter (fun a -> a <> "-s") !fuse_args),
+       Arg.Unit (fun _ ->
+         fuse_args := List.filter
+                        (fun a -> a <> "-s")
+                        !fuse_args;
+         multi_threading := true),
        " enable multi-threaded operation.";
        "-o",
        Arg.String parse_mount_options,
@@ -528,6 +537,7 @@ let () =
         headless = !headless;
         skip_trash = !skip_trash;
         base_dir = !base_dir;
+        multi_threading = !multi_threading;
       } in
       if !mountpoint = "" then begin
         setup_application { params with mountpoint = "." };

@@ -266,7 +266,7 @@ let default = {
   metadata_cache_time = 60;
   read_only = false;
   umask;
-  sqlite3_busy_timeout = 500;
+  sqlite3_busy_timeout = 5000;
   download_docs = true;
   document_format = "odt";
   document_icon = "";
@@ -306,7 +306,7 @@ let default_debug = {
   metadata_cache_time = 60;
   read_only = false;
   umask;
-  sqlite3_busy_timeout = 500;
+  sqlite3_busy_timeout = 5000;
   download_docs = true;
   document_format = "odt";
   document_icon = "";

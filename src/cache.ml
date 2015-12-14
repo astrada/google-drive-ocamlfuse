@@ -102,7 +102,7 @@ let select_all_rows stmt bind_parameters row_to_data =
 
 (* Prepare SQL *)
 let prepare_begin_tran_stmt db =
-  Sqlite3.prepare db "BEGIN TRANSACTION;"
+  Sqlite3.prepare db "BEGIN IMMEDIATE TRANSACTION;"
 
 let prepare_commit_tran_stmt db =
   Sqlite3.prepare db "COMMIT TRANSACTION;"
