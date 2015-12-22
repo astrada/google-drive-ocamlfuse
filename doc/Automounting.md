@@ -31,3 +31,29 @@ And then you can use `mount` to mount your Google Drive:
 If you have another account you can mount it specifying the label after the `#` character. E.g.:
 
     gdfuse#account2  /mnt/gdrive2     fuse    uid=1000,gid=1000     0       0
+
+## Mount using pam_mount
+
+First go through the authorization process. Install the package `libpam-mount` or its equivalent. Edit the file `/etc/security/pam_mount.conf.xml` and uncomment the following line (as root):
+
+    <luserconf name=".pam_mount.conf.xml" />
+
+Create a file `.pam_mount.conf.xml` in your home directory with the following line in the `Volume definitions` stanza:
+
+    <volume fstype="fuse" path="gdfuse#default" mountpoint="~/GoogleDrive" options="nosuid,nodev" />
+
+Create a shell script `gdfuse` in `/usr/local/bin/` (as root) with the following content:
+
+    #!/bin/bash
+    
+    google-drive-ocamlfuse -label $1 $*
+
+And make it executable:
+
+    $ sudo chmod +x /usr/local/bin/gdfuse
+
+Create a directory `GoogleDrive` in the root of your home directory:
+
+    $ mkdir ~/GoogleDrive
+
+Now log out and back in again and your Google Drive should be mounted on `~/GoogleDrive`.

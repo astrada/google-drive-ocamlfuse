@@ -20,7 +20,7 @@ Specifies the umask (i.e. the bitmask of  the  permissions  that  are  not prese
 
 Specifies the Sqlite3 busy handler timeout in milliseconds:
 
-    sqlite3_busy_timeout=500
+    sqlite3_busy_timeout=5000
 
 Specifies whether to download Google Docs (these files are read-only, even if `read_only=false`):
 
@@ -30,25 +30,49 @@ Text document [[export format|Exportable-formats#valid-download-formats-for-text
 
     document_format=odt
 
+If `document_format=desktop`, specifies the icon of the desktop link (default is no icon):
+
+    document_icon=
+
 Drawings [[export format|Exportable-formats#valid-download-formats-for-drawings]]:
 
     drawing_format=png
+
+If `drawing_format=desktop`, specifies the icon of the desktop link (default is no icon):
+
+    drawing_icon=
 
 Forms [[export format|Exportable-formats#valid-formats-for-spreadsheets]]:
 
     form_format=ods
 
+If `form_format=desktop`, specifies the icon of the desktop link (default is no icon):
+
+    form_icon=
+
 Presentations [[export format|Exportable-formats#valid-formats-for-presentations]]:
 
     presentation_format=pdf
+
+If `presentation_format=desktop`, specifies the icon of the desktop link (default is no icon):
+
+    presentation_icon=
 
 Spreadsheets [[export format|Exportable-formats#valid-formats-for-spreadsheets]]:
 
     spreadsheet_format=ods
 
+If `spreadsheet_format=desktop`, specifies the icon of the desktop link (default is no icon):
+
+    spreadsheet_icon=
+
 Maps export format (the only valid format is `desktop`):
 
     map_format=desktop
+
+If `map_format=desktop`, specifies the icon of the desktop link (default is no icon):
+
+    map_icon=
 
 OAuth2 client ID (optional):
 
@@ -108,6 +132,27 @@ Force export of Google Docs in the format specified above. Introduced as a worka
 
     force_docs_export=true
 
+Specifies whether to upload files in new threads (**WARNING**: this flag is EXPERIMENTAL. Use at your own risk. Automatically turned off if `-m` is specified on the command line):
+
+    async_upload=false
+
+Specifies connection timeout in milliseconds:
+
+    connect_timeout_ms=5000
+
+Specifies maximum download speed per connection in bytes/second (`0` = unlimited):
+
+    max_download_speed = 0
+
+Specifies maximum upload speed per connection in bytes/second (`0` = unlimited):
+
+    max_upload_speed = 0
+
+Specifies when a transfer is too slow. If speed (in bytes/second) is under `low_speed_limit` for `low_speed_time` (in seconds), the file transfer will be terminated (`0` = don't check):
+
+    low_speed_limit = 0
+    low_speed_time = 0
+
 ### Document export formats
 
 `desktop` format creates a shortcut to the document that will be opened in the web browser for edit.
@@ -118,4 +163,4 @@ If you don't want to export a specific kind of docs, just remove the format port
 
 no drawings will be exported.
 
-Note that if you change any export format, you will have to clear the cache (using `-cc` command line option).
+Note that if you change any export format, you will have to clear the cache (using `-cc` command line option). Note also that this feature works only if you set `docs_file_extension=true`.

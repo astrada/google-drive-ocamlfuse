@@ -1,20 +1,16 @@
-[Martin Gallant](https://plus.google.com/u/0/106520267009287985667) contributed this checklist to install `google-drive-ocamlfuse` on a fresh Debian Jessie VM with only the base packages installed.
+[Martin Gallant](https://plus.google.com/u/0/106520267009287985667) contributed this checklist to install `google-drive-ocamlfuse` on a fresh Debian Jessie VM with only the base packages installed. (Updated for Jessie 8.2 installed via netinstall. See [issue #145](https://github.com/astrada/google-drive-ocamlfuse/issues/145).)
 
 These utilities get me started from a base Debian Jessie install:
 
     sudo apt-get install sudo ssh
 
-The wiki says I need to do this, I did not check if this was all necessary:
+Then install project dependencies:
 
-    sudo apt-get install m4 libcurl4-gnutls-dev libfuse-dev libsqlite3-dev
+    sudo apt-get install m4 libcurl4-gnutls-dev libfuse-dev libsqlite3-dev opam ocaml make fuse camlp4-extra build-essential pkg-config zlib1g zlib1g-dev
 
-I needed the following as well:
+Create `fuse` group (if not already present):
 
-    sudo apt-get install opam ocaml
-    sudo apt-get install make
-    sudo apt-get install fuse
-    sudo apt-get install camlp4-extra
-
+    sudo groupadd fuse
 
 Debian has a special user group to allow fuse access. Log out, and log back in after this to make change effective:
 
@@ -31,3 +27,5 @@ Get the packages installed. I used the default on all installer prompts:
     opam update
     opam install google-drive-ocamlfuse
     . /home/*user*/.opam/opam-init/init.sh > /dev/null 2> /dev/null || true
+
+*Note*: if you are using `root` to install opam, init script will be located in `/root/.opam/opam-init/init.sh`, and you will need to `chmod +x` it, because otherwise you will get a permission denied error.
