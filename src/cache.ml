@@ -39,7 +39,9 @@ let finalize_stmt stmt =
   Sqlite3.finalize stmt |> fail_if_not_ok
 
 let final_step stmt =
-  Sqlite3.step stmt |> expect Sqlite3.Rc.DONE
+  Utils.with_retry (fun () ->
+    Sqlite3.step stmt |> expect Sqlite3.Rc.DONE)
+    "final_step"
 (* END Helpers *)
 
 (* Query helpers *)
@@ -398,19 +400,9 @@ let open_db cache =
   db
 
 let close_db db =
-  let rec try_close n =
-    if n > 4 then begin
-      let thread_id = Utils.get_thread_id () in
-      Utils.log_message "Thread id=%d: Error: cannot close db\n%!" thread_id;
-      Printf.eprintf "Error: cannot close sqlite db.\n\
-        Please restart the program.\n%!";
-      exit 1
-    end else if not (Sqlite3.db_close db) then begin
-      Unix.sleep 1;
-      try_close (succ n)
-    end
-  in
-  try_close 0
+  Utils.with_retry (fun () ->
+    if not (Sqlite3.db_close db) then raise (Failure "close_db"))
+    "close_db"
 
 let with_db cache f =
   let db = open_db cache in
@@ -663,7 +655,7 @@ struct
          insert_stmt db)
 
   let update_resource cache resource =
-    with_db cache
+    with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_update_stmt db in
          bind_resource_parameters stmt resource;
@@ -677,14 +669,14 @@ struct
     final_step stmt
 
   let delete_resource cache resource =
-    with_db cache
+    with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_delete_stmt db in
          _delete_resource stmt resource.id;
          finalize_stmt stmt)
 
   let delete_not_found_resource_with_path cache path =
-    with_db cache
+    with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_delete_not_found_with_path_stmt db in
          reset_stmt stmt;
@@ -740,7 +732,7 @@ struct
          finalize_stmt stmt)
 
   let invalidate_trash_bin cache change_id =
-    with_db cache
+    with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_invalidate_trash_bin_stmt db in
          reset_stmt stmt;
@@ -762,7 +754,7 @@ struct
          finalize_stmt stmt)
 
   let delete_all_with_parent_path cache parent_path trashed =
-    with_db cache
+    with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_delete_all_with_parent_path db in
          reset_stmt stmt;
@@ -772,7 +764,7 @@ struct
          finalize_stmt stmt)
 
   let trash_all_with_parent_path cache parent_path =
-    with_db cache
+    with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_trash_all_with_parent_path db in
          reset_stmt stmt;
@@ -806,7 +798,7 @@ struct
     }
 
   let select_resource cache prepare bind =
-    with_db cache
+    with_transaction cache
       (fun db ->
          let stmt = prepare db in
          let result =
@@ -827,7 +819,7 @@ struct
       (fun stmt -> bind_text stmt ":remote_id" (Some remote_id))
 
   let select_resources_with_parent_path cache parent_path trashed =
-    with_db cache
+    with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_select_with_parent_path_stmt db in
          let results =
@@ -840,7 +832,7 @@ struct
          results)
 
   let select_resources_order_by_last_update cache =
-    with_db cache
+    with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_select_order_by_last_update db in
          let results =
@@ -1010,7 +1002,7 @@ struct
     final_step stmt
 
   let insert_metadata cache resource =
-    with_db cache
+    with_transaction cache
       (fun db ->
          let stmt = MetadataStmts.prepare_insert_stmt db in
          save_metadata stmt resource;
@@ -1030,7 +1022,7 @@ struct
     }
 
   let select_metadata cache =
-    with_db cache
+    with_transaction cache
       (fun db ->
          let stmt = MetadataStmts.prepare_select_stmt db in
          let result =
@@ -1078,7 +1070,7 @@ let setup_db cache =
   with_db cache
     (fun db ->
       wrap_exec_not_null_no_headers db
-        "BEGIN TRANSACTION; \
+        "BEGIN IMMEDIATE TRANSACTION; \
          CREATE TABLE IF NOT EXISTS resource ( \
             id INTEGER PRIMARY KEY, \
             etag TEXT NULL, \

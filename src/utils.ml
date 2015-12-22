@@ -120,3 +120,21 @@ let start_browser url =
     if not status then
       failwith ("Error opening URL:" ^ url)
 
+let with_retry f label =
+  let rec loop n =
+    try
+      f ()
+    with e ->
+      if n > 4 then begin
+        log_with_header "Error during %s after 5 attempts: %s\n%!"
+          label (Printexc.to_string e);
+        raise e
+      end else begin
+        log_with_header "Retrying (%d/5) %s after exception: %s\n%!"
+          (n + 1) label (Printexc.to_string e);
+        GapiUtils.wait_exponential_backoff n;
+        loop (n + 1)
+      end
+  in
+  loop 0
+
