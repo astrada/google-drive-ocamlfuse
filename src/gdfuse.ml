@@ -153,12 +153,19 @@ let setup_application params =
   (* Turn off async_upload if multi_threading is true. *)
   let async_upload =
     current_config.Config.async_upload && not params.multi_threading in
+  let sqlite3_busy_timeout =
+    (* Previously default timeout was 500ms thats too low for multi-threading,
+     * update default value to 5000ms *)
+    if params.multi_threading &&
+       current_config.Config.sqlite3_busy_timeout = 500 then 5000
+    else current_config.Config.sqlite3_busy_timeout in
   let config =
     { current_config with
           Config.debug = params.debug;
           client_id;
           client_secret;
           async_upload;
+          sqlite3_busy_timeout;
     } in
   let config_store = config_store
     |> Context.ConfigFileStore.data ^= config in
@@ -422,7 +429,7 @@ let start_filesystem mountpoint fuse_args =
 let () =
   let fs_label = ref "default" in
   let mountpoint = ref "" in
-  let fuse_args = ref ["-s"; "-obig_writes"] in
+  let fuse_args = ref ["-obig_writes"] in
   let show_version = ref false in
   let debug = ref false in
   let client_id = ref "" in
@@ -430,7 +437,7 @@ let () =
   let clear_cache = ref false in
   let headless = ref false in
   let skip_trash = ref false in
-  let multi_threading = ref false in
+  let multi_threading = ref true in
   let base_dir =
     let dir = Filename.concat (Sys.getenv "HOME") ".gdfuse" in
     ref dir in
@@ -489,13 +496,11 @@ let () =
        "-d",
        Arg.Unit (fun _ -> fuse_args := "-d" :: !fuse_args),
        " enable FUSE debug output (implies -f).";
-       "-m",
+       "-s",
        Arg.Unit (fun _ ->
-         fuse_args := List.filter
-                        (fun a -> a <> "-s")
-                        !fuse_args;
-         multi_threading := true),
-       " enable multi-threaded operation.";
+         fuse_args := "-s" :: !fuse_args;
+         multi_threading := false),
+       " switch to single-threaded operation.";
        "-o",
        Arg.String parse_mount_options,
        " specify FUSE mount options.";
