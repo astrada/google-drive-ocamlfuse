@@ -170,6 +170,7 @@ let setup_application params =
   let config_store = config_store
     |> Context.ConfigFileStore.data ^= config in
   Context.save_config_store config_store;
+  Utils.max_retries := config.Config.max_retries;
   let gapi_config =
     let gapi_config = Config.create_gapi_config config app_dir in
     if client_id = "" || client_secret = "" then

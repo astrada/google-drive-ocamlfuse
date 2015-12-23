@@ -105,6 +105,8 @@ type t = {
   (* If speed (in bytes/second) is under low_speed_limit for low_speed_time
    * (in seconds), the file transfer is considered too slow and therefore
    * terminated. *)
+  max_retries : int;
+  (* Specifies the maximum number of attempts if an operation fails. *)
 }
 
 let debug = {
@@ -255,6 +257,10 @@ let low_speed_time = {
   GapiLens.get = (fun x -> x.low_speed_time);
   GapiLens.set = (fun v x -> { x with low_speed_time = v })
 }
+let max_retries = {
+  GapiLens.get = (fun x -> x.max_retries);
+  GapiLens.set = (fun v x -> { x with max_retries = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -299,6 +305,7 @@ let default = {
   max_upload_speed = 0L;
   low_speed_limit = 0;
   low_speed_time = 0;
+  max_retries = 10;
 }
 
 let default_debug = {
@@ -339,6 +346,7 @@ let default_debug = {
   max_upload_speed = 0L;
   low_speed_limit = 0;
   low_speed_time = 0;
+  max_retries = 10;
 }
 
 let of_table table =
@@ -414,6 +422,7 @@ let of_table table =
         get "low_speed_limit" int_of_string default.low_speed_limit;
       low_speed_time =
         get "low_speed_time" int_of_string default.low_speed_time;
+      max_retries = get "max_retries" int_of_string default.max_retries;
     }
 
 let to_table data =
@@ -459,6 +468,7 @@ let to_table data =
     add "max_upload_speed" (data.max_upload_speed |> Int64.to_string);
     add "low_speed_limit" (data.low_speed_limit |> string_of_int);
     add "low_speed_time" (data.low_speed_time |> string_of_int);
+    add "max_retries" (data.max_retries |> string_of_int);
     table
 
 let debug_print out_ch start_time curl info_type info =

@@ -29,6 +29,7 @@ let get_thread_id () =
 let start_time = Unix.gettimeofday ()
 let verbose = ref false
 let log_channel = ref stdout
+let max_retries = ref 10
 
 let log_message format =
   if !verbose then
@@ -125,15 +126,16 @@ let with_retry f label =
     try
       f ()
     with e ->
-      if n > 4 then begin
-        log_with_header "Error during %s after 5 attempts: %s\n%!"
-          label (Printexc.to_string e);
+      if n >= !max_retries then begin
+        log_with_header "Error during %s after %d attempts: %s\n%!"
+          label !max_retries (Printexc.to_string e);
         raise e
       end else begin
-        log_with_header "Retrying (%d/5) %s after exception: %s\n%!"
-          (n + 1) label (Printexc.to_string e);
+        let n' = n + 1 in
+        log_with_header "Retrying (%d/%d) %s after exception: %s\n%!"
+          n' !max_retries label (Printexc.to_string e);
         GapiUtils.wait_exponential_backoff n;
-        loop (n + 1)
+        loop n'
       end
   in
   loop 0

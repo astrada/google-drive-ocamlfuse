@@ -834,7 +834,7 @@ let with_retry f resource =
       (f res)
       (function
            Resource_busy as e ->
-             if n > 4 then begin
+             if n >= !Utils.max_retries then begin
                let context = Context.get_ctx () in
                let conflict_resolution = context
                  |. Context.config_lens
@@ -867,8 +867,8 @@ let with_retry f resource =
                update_cached_resource cache refreshed_resource;
                let n' = n + 1 in
                Utils.log_with_header
-                 "Retry (%d) %s resource (id=%Ld).\n%!"
-                 n' verb resource.Cache.Resource.id;
+                 "Retry (%d/%d) %s resource (id=%Ld).\n%!"
+                 n' !Utils.max_retries verb resource.Cache.Resource.id;
                loop refreshed_resource n'
              end
          | e -> throw e)

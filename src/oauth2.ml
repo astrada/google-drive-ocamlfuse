@@ -54,11 +54,12 @@ let do_request go =
             ExtString.String.exists message "CURLE_RECV_ERROR"
           in
           Utils.log_message "Error during request: %s\n%!" message;
-          if check_curl_error () && n < 5 then begin
-            Utils.log_message "Retrying (%d/5)\n%!" (n + 1);
+          if check_curl_error () && n < !Utils.max_retries then begin
+            let n' = n + 1 in
+            Utils.log_message "Retrying (%d/%d)\n%!" n' !Utils.max_retries;
             GapiUtils.wait_exponential_backoff n;
             (* Retry on timeout *)
-            try_request (n + 1)
+            try_request n'
           end else begin
             Utils.log_message "Giving up\n%!";
             raise e
