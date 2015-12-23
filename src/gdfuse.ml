@@ -500,7 +500,7 @@ let () =
        Arg.Unit (fun _ ->
          fuse_args := "-s" :: !fuse_args;
          multi_threading := false),
-       " switch to single-threaded operation.";
+       " run in single-threaded mode.";
        "-o",
        Arg.String parse_mount_options,
        " specify FUSE mount options.";
