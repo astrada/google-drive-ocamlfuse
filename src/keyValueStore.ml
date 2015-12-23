@@ -50,22 +50,26 @@ struct
     if not (Sys.file_exists filename) then raise File_not_found;
     let sb = Scanf.Scanning.from_file filename in
     let table = Hashtbl.create 16 in
-      while (not (Scanf.Scanning.end_of_input sb)) do
-        let (key, value) = Scanf.bscanf sb "%s@=%s@\n" (fun k v -> (k, v)) in
-          Hashtbl.add table key value
-      done;
-      { path = filename;
-        data = D.of_table table;
-      }
+    while (not (Scanf.Scanning.end_of_input sb)) do
+      let (key, value) = Scanf.bscanf sb "%s@=%s@\n" (fun k v -> (k, v)) in
+        Hashtbl.add table key value
+    done;
+    { path = filename;
+      data = D.of_table table;
+    }
 
   let save store =
     let table = D.to_table store.data in
     let out_ch = open_out store.path in
-      Hashtbl.iter
-        (fun key value ->
-           Printf.fprintf out_ch "%s=%s\n" key value)
-        table;
-      close_out out_ch
+    let key_value_list =
+      Hashtbl.fold (fun key value kvs -> (key, value) :: kvs) table [] in
+    let sorted_table =
+      List.sort (fun (k, _) (k', _) -> compare k k') key_value_list in
+    List.iter
+      (fun (key, value) ->
+         Printf.fprintf out_ch "%s=%s\n" key value)
+      sorted_table;
+    close_out out_ch
 
 end
 
