@@ -650,7 +650,7 @@ let refresh_remote_resource resource current_file =
   let remote_id = resource.Cache.Resource.remote_id |> Option.get in
   let etag = resource.Cache.Resource.etag in
   Utils.log_message
-    "Refreshing remote resource (id=%s,etag=%s)...%!"
+    "Refreshing remote resource (id=%s, etag=%s)...%!"
     remote_id (Option.default "" etag);
   with_try
     (FilesResource.get
@@ -799,15 +799,16 @@ and get_resource path trashed =
           SessionM.return resource
     end
 
-let check_md5_checksum resource =
+let check_md5_checksum resource cache =
   let path = resource.Cache.Resource.path in
+  let content_path = Cache.get_content_path cache resource in
   let md5_checksum = Option.default "" resource.Cache.Resource.md5_checksum in
   if md5_checksum <> "" then begin
-    Utils.log_message "Checking MD5 checksum (path=%s, hash=%s)...\n%!"
-      path md5_checksum;
-    if Sys.file_exists path then begin
+    Utils.log_message "Checking MD5 checksum (path=%s, cache path=%s, hash=%s)...\n%!"
+      path content_path md5_checksum;
+    if Sys.file_exists content_path then begin
       let md5 = Cryptokit.Hash.md5 () in
-      Utils.with_in_channel path
+      Utils.with_in_channel content_path
         (fun ch ->
            try
              while true do
@@ -981,7 +982,7 @@ let download_resource resource =
         else
           do_download ()
     | Cache.Resource.State.ToDownload ->
-        if check_md5_checksum resource then
+        if check_md5_checksum resource cache then
           SessionM.return content_path
         else
           do_download ()
@@ -995,7 +996,7 @@ let stream_resource offset buffer resource =
   let length = Bigarray.Array1.dim buffer in
   let finish = Int64.add offset (Int64.of_int (length - 1)) in
   Utils.log_message
-    "Stream resource (id=%Ld,offset=%Ld,finish=%Ld,length=%d)...%!"
+    "Stream resource (id=%Ld, offset=%Ld, finish=%Ld, length=%d)...%!"
     resource.Cache.Resource.id offset finish length;
   try_with_default
     (let media_destination = GapiMediaResource.ArrayBuffer buffer in
@@ -1129,14 +1130,14 @@ let read_dir path =
   let (path_in_cache, trashed) = get_path_in_cache path in
 
   let request_folder =
-    Utils.log_message "Getting folder content (path=%s,trashed=%b)\n%!"
+    Utils.log_message "Getting folder content (path=%s, trashed=%b)\n%!"
       path_in_cache trashed;
     get_resource path_in_cache trashed >>= fun resource ->
     get_folder_id path_in_cache trashed >>= fun folder_id ->
     let q =
       Printf.sprintf "'%s' in parents and trashed = %b" folder_id trashed in
     get_all_files q >>= fun files ->
-    Utils.log_message "Done getting folder content (path=%s,trashed=%b)\n%!"
+    Utils.log_message "Done getting folder content (path=%s, trashed=%b)\n%!"
       path_in_cache trashed;
     begin if path = trash_directory && trashed then begin
       Utils.log_message "Getting explicitly trashed files...%!";
@@ -1157,7 +1158,7 @@ let read_dir path =
   let resources =
     if check_resource_in_cache cache path_in_cache trashed then begin
       Utils.log_message
-        "Getting resources from db (parent path=%s,trashed=%b)...%!"
+        "Getting resources from db (parent path=%s, trashed=%b)...%!"
         path_in_cache trashed;
       let resources =
         Cache.Resource.select_resources_with_parent_path
@@ -1329,7 +1330,7 @@ let utime path atime mtime =
         ~std_params:file_std_params
         ~fileId:remote_id >>= fun touched_file ->
       Utils.log_message "done\n%!";
-      Utils.log_message "Updating file mtime (id=%s,mtime=%f)...%!"
+      Utils.log_message "Updating file mtime (id=%s, mtime=%f)...%!"
         remote_id mtime;
       let file_patch = File.empty
             |> File.modifiedDate ^= Netdate.create mtime in
@@ -1394,7 +1395,7 @@ let write path buf offset file_descr =
   let write_to_resource =
     get_resource path_in_cache trashed >>= fun resource ->
     with_retry download_resource resource >>= fun content_path ->
-    Utils.log_message "Writing local file (path=%s,trashed=%b)...%!"
+    Utils.log_message "Writing local file (path=%s, trashed=%b)...%!"
       path_in_cache trashed;
     let bytes =
       Utils.with_out_channel content_path
@@ -1540,7 +1541,7 @@ let create_remote_resource is_folder path mode =
           parents = [parent_reference];
           mimeType;
     } in
-    Utils.log_message "Creating %s (path=%s,trashed=%b) on server...%!"
+    Utils.log_message "Creating %s (path=%s, trashed=%b) on server...%!"
       (if is_folder then "folder" else "file") path_in_cache trashed;
     FilesResource.insert
       ~std_params:file_std_params
@@ -1643,7 +1644,7 @@ let delete_resource is_folder path =
         Cache.Resource.delete_resource cache resource;
         if is_folder then begin
           Utils.log_message
-            "Deleting folder old content (path=%s,trashed=%b) from cache...%!"
+            "Deleting folder old content (path=%s, trashed=%b) from cache...%!"
             path_in_cache trashed;
           Cache.Resource.delete_all_with_parent_path
             cache path_in_cache trashed;
@@ -1794,7 +1795,7 @@ let rename path new_path =
           Utils.log_message "done\n%!";
           if Cache.Resource.is_folder resource then begin
             Utils.log_message
-              "Deleting folder old content (path=%s,trashed=%b) from cache...%!"
+              "Deleting folder old content (path=%s, trashed=%b) from cache...%!"
               path_in_cache trashed;
             Cache.Resource.delete_all_with_parent_path
               cache path_in_cache trashed;
