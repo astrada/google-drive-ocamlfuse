@@ -97,10 +97,11 @@ let update_ctx update =
   get_ctx () |> update |> set_ctx
 
 let save_state_store state_store =
-  Utils.log_message "Saving application state in %s..."
+  Utils.log_with_header "BEGIN: Saving application state in %s\n"
     state_store.StateFileStore.path;
   StateFileStore.save state_store;
-  Utils.log_message "done\n"
+  Utils.log_with_header "END: Saving application state in %s\n"
+    state_store.StateFileStore.path
 
 let save_state_from_context context =
   ConcurrentContext.with_lock
@@ -111,10 +112,11 @@ let save_state_from_context context =
 let save_config_store config_store =
   ConcurrentContext.with_lock
     (fun () ->
-       Utils.log_message "Saving configuration in %s..."
+       Utils.log_with_header "BEGIN: Saving configuration in %s\n"
          config_store.ConfigFileStore.path;
        ConfigFileStore.save config_store;
-       Utils.log_message "done\n")
+       Utils.log_with_header "END: Saving configuration in %s\n"
+         config_store.ConfigFileStore.path)
 
 let get_cache () =
   get_ctx () |. cache

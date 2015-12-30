@@ -4,26 +4,26 @@ open GapiLens.Infix
 let try_finally f finally =
   try
     let result = f () in
-      finally ();
-      result
+    finally ();
+    result
   with e ->
     finally ();
     raise e
 
 let with_in_channel path f =
   let ch = open_in path in
-    try_finally
-      (fun () -> f ch)
-      (fun () -> close_in ch)
+  try_finally
+    (fun () -> f ch)
+    (fun () -> close_in ch)
 
 let with_out_channel ?(mode = [Open_creat; Open_wronly]) path f =
   let ch = open_out_gen mode 0o600 path in
-    try_finally
-      (fun () -> f ch)
-      (fun () -> close_out ch)
+  try_finally
+    (fun () -> f ch)
+    (fun () -> close_out ch)
 
 let get_thread_id () =
-  Thread.self () |> Thread.id
+  Thread.id (Thread.self ())
 
 (* Logging *)
 let start_time = Unix.gettimeofday ()
@@ -40,7 +40,7 @@ let log_message format =
 let log_with_header format =
   if !verbose then begin
     let elapsed = Unix.gettimeofday () -. start_time in
-    let thread_id = Thread.id (Thread.self ()) in
+    let thread_id = get_thread_id () in
     Printf.fprintf !log_channel "[%f] TID=%d: " elapsed thread_id;
     Printf.fprintf !log_channel format
   end else
@@ -49,14 +49,14 @@ let log_with_header format =
 let log_exception e =
   let message = Printexc.to_string e in
   let backtrace = Printexc.get_backtrace () in
-    log_message "Exception:%s\n" message;
-    log_message "Backtrace:%s\n%!" backtrace
+  log_with_header "Exception:%s\n" message;
+  log_message "Backtrace:%s\n%!" backtrace
 
 (* Hashtbl *)
 let safe_find table key =
   try
     let v = Hashtbl.find table key in
-      Some v
+    Some v
   with Not_found -> None
 
 let get_from_string_table table (key : string) conv default =
@@ -85,7 +85,7 @@ let flags_to_string flags =
          | _ -> "_")
       flags
   in
-    String.concat "," flag_descriptions
+  String.concat "," flag_descriptions
 
 let xattr_flags_to_string = function
     Fuse.AUTO -> "AUTO"
@@ -96,16 +96,16 @@ let xattr_flags_to_string = function
 let start_browser url =
   let start_process browser =
     let command = Printf.sprintf "%s \"%s\"" browser url in
-    let () = log_message "Starting web browser with command: %s..." command in
+    log_with_header "BEGIN: Starting web browser with command: %s\n" command;
     let ch = Unix.open_process_in command in
     let status = Unix.close_process_in ch in
-      if status = (Unix.WEXITED 0) then begin
-        log_message "done\n%!";
-        true
-      end else begin
-        log_message "fail\n%!";
-        false
-      end
+    if status = (Unix.WEXITED 0) then begin
+      log_with_header "END: Starting web browser with command: %s\n" command;
+      true
+    end else begin
+      log_with_header "FAIL: Starting web browser with command: %s\n" command;
+      false
+    end
   in
   let browsers = ["xdg-open"; "firefox"; "google-chrome"] in
   let status =
@@ -118,8 +118,8 @@ let start_browser url =
       false
       browsers
   in
-    if not status then
-      failwith ("Error opening URL:" ^ url)
+  if not status then
+    failwith ("Error opening URL:" ^ url)
 
 let with_retry f label =
   let rec loop n =

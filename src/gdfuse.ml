@@ -250,16 +250,16 @@ let setup_application params =
 let handle_exception e label param =
   match e with
       Drive.File_not_found ->
-        Utils.log_message "File not found: %s %s\n%!" label param;
+        Utils.log_with_header "File not found: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.ENOENT, label, param))
     | Drive.Permission_denied ->
-        Utils.log_message "Permission denied: %s %s\n%!" label param;
+        Utils.log_with_header "Permission denied: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.EACCES, label, param))
     | Drive.Directory_not_empty ->
-        Utils.log_message "Directory not empty: %s %s\n%!" label param;
+        Utils.log_with_header "Directory not empty: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.ENOTEMPTY, label, param))
     | Drive.Resource_busy ->
-        Utils.log_message "Resource busy: %s %s\n%!" label param;
+        Utils.log_with_header "Resource busy: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.EBUSY, label, param))
     | e ->
         Utils.log_exception e;

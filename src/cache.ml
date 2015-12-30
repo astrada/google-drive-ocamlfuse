@@ -1056,11 +1056,14 @@ let delete_files_from_cache cache resources =
   List.fold_left
     (fun total_size resource ->
        let content_path = get_content_path cache resource in
-       Utils.log_message "Removing file (%s: resource %Ld) from cache...%!"
+       Utils.log_with_header
+         "BEGIN: Removing file (%s: resource %Ld) from cache\n%!"
          content_path resource.Resource.id;
        let size = remove_file content_path in
        let new_size = Int64.add total_size size in
-       Utils.log_message "done\n%!";
+       Utils.log_with_header
+         "END: Removing file (%s: resource %Ld) from cache\n%!"
+         content_path resource.Resource.id;
        new_size)
     0L
     resources
@@ -1123,7 +1126,7 @@ let clean_up_cache cache =
          try
            Sys.remove (Filename.concat cache.cache_dir file)
          with e ->
-           Utils.log_message "Error removing file %s: %s\n%!"
+           Utils.log_with_header "Error removing file %s: %s\n%!"
              file (Printexc.to_string e))
       (Sys.readdir cache.cache_dir)
   end

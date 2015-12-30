@@ -19,19 +19,21 @@ let gae_proxy_request page query_string =
            (fun pipe code headers session ->
               let response = GapiConversation.read_all pipe in
               if code <> 200 then begin
-                Utils.log_message "fail\n%!";
+                Utils.log_with_header "END: %s fail\n%!" page;
                 raise (ServerError (Printf.sprintf
                                       "Server response: %s (code=%d)"
                                       response code));
               end else begin
                 match response with
                     "Not_found" ->
-                      Utils.log_message "not found, retrying\n%!";
+                      Utils.log_with_header
+                        "END: %s not found, retrying\n%!" page;
                       raise Not_found
                   | "access_denied"
                   | "ConflictError"
                   | "Exception" as error_code ->
-                      Utils.log_message "fail (error_code=%s)\n%!" error_code;
+                      Utils.log_with_header
+                        "END: %s fail (error_code=%s)\n%!" page error_code;
                       raise (ServerError ("error_code " ^ error_code))
                   | "Missing_request_id" ->
                       failwith "Bug! Missing_request_id"
@@ -39,7 +41,8 @@ let gae_proxy_request page query_string =
                       failwith "Bug! Missing_refresh_token"
                   | _ -> ()
               end;
-              Utils.log_message "ok\n%!";
+              Utils.log_with_header
+                "END: %s ok\n%!" page;
               let json = Yojson.Safe.from_string response in
               let fields =
                 match json with
@@ -61,7 +64,7 @@ let get_string_field table name =
     | _ -> failwith ("Cannot get " ^ name ^ " field from JSON response")
 
 let get_tokens () =
-  Utils.log_message "Getting tokens from GAE proxy...";
+  Utils.log_with_header "BEGIN: Getting tokens from GAE proxy\n";
   let context = Context.get_ctx () in
   let request_id = context |. Context.request_id_lens in
   let query_string =
@@ -95,7 +98,7 @@ let start_server_polling () =
     loop 0
 
 let refresh_access_token () =
-  Utils.log_message "Refreshing access token...";
+  Utils.log_with_header "BEGIN: Refreshing access token\n";
   let context = Context.get_ctx () in
   let token = context |. Context.refresh_token_lens in
   let query_string =
@@ -104,7 +107,8 @@ let refresh_access_token () =
     try
       gae_proxy_request "refreshtoken" query_string
     with e ->
-      Utils.log_message "Error refreshing access token (try=%d):\n%!" n;
+      Utils.log_with_header
+        "END: Refreshing access token: Error (try=%d):\n%!" n;
       Utils.log_exception e;
       if n > 4 then begin
         prerr_endline "Cannot refresh access token. Quitting.";

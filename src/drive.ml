@@ -29,7 +29,7 @@ let do_request = Oauth2.do_request
 let async_do_request f =
   let thread = Thread.create (fun go -> do_request go) f in
   let thread_id = Thread.id thread in
-  Utils.log_message "Spawning new thread id=%d\n%!" thread_id
+  Utils.log_with_header "Spawning new thread id=%d\n%!" thread_id
 
 let root_directory = "/"
 let trash_directory = "/.Trash"
@@ -82,24 +82,23 @@ let disambiguate_filename filename without_extension filename_table  =
         let (base_name, extension) = split_filename filename in
         Printf.sprintf "%s (%d)%s" base_name copy_number extension
     in
-    Utils.log_message "Checking: %s...%!" new_candidate;
     if not (Hashtbl.mem filename_table new_candidate) then begin
-      Utils.log_message "OK\n%!";
+      Utils.log_with_header "Checking: %s: OK\n%!" new_candidate;
       (new_candidate, copy_number)
     end else begin
-      Utils.log_message "KO\n%!";
+      Utils.log_with_header "Checking: %s: KO\n%!" new_candidate;
       find_first_unique_filename filename (copy_number + 1)
     end
   in
   if Hashtbl.mem filename_table filename then begin
-    Utils.log_message "Filename collision detected: %s\n%!" filename;
+    Utils.log_with_header "Filename collision detected: %s\n%!" filename;
     let last_copy_number = Hashtbl.find filename_table filename in
     let (unique_filename, copy_number) =
       find_first_unique_filename filename (last_copy_number + 1) in
     Hashtbl.replace filename_table filename copy_number;
     unique_filename
   end else begin
-    Utils.log_message "Filename (unused): %s\n%!" filename;
+    Utils.log_with_header "Filename (unused): %s\n%!" filename;
     Hashtbl.add filename_table filename 0;
     filename
   end
@@ -311,29 +310,42 @@ let get_parent_resource_ids file =
 
 let insert_resource_into_cache ?state cache resource file =
   let resource = update_resource_from_file ?state resource file in
-  Utils.log_message "Saving resource to db...%!";
+  Utils.log_with_header "BEGIN: Saving resource to db (remote id=%s)\n%!"
+    file.File.id;
   let inserted = Cache.Resource.insert_resource cache resource in
-  Utils.log_message "done\n%!";
+  Utils.log_with_header "END: Saving resource to db (remote id=%s, id=%Ld)\n%!"
+    file.File.id inserted.Cache.Resource.id;
   inserted
 
 let update_cached_resource cache resource =
-  Utils.log_message "Updating resource in db (id=%Ld)...%!"
-    resource.Cache.Resource.id;
+  Utils.log_with_header
+    "BEGIN: Updating resource in db (id=%Ld, state=%s)\n%!"
+    resource.Cache.Resource.id
+    (Cache.Resource.State.to_string resource.Cache.Resource.state);
   Cache.Resource.update_resource cache resource;
-  Utils.log_message "done\n%!"
+  Utils.log_with_header "END: Updating resource in db (id=%Ld)\n%!"
+    resource.Cache.Resource.id
 
 let lookup_resource path trashed =
-  Utils.log_message "Loading resource %s (trashed=%b) from db...%!"
+  Utils.log_with_header "BEGIN: Loading resource %s (trashed=%b) from db\n%!"
     path trashed;
   let cache = Context.get_cache () in
-  let resource =
-    Cache.Resource.select_resource_with_path cache path trashed
-  in
-    if Option.is_none resource then
-      Utils.log_message "not found\n%!"
-    else
-      Utils.log_message "found\n%!";
-    resource
+  let resource = Cache.Resource.select_resource_with_path cache path trashed in
+  begin if Option.is_none resource then begin
+    Utils.log_with_header
+      "END: Loading resource %s (trashed=%b) from db: Not found\n%!"
+      path trashed;
+  end else begin
+    let id = resource |. GapiLens.option_get |. Cache.Resource.id in
+    let state = resource
+      |. GapiLens.option_get
+      |. Cache.Resource.state
+      |> Cache.Resource.State.to_string in
+    Utils.log_with_header
+      "END: Loading resource %s (trashed=%b) from db: Found (id=%Ld, state=%s)\n%!"
+      path trashed id state;
+  end end;
+  resource
 
 let get_root_resource trashed =
   let context = Context.get_ctx () in
@@ -346,21 +358,24 @@ let get_root_resource trashed =
               metadata.Cache.Metadata.root_folder_id
               metadata.Cache.Metadata.largest_change_id
               trashed in
-            Utils.log_message "Saving root resource to db...%!";
+            Utils.log_with_header
+              "BEGIN: Saving root resource to db (id=%Ld)\n%!"
+              root_resource.Cache.Resource.id;
             let inserted =
               Cache.Resource.insert_resource cache root_resource in
-            Utils.log_message "done\n%!";
+            Utils.log_with_header
+              "END: Saving root resource to db (id=%Ld)\n%!"
+              root_resource.Cache.Resource.id;
             inserted
       | Some resource -> resource
 
 let update_cache_size new_size metadata cache =
   let updated_metadata = metadata
     |> Cache.Metadata.cache_size ^= new_size in
-  Utils.log_message "Updating cache size (%Ld) in db...%!" new_size;
+  Utils.log_with_header "BEGIN: Updating cache size (%Ld) in db\n%!" new_size;
   Cache.Metadata.insert_metadata cache updated_metadata;
-  Utils.log_message "done\nUpdating context...%!";
-  Context.update_ctx (Context.metadata ^= Some updated_metadata);
-  Utils.log_message "done\n%!"
+  Utils.log_with_header "END: Updating cache size (%Ld) in db\n%!" new_size;
+  Context.update_ctx (Context.metadata ^= Some updated_metadata)
 
 let shrink_cache file_size max_cache_size_mb metadata cache =
   let check_cache_size cache_size =
@@ -443,12 +458,12 @@ let get_metadata () =
   let cache = context.Context.cache in
   let metadata =
     if Option.is_none context.Context.metadata then begin
-      Utils.log_message "Loading metadata from db...%!";
+      Utils.log_with_header "BEGIN: Loading metadata from db\n%!";
       let db_metadata = Cache.Metadata.select_metadata context.Context.cache in
-        Context.update_ctx (Context.metadata ^= db_metadata);
-        db_metadata
+      Context.update_ctx (Context.metadata ^= db_metadata);
+      db_metadata
     end else begin
-      Utils.log_message "Getting metadata from context...%!";
+      Utils.log_with_header "BEGIN: Getting metadata from context\n%!";
       context.Context.metadata
     end in
 
@@ -472,14 +487,14 @@ let get_metadata () =
         else
           loop ~pageToken:change_list.ChangeList.nextPageToken changes
       in
-        loop []
+      loop []
     in
 
     let request_changes =
-      Utils.log_message "Getting changes from server...%!";
+      Utils.log_with_header "BEGIN: Getting changes from server\n%!";
       let startChangeId = Int64.succ last_change_id in
       get_all_changes startChangeId >>= fun changes ->
-      Utils.log_message "done\n%!";
+      Utils.log_with_header "END: Getting changes from server\n%!";
       SessionM.return changes
     in
 
@@ -496,16 +511,16 @@ let get_metadata () =
                     [] -> [context |. Context.root_folder_id_lens]
                   | ids -> ids
               in
-                List.map
-                  (Cache.Resource.select_resource_with_remote_id cache)
-                  remote_ids
+              List.map
+                (Cache.Resource.select_resource_with_remote_id cache)
+                remote_ids
           | Some r ->
               let parent_resource =
                 Cache.Resource.select_resource_with_path cache
                   r.Cache.Resource.parent_path
                   false
               in
-                [parent_resource; selected_resource]
+              [parent_resource; selected_resource]
       in
       List.map get_id resources
     in
@@ -518,10 +533,11 @@ let get_metadata () =
     let remaining_change_ids =
       new_metadata.Cache.Metadata.remaining_change_ids in
     if remaining_change_ids = 0L then
-      Utils.log_message "no need to update resource cache\n%!"
+      Utils.log_with_header
+        "END: Getting metadata: No need to update resource cache\n%!"
     else if remaining_change_ids > change_id_limit then
-      Utils.log_message
-        "too many changes (remaining_change_ids=%Ld)\n%!"
+      Utils.log_with_header
+        "END: Getting metadata: Too many changes (remaining_change_ids=%Ld)\n%!"
         remaining_change_ids
     else match metadata with
         None -> ()
@@ -551,7 +567,7 @@ let get_metadata () =
             update_cache cache xs;
           in
 
-          Utils.log_message "Updating resource cache...%!";
+          Utils.log_with_header "BEGIN: Updating resource cache\n%!";
           update_resource_cache
             (fun change ->
                not change.Change.deleted &&
@@ -559,22 +575,26 @@ let get_metadata () =
             get_ids_to_update
             (fun cache ids ->
                Cache.Resource.invalidate_resources cache ids change_id);
-          Utils.log_message "done\nUpdating trashed resources...%!";
+          Utils.log_with_header "END: Updating resource cache\n";
+          Utils.log_with_header "BEGIN: Updating trashed resources\n%!";
           update_resource_cache
             (fun change -> change.Change.file.File.labels.File.Labels.trashed)
             get_file_id_from_change
             (fun cache resources ->
                Cache.Resource.trash_resources cache resources change_id);
-          Utils.log_message "done\nRemoving deleted resources...%!";
+          Utils.log_with_header "END: Updating trashed resources\n";
+          Utils.log_with_header "BEGIN: Removing deleted resources\n%!";
           update_resource_cache
             (fun change -> change.Change.deleted)
             get_file_id_from_change
             (delete_resources new_metadata);
+          Utils.log_with_header
+            "END: Removing deleted resources\n%!";
           if List.length changes > 0 then begin
-            Utils.log_message "done\nInvalidating trash bin resource...%!";
+            Utils.log_with_header "BEGIN: Invalidating trash bin resource\n%!";
             Cache.Resource.invalidate_trash_bin cache change_id;
+            Utils.log_with_header "END: Invalidating trash bin resource\n%!";
           end;
-          Utils.log_message "done\n%!";
   in
 
   let refresh_metadata () =
@@ -585,13 +605,14 @@ let get_metadata () =
     let cache_size =
       Option.map_default
         Cache.Metadata.cache_size.GapiLens.get 0L metadata in
-    Utils.log_message "Refreshing metadata...%!";
+    Utils.log_with_header "BEGIN: Refreshing metadata\n%!";
     let update_metadata =
       with_try
         (request_metadata last_change_id etag cache_size)
         (function
             GapiRequest.NotModified session ->
-              Utils.log_message "not modified...%!";
+              Utils.log_with_header
+                "END: Refreshing metadata: Not modified\n%!";
               SessionM.put session >>= fun () ->
               let m = Option.get metadata in
               let m' =
@@ -599,27 +620,30 @@ let get_metadata () =
               SessionM.return m'
           | e -> throw e) in
     let updated_metadata = do_request update_metadata |> fst in
-    Utils.log_message "done\nUpdating metadata in db...%!";
+    Utils.log_with_header "END: Refreshing metadata\n";
+    Utils.log_with_header "BEGIN: Updating metadata in db\n%!";
     Cache.Metadata.insert_metadata context.Context.cache updated_metadata;
-    Utils.log_message "done\nUpdating context...%!";
+    Utils.log_with_header "END: Updating metadata in db\n";
+    Utils.log_with_header "BEGIN: Updating context\n%!";
     Context.update_ctx (Context.metadata ^= Some updated_metadata);
-    Utils.log_message "done\n%!";
+    Utils.log_with_header "END: Updating context\n%!";
     update_resource_cache last_change_id updated_metadata;
     updated_metadata
   in
 
   match metadata with
       None ->
-        Utils.log_message "not found\n%!";
+        Utils.log_with_header "END: Getting metadata: Not found\n%!";
         refresh_metadata ()
     | Some m ->
         let metadata_cache_time =
           context |. Context.config_lens |. Config.metadata_cache_time
         in
         if Cache.Metadata.is_valid metadata_cache_time m then begin
-          Utils.log_message "valid\n%!"; m
+          Utils.log_with_header "END: Getting metadata: Valid\n%!";
+          m
         end else begin
-          Utils.log_message "not valid\n%!";
+          Utils.log_with_header "END: Getting metadata: Not valid\n%!";
           refresh_metadata ()
         end
 
@@ -649,8 +673,8 @@ let statfs () =
 let refresh_remote_resource resource current_file =
   let remote_id = resource.Cache.Resource.remote_id |> Option.get in
   let etag = resource.Cache.Resource.etag in
-  Utils.log_message
-    "Refreshing remote resource (id=%s, etag=%s)...%!"
+  Utils.log_with_header
+    "BEGIN: Refreshing remote resource (remote id=%s, etag=%s)\n%!"
     remote_id (Option.default "" etag);
   with_try
     (FilesResource.get
@@ -659,16 +683,20 @@ let refresh_remote_resource resource current_file =
        ~fileId:remote_id)
     (function
         GapiRequest.NotModified session ->
-        Utils.log_message "Resource (remote_id=%s) not modified\n%!"
+        Utils.log_with_header
+          "END: Refreshing remote resource (remote id=%s): Not modified\n%!"
           remote_id;
         SessionM.put session >>= fun () ->
         SessionM.return current_file
       | e -> throw e) >>= fun file ->
-  Utils.log_message "done\n%!";
+  Utils.log_with_header
+    "END: Refreshing remote resource (remote id=%s)\n%!"
+    remote_id;
   SessionM.return file
 
 let get_file_from_server parent_folder_id title trashed =
-  Utils.log_message "Getting resource %s (in folder %s) from server...%!"
+  Utils.log_with_header
+    "BEGIN: Getting resource %s (in folder %s) from server\n%!"
     title parent_folder_id;
   let q =
     Printf.sprintf "title = '%s' and '%s' in parents and trashed = %b"
@@ -677,7 +705,9 @@ let get_file_from_server parent_folder_id title trashed =
     ~std_params:file_list_std_params
     ~q
     ~maxResults:1 >>= fun file_list ->
-  Utils.log_message "done\n%!";
+  Utils.log_with_header
+    "END: Getting resource %s (in folder %s) from server\n%!"
+    title parent_folder_id;
   let files = file_list.FileList.items in
   if List.length files = 0 then
     SessionM.return None
@@ -689,12 +719,16 @@ let get_resource_from_server parent_folder_id title new_resource trashed cache =
   get_file_from_server parent_folder_id title trashed >>= fun file ->
   match file with
       None ->
-        Utils.log_message "Saving not found resource to db...%!";
+        Utils.log_with_header
+          "BEGIN: Saving not found resource to db (title=%s)\n%!"
+          title;
         let resource = new_resource
           |> Cache.Resource.trashed ^= Some trashed
           |> Cache.Resource.state ^= Cache.Resource.State.NotFound in
         let inserted = Cache.Resource.insert_resource cache resource in
-        Utils.log_message "done\n%!";
+        Utils.log_with_header
+          "END: Saving not found resource to db (title=%s)\n%!"
+          title;
         SessionM.return inserted
     | Some entry ->
         let inserted =
@@ -745,16 +779,20 @@ and get_resource path trashed =
     begin if Option.is_some resource.Cache.Resource.remote_id then begin
       let remote_id = resource.Cache.Resource.remote_id |> Option.get in
       let etag = resource.Cache.Resource.etag in
-      Utils.log_message "Getting file from server (id=%s)...%!" remote_id;
+      Utils.log_with_header
+        "BEGIN: Getting file from server (remote id=%s)\n%!"
+        remote_id;
       FilesResource.get
         ~std_params:file_std_params
         ?etag
         ~fileId:remote_id >>= fun file ->
+      Utils.log_with_header
+        "END: Getting file from server (remote id=%s)\n%!"
+        remote_id;
       SessionM.return (Some file)
     end else
       SessionM.return None
     end >>= fun refreshed_file ->
-    Utils.log_message "done\n%!";
     match refreshed_file with
         None ->
           Cache.Resource.delete_resource cache resource;
@@ -762,7 +800,9 @@ and get_resource path trashed =
       | Some file ->
           let updated_resource = update_resource_from_file resource file in
           update_cached_resource cache updated_resource;
-          Utils.log_message "done\n%!";
+          Utils.log_with_header
+            "END: Refreshing resource (id=%Ld)\n%!"
+            updated_resource.Cache.Resource.id;
           SessionM.return updated_resource
   in
 
@@ -782,8 +822,9 @@ and get_resource path trashed =
               (refresh_resource resource cache)
               (function
                    GapiRequest.NotModified session ->
-                     Utils.log_message
-                       "Resource (remote_id=%s) not modified\n%!"
+                     Utils.log_with_header
+                       "END: Refreshing resource (id=%Ld): Remote id=%s not modified\n%!"
+                       resource.Cache.Resource.id
                        (resource.Cache.Resource.remote_id |> Option.get);
                      SessionM.put session >>= fun () ->
                      let updated_resource = resource
@@ -804,7 +845,8 @@ let check_md5_checksum resource cache =
   let content_path = Cache.get_content_path cache resource in
   let md5_checksum = Option.default "" resource.Cache.Resource.md5_checksum in
   if md5_checksum <> "" then begin
-    Utils.log_message "Checking MD5 checksum (path=%s, cache path=%s, hash=%s)...\n%!"
+    Utils.log_with_header
+      "BEGIN: Checking MD5 checksum (path=%s, cache path=%s, hash=%s)\n%!"
       path content_path md5_checksum;
     if Sys.file_exists content_path then begin
       let md5 = Cryptokit.Hash.md5 () in
@@ -821,10 +863,14 @@ let check_md5_checksum resource cache =
       hexa#put_string md5_result;
       hexa#finish;
       let checksum = hexa#get_string in
-      Utils.log_message "Computed MD5 checksum: %s\n%!" checksum;
+      Utils.log_with_header
+        "END: Checking MD5 checksum (path=%s, cache path=%s, hash=%s): Computed MD5 checksum: %s\n%!"
+        path content_path md5_checksum checksum;
       checksum = md5_checksum
     end else begin
-      Utils.log_message "File does not exists.\n%!";
+      Utils.log_with_header
+        "END: Checking MD5 checksum (path=%s, cache path=%s, hash=%s): File does not exists\n%!"
+        path content_path md5_checksum;
       false
     end;
   end else false
@@ -933,7 +979,8 @@ let download_resource resource =
   let config = context |. Context.config_lens in
   let content_path = Cache.get_content_path cache resource in
   let create_empty_file () =
-    Utils.log_message "Creating resource without content (path=%s)...\n%!"
+    Utils.log_with_header
+      "BEGIN: Creating resource without content (path=%s)\n%!"
       content_path;
     close_out (open_out content_path);
     SessionM.return () in
@@ -949,7 +996,8 @@ let download_resource resource =
       resource.Cache.Resource.file_size;
     SessionM.return () in
   let do_download () =
-    Utils.log_message "Downloading resource (id=%Ld)...%!"
+    Utils.log_with_header
+      "BEGIN: Downloading resource (id=%Ld)\n%!"
       resource.Cache.Resource.id;
     let download_link =
       if Cache.Resource.is_document resource then
@@ -969,11 +1017,22 @@ let download_resource resource =
     end >>= fun () ->
     let updated_resource = resource
       |> Cache.Resource.state ^= Cache.Resource.State.InSync in
-    Utils.log_message "done\n%!";
+    Utils.log_with_header
+      "END: Downloading resource (id=%Ld)\n%!"
+      resource.Cache.Resource.id;
     Cache.Resource.update_resource cache updated_resource;
     SessionM.return content_path
   in
-  begin match resource.Cache.Resource.state with
+  let reloaded_resource = Option.map_default
+    (Cache.Resource.select_resource_with_remote_id cache)
+    (Some resource)
+    resource.Cache.Resource.remote_id
+  in
+  let reloaded_state = match reloaded_resource with
+      None -> Cache.Resource.State.NotFound
+    | Some r -> r.Cache.Resource.state
+  in
+  begin match reloaded_state with
       Cache.Resource.State.InSync
     | Cache.Resource.State.ToUpload
     | Cache.Resource.State.Uploading ->
@@ -995,8 +1054,8 @@ let stream_resource offset buffer resource =
   let download_link = Option.get resource.Cache.Resource.download_url in
   let length = Bigarray.Array1.dim buffer in
   let finish = Int64.add offset (Int64.of_int (length - 1)) in
-  Utils.log_message
-    "Stream resource (id=%Ld, offset=%Ld, finish=%Ld, length=%d)...%!"
+  Utils.log_with_header
+    "BEGIN: Stream resource (id=%Ld, offset=%Ld, finish=%Ld, length=%d)\n%!"
     resource.Cache.Resource.id offset finish length;
   try_with_default
     (let media_destination = GapiMediaResource.ArrayBuffer buffer in
@@ -1005,7 +1064,9 @@ let stream_resource offset buffer resource =
        download_link
        media_destination)
     >>= fun () ->
-  Utils.log_message "done\n%!";
+  Utils.log_with_header
+    "END: Stream resource (id=%Ld, offset=%Ld, finish=%Ld, length=%d)\n%!"
+    resource.Cache.Resource.id offset finish length;
   SessionM.return ()
 
 let is_filesystem_read_only () =
@@ -1130,23 +1191,26 @@ let read_dir path =
   let (path_in_cache, trashed) = get_path_in_cache path in
 
   let request_folder =
-    Utils.log_message "Getting folder content (path=%s, trashed=%b)\n%!"
+    Utils.log_with_header
+      "BEGIN: Getting folder content (path=%s, trashed=%b)\n%!"
       path_in_cache trashed;
     get_resource path_in_cache trashed >>= fun resource ->
     get_folder_id path_in_cache trashed >>= fun folder_id ->
     let q =
       Printf.sprintf "'%s' in parents and trashed = %b" folder_id trashed in
     get_all_files q >>= fun files ->
-    Utils.log_message "Done getting folder content (path=%s, trashed=%b)\n%!"
+    Utils.log_with_header
+      "END: Getting folder content (path=%s, trashed=%b)\n%!"
       path_in_cache trashed;
     begin if path = trash_directory && trashed then begin
-      Utils.log_message "Getting explicitly trashed files...%!";
+      Utils.log_with_header "BEGiN: Getting explicitly trashed files\n%!";
       let q =
         Printf.sprintf "not '%s' in parents and trashed = true" folder_id in
       get_all_files q >>= fun trashed_files ->
       let explicitly_trashed_files =
         List.filter (fun file -> file.File.explicitlyTrashed) trashed_files in
-      Utils.log_message "done (found %d files)\n%!"
+      Utils.log_with_header
+        "END: Getting explicitly trashed files: Found %d files\n%!"
         (List.length explicitly_trashed_files);
       SessionM.return (files @ explicitly_trashed_files, resource);
     end else
@@ -1157,13 +1221,15 @@ let read_dir path =
   let cache = Context.get_cache () in
   let resources =
     if check_resource_in_cache cache path_in_cache trashed then begin
-      Utils.log_message
-        "Getting resources from db (parent path=%s, trashed=%b)...%!"
+      Utils.log_with_header
+        "BEGIN: Getting resources from db (parent path=%s, trashed=%b)\n%!"
         path_in_cache trashed;
       let resources =
         Cache.Resource.select_resources_with_parent_path
           cache path_in_cache trashed in
-      Utils.log_message "done\n%!";
+      Utils.log_with_header
+        "END: Getting resources from db (parent path=%s, trashed=%b)\n%!"
+        path_in_cache trashed;
       resources
     end else begin
       let (files, folder_resource) = do_request request_folder |> fst in
@@ -1197,20 +1263,23 @@ let read_dir path =
                    update_resource_from_file resource file)
           resources_and_files
       in
-        Utils.log_message
-          "Inserting folder resources into db (trashed=%b)...%!" trashed;
-        let inserted_resources =
-          Cache.Resource.insert_resources
-            cache resources path_in_cache change_id trashed in
-        Utils.log_message "done\n%!";
-        let change_id =
-          Context.get_ctx () |. Context.largest_change_id_lens in
-        let updated_resource = folder_resource
-          |> Cache.Resource.change_id ^= change_id
-          |> Cache.Resource.state ^= Cache.Resource.State.InSync
-        in
-          update_cached_resource cache updated_resource;
-        inserted_resources
+      Utils.log_with_header
+        "BEGIN: Inserting folder resources into db (trashed=%b)\n%!"
+        trashed;
+      let inserted_resources =
+        Cache.Resource.insert_resources
+          cache resources path_in_cache change_id trashed in
+      Utils.log_with_header
+        "END: Inserting folder resources into db (trashed=%b)\n%!"
+        trashed;
+      let change_id =
+        Context.get_ctx () |. Context.largest_change_id_lens in
+      let updated_resource = folder_resource
+        |> Cache.Resource.change_id ^= change_id
+        |> Cache.Resource.state ^= Cache.Resource.State.InSync
+      in
+      update_cached_resource cache updated_resource;
+      inserted_resources
     end
   in
   let filenames =
@@ -1273,20 +1342,21 @@ let update_remote_resource path
       (function
            GapiRequest.PreconditionFailed session
          | GapiRequest.Conflict session ->
-             Utils.log_message "Conflict detected: %!";
+             Utils.log_with_header "BEGIN: Conflict detected\n%!";
              GapiMonad.SessionM.put session >>
              begin match config.Config.conflict_resolution with
                  Config.ConflictResolutionStrategy.Client ->
-                   Utils.log_message "Retrying...%!";
+                   Utils.log_with_header "BEGIN: Retrying\n%!";
                    let resource_without_etag =
                      resource |> Cache.Resource.etag ^= None in
                    retry_update resource_without_etag >>= fun file ->
-                   Utils.log_message "done\n%!";
+                   Utils.log_with_header "END: Conflict detected\n%!";
                    SessionM.return file
                | Config.ConflictResolutionStrategy.Server ->
-                   Utils.log_message "Keeping server changes.\n%!";
-                   Utils.log_message
-                     "Deleting resource (id=%Ld) from cache...%!"
+                   Utils.log_with_header
+                     "END: Conflict detected: Keeping server changes\n";
+                   Utils.log_with_header
+                     "Deleting resource (id=%Ld) from cache\n%!"
                      resource.Cache.Resource.id;
                    Cache.Resource.delete_resource cache resource;
                    throw Resource_busy
@@ -1325,12 +1395,12 @@ let utime path atime mtime =
   let update =
     let touch resource =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-      Utils.log_message "Touching file (id=%s)...%!" remote_id;
+      Utils.log_with_header "BEGIN: Touching file (remote id=%s)\n%!" remote_id;
       FilesResource.touch
         ~std_params:file_std_params
         ~fileId:remote_id >>= fun touched_file ->
-      Utils.log_message "done\n%!";
-      Utils.log_message "Updating file mtime (id=%s, mtime=%f)...%!"
+      Utils.log_with_header "END: Touching file (remote id=%s)\n%!" remote_id;
+      Utils.log_with_header "BEGIN: Updating file mtime (remote id=%s, mtime=%f)\n%!"
         remote_id mtime;
       let file_patch = File.empty
             |> File.modifiedDate ^= Netdate.create mtime in
@@ -1339,7 +1409,8 @@ let utime path atime mtime =
         ~setModifiedDate:true
         ~fileId:remote_id
         file_patch >>= fun patched_file ->
-      Utils.log_message "done\n%!";
+      Utils.log_with_header "END: Updating file mtime (remote id=%s, mtime=%f)\n%!"
+        remote_id mtime;
       SessionM.return (Some patched_file)
     in
     update_remote_resource
@@ -1395,7 +1466,8 @@ let write path buf offset file_descr =
   let write_to_resource =
     get_resource path_in_cache trashed >>= fun resource ->
     with_retry download_resource resource >>= fun content_path ->
-    Utils.log_message "Writing local file (path=%s, trashed=%b)...%!"
+    Utils.log_with_header
+      "BEGIN: Writing local file (path=%s, trashed=%b)\n%!"
       path_in_cache trashed;
     let bytes =
       Utils.with_out_channel content_path
@@ -1403,7 +1475,9 @@ let write path buf offset file_descr =
            let file_descr = Unix.descr_of_out_channel ch in
            Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
            Unix_util.write file_descr buf) in
-    Utils.log_message "done\n%!";
+    Utils.log_with_header
+      "END: Writing local file (path=%s, trashed=%b)\n%!"
+      path_in_cache trashed;
     let updated_resource =
       resource |> Cache.Resource.state ^= Cache.Resource.State.ToUpload in
     update_cached_resource cache updated_resource;
@@ -1451,7 +1525,7 @@ let upload resource =
     if file_source.GapiMediaResource.content_length = 0L then None
     else Some file_source in
   Utils.log_with_header
-    "Start uploading file (id=%Ld, path=%s, cache path=%s, content type=%s).\n%!"
+    "BEGIN: Uploading file (id=%Ld, path=%s, cache path=%s, content type=%s).\n%!"
     resource.Cache.Resource.id resource.Cache.Resource.path content_path mime_type;
   FilesResource.get
     ~std_params:file_std_params
@@ -1467,11 +1541,17 @@ let upload resource =
     update_resource_from_file resource updated_file in
   refresh_remote_resource updated_resource updated_file >>= fun file ->
   Utils.log_with_header
-    "Finished uploading file (id=%Ld, path=%s, cache path=%s, content type=%s).\n%!"
+    "END: Uploading file (id=%Ld, path=%s, cache path=%s, content type=%s).\n%!"
     resource.Cache.Resource.id resource.Cache.Resource.path content_path mime_type;
+  let reloaded_resource =
+    Cache.Resource.select_resource_with_remote_id cache file.File.id in
+  let resource = Option.default resource reloaded_resource in
+  let state =
+    match resource.Cache.Resource.state with
+        Cache.Resource.State.Uploading -> Some Cache.Resource.State.InSync
+      | _ -> None in
   let updated_resource =
-    update_resource_from_file
-      ~state:Cache.Resource.State.InSync resource file in
+    update_resource_from_file ?state resource file in
   update_cached_resource cache updated_resource;
   let metadata = context.Context.metadata |> Option.get in
   let config = context |. Context.config_lens in
@@ -1541,17 +1621,23 @@ let create_remote_resource is_folder path mode =
           parents = [parent_reference];
           mimeType;
     } in
-    Utils.log_message "Creating %s (path=%s, trashed=%b) on server...%!"
+    Utils.log_with_header
+      "BEGIN: Creating %s (path=%s, trashed=%b) on server\n%!"
       (if is_folder then "folder" else "file") path_in_cache trashed;
     FilesResource.insert
       ~std_params:file_std_params
       file >>= fun created_file ->
-    Utils.log_message "done\n%!";
+    Utils.log_with_header
+      "END: Creating file/folder (path=%s, trashed=%b) on server\n%!"
+      path_in_cache trashed;
     let new_resource = create_resource path_in_cache largest_change_id in
-    Utils.log_message "Deleting 'NotFound' resources (path=%s) from cache...%!"
+    Utils.log_with_header
+      "BEGIN: Deleting 'NotFound' resources (path=%s) from cache\n%!"
       path_in_cache;
     Cache.Resource.delete_not_found_resource_with_path cache path_in_cache;
-    Utils.log_message "done\n%!";
+    Utils.log_with_header
+      "END: Deleting 'NotFound' resources (path=%s) from cache\n%!"
+      path_in_cache;
     let inserted =
       insert_resource_into_cache
         ~state:Cache.Resource.State.InSync cache new_resource created_file in
@@ -1582,10 +1668,10 @@ let check_if_empty remote_id is_folder trashed =
       ~q
       ~folderId:remote_id >>= fun children ->
     if children.ChildList.items = [] then begin
-      Utils.log_message "Folder (id=%s) is empty\n%!" remote_id;
+      Utils.log_with_header "Folder (remote id=%s) is empty\n%!" remote_id;
       SessionM.return ()
     end else begin
-      Utils.log_message "Folder (id=%s) is not empty\n%!" remote_id;
+      Utils.log_with_header "Folder (remote id=%s) is not empty\n%!" remote_id;
       raise Directory_not_empty
     end
   end else
@@ -1598,11 +1684,11 @@ let trash_resource is_folder trashed path =
   let trash resource =
     let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
     check_if_empty remote_id is_folder trashed >>= fun () ->
-    Utils.log_message "Trashing file (id=%s)...%!" remote_id;
+    Utils.log_with_header "BEGIN: Trashing file (remote id=%s)\n%!" remote_id;
     FilesResource.trash
       ~std_params:file_std_params
       ~fileId:remote_id >>= fun trashed_file ->
-    Utils.log_message "done\n%!";
+    Utils.log_with_header "END: Trashing file (remote id=%s)\n%!" remote_id;
     SessionM.return (Some trashed_file)
   in
   update_remote_resource
@@ -1615,10 +1701,13 @@ let trash_resource is_folder trashed path =
           cache resource.Cache.Resource.change_id;
         if is_folder then begin
           let (path_in_cache, _) = get_path_in_cache path in
-          Utils.log_message "Trashing folder old content (path=%s)...%!"
+          Utils.log_with_header
+            "BEGiN: Trashing folder old content (path=%s)\n%!"
             path_in_cache;
           Cache.Resource.trash_all_with_parent_path cache path_in_cache;
-          Utils.log_message "done\n%!";
+          Utils.log_with_header
+            "END: Trashing folder old content (path=%s)\n%!"
+            path_in_cache;
         end)
     path
     trash
@@ -1631,11 +1720,15 @@ let delete_resource is_folder path =
   let delete resource =
     let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
     check_if_empty remote_id is_folder trashed >>= fun () ->
-    Utils.log_message "Permanently deleting file (id=%s)...%!" remote_id;
+    Utils.log_with_header
+      "BEGiN: Permanently deleting file (remote id=%s)\n%!"
+      remote_id;
     FilesResource.delete
       ~std_params:file_std_params
       ~fileId:remote_id >>= fun () ->
-    Utils.log_message "done\n%!";
+    Utils.log_with_header
+      "END: Permanently deleting file (remote id=%s)\n%!"
+      remote_id;
     SessionM.return None
   in
   update_remote_resource
@@ -1643,12 +1736,14 @@ let delete_resource is_folder path =
       fun cache resource ->
         Cache.Resource.delete_resource cache resource;
         if is_folder then begin
-          Utils.log_message
-            "Deleting folder old content (path=%s, trashed=%b) from cache...%!"
+          Utils.log_with_header
+            "BEGiN: Deleting folder old content (path=%s, trashed=%b) from cache\n%!"
             path_in_cache trashed;
           Cache.Resource.delete_all_with_parent_path
             cache path_in_cache trashed;
-          Utils.log_message "done\n%!";
+          Utils.log_with_header
+            "END: Deleting folder old content (path=%s, trashed=%b) from cache\n%!"
+            path_in_cache trashed;
         end)
     path
     delete
@@ -1712,7 +1807,7 @@ let rename path new_path =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       if old_name <> new_name then begin
         delete_target_path >>= fun () ->
-        Utils.log_message "Renaming file (id=%s) from %s to %s...%!"
+        Utils.log_with_header "BEGIN: Renaming file (remote id=%s) from %s to %s\n%!"
           remote_id old_name new_name;
         let etag = Option.default "" resource.Cache.Resource.etag in
         let file_patch =
@@ -1725,7 +1820,8 @@ let rename path new_path =
           ~std_params:file_std_params
           ~fileId:remote_id
           file_patch >>= fun patched_file ->
-        Utils.log_message "done\n%!";
+        Utils.log_with_header "END: Renaming file (remote id=%s) from %s to %s\n%!"
+          remote_id old_name new_name;
         SessionM.return (Some patched_file)
       end else begin
         SessionM.return None
@@ -1735,7 +1831,7 @@ let rename path new_path =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       begin if old_parent_path <> new_parent_path then begin
         delete_target_path >>= fun () ->
-        Utils.log_message "Moving file (id=%s) from %s to %s...%!"
+        Utils.log_with_header "BEGIN: Moving file (remote id=%s) from %s to %s\n%!"
           remote_id old_parent_path new_parent_path;
         get_resource
           new_parent_path target_trashed >>= fun new_parent_resource ->
@@ -1750,7 +1846,8 @@ let rename path new_path =
           ~std_params:file_std_params
           ~fileId:remote_id
           file_patch >>= fun patched_file ->
-        Utils.log_message "done\n%!";
+        Utils.log_with_header "END: Moving file (remote id=%s) from %s to %s\n%!"
+          remote_id old_parent_path new_parent_path;
         SessionM.return (Some patched_file)
       end else
         SessionM.return None
@@ -1787,19 +1884,23 @@ let rename path new_path =
             else resource_with_new_path
           in
           update_cached_resource cache resource_to_save;
-          Utils.log_message
-            "Deleting 'NotFound' resources (path=%s) from cache...%!"
+          Utils.log_with_header
+            "BEGIN: Deleting 'NotFound' resources (path=%s) from cache\n%!"
             new_path_in_cache;
           Cache.Resource.delete_not_found_resource_with_path
             cache new_path_in_cache;
-          Utils.log_message "done\n%!";
+          Utils.log_with_header
+            "END: Deleting 'NotFound' resources (path=%s) from cache\n%!"
+            new_path_in_cache;
           if Cache.Resource.is_folder resource then begin
-            Utils.log_message
-              "Deleting folder old content (path=%s, trashed=%b) from cache...%!"
+            Utils.log_with_header
+              "BEGIN: Deleting folder old content (path=%s, trashed=%b) from cache\n%!"
               path_in_cache trashed;
             Cache.Resource.delete_all_with_parent_path
               cache path_in_cache trashed;
-            Utils.log_message "done\n%!";
+            Utils.log_with_header
+              "END: Deleting folder old content (path=%s, trashed=%b) from cache\n%!"
+              path_in_cache trashed;
           end)
   in
     do_request update |> ignore
@@ -1812,7 +1913,7 @@ let truncate path size =
     get_resource path_in_cache trashed >>= fun resource ->
     with_retry download_resource resource >>= fun content_path ->
     let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-    Utils.log_message "Truncating file (id=%s)...%!" remote_id;
+    Utils.log_with_header "BEGIN: Truncating file (remote id=%s)\n%!" remote_id;
     let context = Context.get_ctx () in
     let cache = context.Context.cache in
     let metadata = context.Context.metadata |> Option.get in
@@ -1826,7 +1927,7 @@ let truncate path size =
       config.Config.max_cache_size_mb
       metadata cache;
     Unix.LargeFile.truncate content_path size;
-    Utils.log_message "done\n%!";
+    Utils.log_with_header "END: Truncating file (remote id=%s)\n%!" remote_id;
     SessionM.return ()
   in
   do_request truncate_resource |> ignore
