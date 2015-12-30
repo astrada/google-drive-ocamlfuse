@@ -313,8 +313,10 @@ let insert_resource_into_cache ?state cache resource file =
   Utils.log_with_header "BEGIN: Saving resource to db (remote id=%s)\n%!"
     file.File.id;
   let inserted = Cache.Resource.insert_resource cache resource in
-  Utils.log_with_header "END: Saving resource to db (remote id=%s, id=%Ld)\n%!"
-    file.File.id inserted.Cache.Resource.id;
+  Utils.log_with_header "END: Saving resource to db (remote id=%s, id=%Ld, state=%s)\n%!"
+    file.File.id
+    inserted.Cache.Resource.id
+    (Cache.Resource.State.to_string inserted.Cache.Resource.state);
   inserted
 
 let update_cached_resource cache resource =
@@ -612,7 +614,7 @@ let get_metadata () =
         (function
             GapiRequest.NotModified session ->
               Utils.log_with_header
-                "END: Refreshing metadata: Not modified\n%!";
+                "Refreshing metadata: Not modified\n%!";
               SessionM.put session >>= fun () ->
               let m = Option.get metadata in
               let m' =
@@ -1346,11 +1348,11 @@ let update_remote_resource path
              GapiMonad.SessionM.put session >>
              begin match config.Config.conflict_resolution with
                  Config.ConflictResolutionStrategy.Client ->
-                   Utils.log_with_header "BEGIN: Retrying\n%!";
+                   Utils.log_with_header "Retrying after conflict\n%!";
                    let resource_without_etag =
                      resource |> Cache.Resource.etag ^= None in
                    retry_update resource_without_etag >>= fun file ->
-                   Utils.log_with_header "END: Conflict detected\n%!";
+                   Utils.log_with_header "END: Conflict detected: Local changes successfully submitted\n%!";
                    SessionM.return file
                | Config.ConflictResolutionStrategy.Server ->
                    Utils.log_with_header
