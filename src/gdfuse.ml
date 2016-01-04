@@ -502,6 +502,9 @@ let () =
          fuse_args := "-s" :: !fuse_args;
          multi_threading := false),
        " run in single-threaded mode.";
+       "-m",
+       Arg.Set multi_threading,
+       " run in multi-threaded mode (default).";
        "-o",
        Arg.String parse_mount_options,
        " specify FUSE mount options.";
@@ -528,7 +531,7 @@ let () =
 
   if !show_version then begin
     Printf.printf "google-drive-ocamlfuse, version %s\n\
-                   Copyright (C) 2012-2015 Alessandro Strada\n\
+                   Copyright (C) 2012-2016 Alessandro Strada\n\
                    License MIT\n"
       Config.version;
   end else begin
