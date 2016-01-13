@@ -741,6 +741,7 @@ let map_filename_to_mime_type filename =
     | "mj2" | "mjp2" -> "video/mj2"
     | "mp4" | "mp4v" | "mpg4" -> "video/mp4"
     | "mpeg" | "mpg" | "mpe" | "m1v" | "m2v" -> "video/mpeg"
+    | "ts" | "m2ts" -> "video/MP2T"
     | "ogv" -> "video/ogg"
     | "qt" | "mov" -> "video/quicktime"
     | "uvh" | "uvvh" -> "video/vnd.dece.hd"
