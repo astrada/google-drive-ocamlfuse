@@ -69,7 +69,15 @@ let get_tokens () =
   let request_id = context |. Context.request_id_lens in
   let query_string =
     Netencoding.Url.mk_url_encoded_parameters [("requestid", request_id)] in
-  let table = gae_proxy_request "gettokens" query_string in
+  let table =
+    try
+      Utils.with_retry (fun () ->
+        gae_proxy_request "gettokens" query_string)
+      "get_tokens"
+    with e ->
+      prerr_endline "Cannot get token. Quitting.";
+      exit 1
+  in
   let get_string = get_string_field table in
   let current_state = context |. Context.state_lens in
   context
@@ -103,22 +111,15 @@ let refresh_access_token () =
   let token = context |. Context.refresh_token_lens in
   let query_string =
     Netencoding.Url.mk_url_encoded_parameters [("token", token)] in
-  let rec try_request n =
+  let table =
     try
-      gae_proxy_request "refreshtoken" query_string
+      Utils.with_retry (fun () ->
+        gae_proxy_request "refreshtoken" query_string)
+      "refresh_token"
     with e ->
-      Utils.log_with_header
-        "END: Refreshing access token: Error (try=%d):\n%!" n;
-      Utils.log_exception e;
-      if n > 4 then begin
-        prerr_endline "Cannot refresh access token. Quitting.";
-        exit 1
-      end else begin
-        GapiUtils.wait_exponential_backoff n;
-        try_request (n + 1)
-      end
+      prerr_endline "Cannot refresh access token. Quitting.";
+      exit 1
   in
-  let table = try_request 0 in
   let get_string = get_string_field table in
   let current_state = context |. Context.state_lens in
   context
