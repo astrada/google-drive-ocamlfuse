@@ -1065,7 +1065,7 @@ let download_resource resource =
       | Cache.Resource.State.ToDownload ->
           download_if_not_updated ()
       | Cache.Resource.State.Downloading ->
-          if n > 60 then begin
+          if n > 3600 then begin
             Utils.log_with_header
               "Still downloading resource (id=%Ld): start downloading again\n%!"
               resource.Cache.Resource.id;
@@ -1075,7 +1075,7 @@ let download_resource resource =
               "Already downloading resource (id=%Ld): check number %d\n%!"
               resource.Cache.Resource.id
               n;
-            let n' = if n > 6 then n = 6 else n in
+            let n' = if n > 6 then 6 else n in
             GapiUtils.wait_exponential_backoff n';
             check_state (n + 1)
           end
