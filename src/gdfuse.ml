@@ -430,7 +430,7 @@ let start_filesystem mountpoint fuse_args =
 let () =
   let fs_label = ref "default" in
   let mountpoint = ref "" in
-  let fuse_args = ref ["-obig_writes"] in
+  let fuse_args = ref ["-s"; "-obig_writes"] in
   let show_version = ref false in
   let debug = ref false in
   let client_id = ref "" in
@@ -438,7 +438,7 @@ let () =
   let clear_cache = ref false in
   let headless = ref false in
   let skip_trash = ref false in
-  let multi_threading = ref true in
+  let multi_threading = ref false in
   let base_dir =
     let dir = Filename.concat (Sys.getenv "HOME") ".gdfuse" in
     ref dir in
@@ -499,12 +499,13 @@ let () =
        " enable FUSE debug output (implies -f).";
        "-s",
        Arg.Unit (fun _ ->
-         fuse_args := "-s" :: !fuse_args;
          multi_threading := false),
-       " run in single-threaded mode.";
+       " run in single-threaded mode (default).";
        "-m",
-       Arg.Set multi_threading,
-       " run in multi-threaded mode (default).";
+       Arg.Unit (fun _ ->
+         fuse_args := List.filter (fun a -> a <> "-s") !fuse_args;
+         multi_threading := true),
+       " run in multi-threaded mode.";
        "-o",
        Arg.String parse_mount_options,
        " specify FUSE mount options.";
