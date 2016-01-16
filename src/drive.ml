@@ -379,6 +379,8 @@ let get_root_resource trashed =
             inserted
       | Some resource -> resource
 
+let cache_size_mutex = Mutex.create ()
+
 let update_cache_size new_size metadata cache =
   let updated_metadata = metadata
     |> Cache.Metadata.cache_size ^= new_size in
@@ -388,48 +390,71 @@ let update_cache_size new_size metadata cache =
   Context.update_ctx (Context.metadata ^= Some updated_metadata)
 
 let shrink_cache file_size max_cache_size_mb metadata cache =
-  let check_cache_size cache_size =
-    let max_cache_size = Int64.mul (Int64.of_int max_cache_size_mb) mb in
-    cache_size <= max_cache_size
-  in
-
-  if file_size <> 0L then begin
-    let target_size = Int64.add metadata.Cache.Metadata.cache_size file_size in
-    if check_cache_size target_size then begin
-      update_cache_size target_size metadata cache;
-    end else begin
-      let resources =
-        Cache.Resource.select_resources_order_by_last_update cache in
-      let (new_cache_size, resources_to_free) =
-        List.fold_left
-          (fun (new_cache_size, rs) resource ->
-            if check_cache_size new_cache_size then
-              (new_cache_size, rs)
-            else begin
-              let new_size = Int64.sub
-                new_cache_size
-                (Option.get resource.Cache.Resource.file_size) in
-              (new_size, resource :: rs)
-            end)
-          (target_size, [])
-          resources in
-      update_cache_size new_cache_size metadata cache;
-      List.iter
-        (fun resource ->
-           update_cached_resource_state
-             cache Cache.Resource.State.ToDownload resource.Cache.Resource.id)
-        resources_to_free;
-      Cache.delete_files_from_cache cache resources_to_free |> ignore
-    end
-  end
+  Utils.try_finally
+    (fun () ->
+      Mutex.lock cache_size_mutex;
+      if file_size <> 0L then begin
+        let max_cache_size = Int64.mul (Int64.of_int max_cache_size_mb) mb in
+        let target_size =
+          Int64.add metadata.Cache.Metadata.cache_size file_size in
+        if target_size <= max_cache_size then begin
+          update_cache_size target_size metadata cache;
+        end else begin
+          let resources =
+            Cache.Resource.select_resources_order_by_last_update cache in
+          let (new_cache_size, resources_to_free) =
+            List.fold_left
+              (fun (new_cache_size, rs) resource ->
+                if new_cache_size <= max_cache_size then
+                  (new_cache_size, rs)
+                else begin
+                  let new_size = Int64.sub
+                    new_cache_size
+                    (Option.get resource.Cache.Resource.file_size) in
+                  (new_size, resource :: rs)
+                end)
+              (target_size, [])
+              resources in
+          update_cache_size new_cache_size metadata cache;
+          List.iter
+            (fun resource ->
+               update_cached_resource_state cache
+                 Cache.Resource.State.ToDownload resource.Cache.Resource.id)
+            resources_to_free;
+          Cache.delete_files_from_cache cache resources_to_free |> ignore
+        end
+      end)
+    (fun () -> Mutex.unlock cache_size_mutex)
 
 let delete_resources metadata cache resources =
-  Cache.Resource.delete_resources cache resources;
-  let total_size =
-    Cache.delete_files_from_cache cache resources in
-  let new_cache_size =
-    Int64.sub metadata.Cache.Metadata.cache_size total_size in
-  update_cache_size new_cache_size metadata cache
+  Utils.try_finally
+    (fun () ->
+      Mutex.lock cache_size_mutex;
+      Cache.Resource.delete_resources cache resources;
+      let total_size =
+        Cache.delete_files_from_cache cache resources in
+      let new_cache_size =
+        Int64.sub metadata.Cache.Metadata.cache_size total_size in
+      update_cache_size new_cache_size metadata cache)
+    (fun () -> Mutex.unlock cache_size_mutex)
+
+let update_cache_size_for_documents cache resource content_path op =
+  Utils.try_finally
+    (fun () ->
+      Mutex.lock cache_size_mutex;
+      if resource.Cache.Resource.file_size = Some 0L &&
+          Sys.file_exists content_path then begin
+        try
+          let stats = Unix.LargeFile.stat content_path in
+          let size = stats.Unix.LargeFile.st_size in
+          let context = Context.get_ctx () in
+          let metadata = context.Context.metadata |> Option.get in
+          let new_cache_size =
+            op metadata.Cache.Metadata.cache_size size in
+          update_cache_size new_cache_size metadata cache
+        with e -> Utils.log_exception e
+      end)
+    (fun () -> Mutex.unlock cache_size_mutex)
 (* END Resource cache *)
 
 (* Metadata *)
@@ -1017,6 +1042,7 @@ let download_resource resource =
       shrink_cache () >>= fun () ->
       update_cached_resource_state cache
         Cache.Resource.State.Downloading resource.Cache.Resource.id;
+      update_cache_size_for_documents cache resource content_path Int64.sub;
       with_try
         (let media_destination = GapiMediaResource.TargetFile content_path in
          GapiService.download_resource download_link media_destination)
@@ -1029,6 +1055,7 @@ let download_resource resource =
     else
       create_empty_file ()
     end >>= fun () ->
+    update_cache_size_for_documents cache resource content_path Int64.add;
     Utils.log_with_header
       "END: Downloading resource (id=%Ld)\n%!"
       resource.Cache.Resource.id;
@@ -1065,9 +1092,9 @@ let download_resource resource =
       | Cache.Resource.State.ToDownload ->
           download_if_not_updated ()
       | Cache.Resource.State.Downloading ->
-          if n > 3600 then begin
+          if n > 300 then begin
             Utils.log_with_header
-              "Still downloading resource (id=%Ld): start downloading again\n%!"
+              "Still downloading resource (id=%Ld) after about 5 hours: start downloading again\n%!"
               resource.Cache.Resource.id;
             download_if_not_updated ()
           end else begin
