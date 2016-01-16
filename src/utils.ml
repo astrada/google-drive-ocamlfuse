@@ -1,15 +1,37 @@
 open GapiUtils.Infix
 open GapiLens.Infix
 
+(* Globals *)
+let start_time = Unix.gettimeofday ()
+let verbose = ref false
+let log_channel = ref stdout
+let max_retries = ref 10
+
+(* Threads *)
+let get_thread_id () =
+  Thread.id (Thread.self ())
+
+(* try/finally *)
 let try_finally f finally =
   try
     let result = f () in
     finally ();
     result
   with e ->
-    finally ();
+    begin try
+      finally ()
+    with e' ->
+      let message = Printexc.to_string e' in
+      let backtrace = Printexc.get_backtrace () in
+      let elapsed = Unix.gettimeofday () -. start_time in
+      let thread_id = get_thread_id () in
+      Printf.fprintf !log_channel
+        "[%f] TID=%d: Error in finally block:\nException:%s\nBacktrace:%s\n%!"
+        elapsed thread_id message backtrace
+    end;
     raise e
 
+(* Channels *)
 let with_in_channel path f =
   let ch = open_in path in
   try_finally
@@ -22,15 +44,7 @@ let with_out_channel ?(mode = [Open_creat; Open_wronly]) path f =
     (fun () -> f ch)
     (fun () -> close_out ch)
 
-let get_thread_id () =
-  Thread.id (Thread.self ())
-
 (* Logging *)
-let start_time = Unix.gettimeofday ()
-let verbose = ref false
-let log_channel = ref stdout
-let max_retries = ref 10
-
 let log_message format =
   if !verbose then
     Printf.fprintf !log_channel format

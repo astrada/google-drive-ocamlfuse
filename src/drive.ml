@@ -131,25 +131,26 @@ let with_try f handle_exception s =
 let throw e _ =
   raise e
 
-(* with_try with a default exception handler
- *)
+let handle_default_exceptions =
+  function
+      GapiRequest.PermissionDenied session ->
+        Utils.log_with_header "Server error: Permission denied.\n%!";
+        throw Permission_denied
+    | GapiRequest.RequestTimeout _ ->
+        Utils.log_with_header "Server error: Request Timeout.\n%!";
+        throw Resource_busy
+    | GapiRequest.PreconditionFailed _
+    | GapiRequest.Conflict _ ->
+        Utils.log_with_header "Server error: Conflict.\n%!";
+        throw Resource_busy
+    | GapiRequest.Forbidden _ ->
+        Utils.log_with_header "Server error: Forbidden.\n%!";
+        throw Resource_busy
+    | e -> throw e
+
+(* with_try with a default exception handler *)
 let try_with_default f s =
-  with_try f
-    (function
-         GapiRequest.PermissionDenied session ->
-           Utils.log_with_header "Server error: Permission denied.\n%!";
-           throw Permission_denied
-       | GapiRequest.RequestTimeout _ ->
-           Utils.log_with_header "Server error: Request Timeout.\n%!";
-           throw Resource_busy
-       | GapiRequest.PreconditionFailed _
-       | GapiRequest.Conflict _ ->
-           Utils.log_with_header "Server error: Conflict.\n%!";
-           throw Resource_busy
-       | GapiRequest.Forbidden _ ->
-           Utils.log_with_header "Server error: Forbidden.\n%!";
-           throw Resource_busy
-       | e -> throw e) s
+  with_try f handle_default_exceptions s
 
 (* Resource cache *)
 let get_filename title is_document get_document_format =
@@ -328,6 +329,13 @@ let update_cached_resource cache resource =
   Utils.log_with_header "END: Updating resource in db (id=%Ld)\n%!"
     resource.Cache.Resource.id
 
+let update_cached_resource_state cache state id =
+  Utils.log_with_header
+    "BEGIN: Updating resource state in db (id=%Ld, state=%s)\n%!"
+    id (Cache.Resource.State.to_string state);
+  Cache.Resource.update_resource_state cache state id;
+  Utils.log_with_header "END: Updating resource state in db (id=%Ld)\n%!" id
+
 let lookup_resource path trashed =
   Utils.log_with_header "BEGIN: Loading resource %s (trashed=%b) from db\n%!"
     path trashed;
@@ -408,9 +416,8 @@ let shrink_cache file_size max_cache_size_mb metadata cache =
       update_cache_size new_cache_size metadata cache;
       List.iter
         (fun resource ->
-           let updated_resource = resource
-             |> Cache.Resource.state ^= Cache.Resource.State.ToDownload in
-           update_cached_resource cache updated_resource)
+           update_cached_resource_state
+             cache Cache.Resource.State.ToDownload resource.Cache.Resource.id)
         resources_to_free;
       Cache.delete_files_from_cache cache resources_to_free |> ignore
     end
@@ -893,9 +900,8 @@ let with_retry f resource =
                    && conflict_resolution =
                      Config.ConflictResolutionStrategy.Server then begin
                  let cache = context.Context.cache in
-                 let updated_resource = resource
-                   |> Cache.Resource.state ^= Cache.Resource.State.ToDownload in
-                 update_cached_resource cache updated_resource;
+                 update_cached_resource_state cache
+                   Cache.Resource.State.ToDownload resource.Cache.Resource.id;
                end;
                throw e
              end else begin
@@ -1009,47 +1015,75 @@ let download_resource resource =
         Option.default "" resource.Cache.Resource.download_url in
     begin if download_link <> "" then begin
       shrink_cache () >>= fun () ->
-      try_with_default
+      update_cached_resource_state cache
+        Cache.Resource.State.Downloading resource.Cache.Resource.id;
+      with_try
         (let media_destination = GapiMediaResource.TargetFile content_path in
          GapiService.download_resource download_link media_destination)
+        (fun e ->
+           update_cached_resource_state cache
+             Cache.Resource.State.ToDownload resource.Cache.Resource.id;
+           handle_default_exceptions e)
     end else if is_desktop_format resource config then
       create_desktop_entry resource content_path config
     else
       create_empty_file ()
     end >>= fun () ->
-    let updated_resource = resource
-      |> Cache.Resource.state ^= Cache.Resource.State.InSync in
     Utils.log_with_header
       "END: Downloading resource (id=%Ld)\n%!"
       resource.Cache.Resource.id;
-    Cache.Resource.update_resource cache updated_resource;
+    update_cached_resource_state cache
+      Cache.Resource.State.InSync resource.Cache.Resource.id;
     SessionM.return content_path
   in
-  let reloaded_resource = Option.map_default
-    (Cache.Resource.select_resource_with_remote_id cache)
-    (Some resource)
-    resource.Cache.Resource.remote_id
+  let rec check_state n =
+    let reloaded_resource = Option.map_default
+      (Cache.Resource.select_resource_with_remote_id cache)
+      (Some resource)
+      resource.Cache.Resource.remote_id
+    in
+    let reloaded_state = match reloaded_resource with
+        None -> Cache.Resource.State.NotFound
+      | Some r -> r.Cache.Resource.state
+    in
+    let download_if_not_updated () =
+      if check_md5_checksum resource cache then begin
+        update_cached_resource_state cache
+          Cache.Resource.State.InSync resource.Cache.Resource.id;
+        SessionM.return content_path
+      end else
+        do_download ()
+    in
+    begin match reloaded_state with
+        Cache.Resource.State.InSync
+      | Cache.Resource.State.ToUpload
+      | Cache.Resource.State.Uploading ->
+          if Sys.file_exists content_path then
+            SessionM.return content_path
+          else
+            do_download ()
+      | Cache.Resource.State.ToDownload ->
+          download_if_not_updated ()
+      | Cache.Resource.State.Downloading ->
+          if n > 60 then begin
+            Utils.log_with_header
+              "Still downloading resource (id=%Ld): start downloading again\n%!"
+              resource.Cache.Resource.id;
+            download_if_not_updated ()
+          end else begin
+            Utils.log_with_header
+              "Already downloading resource (id=%Ld): check number %d\n%!"
+              resource.Cache.Resource.id
+              n;
+            let n' = if n > 6 then n = 6 else n in
+            GapiUtils.wait_exponential_backoff n';
+            check_state (n + 1)
+          end
+      | Cache.Resource.State.NotFound ->
+          throw File_not_found
+    end
   in
-  let reloaded_state = match reloaded_resource with
-      None -> Cache.Resource.State.NotFound
-    | Some r -> r.Cache.Resource.state
-  in
-  begin match reloaded_state with
-      Cache.Resource.State.InSync
-    | Cache.Resource.State.ToUpload
-    | Cache.Resource.State.Uploading ->
-        if Sys.file_exists content_path then
-          SessionM.return content_path
-        else
-          do_download ()
-    | Cache.Resource.State.ToDownload ->
-        if check_md5_checksum resource cache then
-          SessionM.return content_path
-        else
-          do_download ()
-    | Cache.Resource.State.NotFound ->
-        throw File_not_found
-  end >>
+  check_state 0 >>
   SessionM.return content_path
 
 let stream_resource offset buffer resource =
@@ -1480,9 +1514,8 @@ let write path buf offset file_descr =
     Utils.log_with_header
       "END: Writing local file (path=%s, trashed=%b)\n%!"
       path_in_cache trashed;
-    let updated_resource =
-      resource |> Cache.Resource.state ^= Cache.Resource.State.ToUpload in
-    update_cached_resource cache updated_resource;
+    update_cached_resource_state cache
+      Cache.Resource.State.ToUpload resource.Cache.Resource.id;
     SessionM.return bytes
   in
   do_request write_to_resource |> fst
@@ -1497,9 +1530,8 @@ let start_uploading_if_dirty path =
     | Some r ->
         if r.Cache.Resource.state == Cache.Resource.State.ToUpload then begin
           let cache = Context.get_cache () in
-          let uploading_resource = r
-            |> Cache.Resource.state ^= Cache.Resource.State.Uploading in
-          update_cached_resource cache uploading_resource;
+          update_cached_resource_state cache
+            Cache.Resource.State.Uploading r.Cache.Resource.id;
           true
         end else false
 
@@ -1507,9 +1539,8 @@ let upload resource =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
-  let uploading_resource =
-    resource |> Cache.Resource.state ^= Cache.Resource.State.Uploading in
-  update_cached_resource cache uploading_resource;
+  update_cached_resource_state cache
+    Cache.Resource.State.Uploading resource.Cache.Resource.id;
   let content_path = Cache.get_content_path cache resource in
   let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
   let file_source =

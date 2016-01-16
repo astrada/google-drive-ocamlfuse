@@ -197,6 +197,15 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_update_state_stmt db =
+    let sql =
+      "UPDATE resource \
+       SET \
+         state = :state \
+       WHERE id = :id;"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_update_all_change_ids db =
     let sql =
       "UPDATE resource \
@@ -230,7 +239,8 @@ struct
          state = 'ToDownload', \
          change_id = :change_id \
        WHERE id = :id \
-         AND state <> 'ToUpload' AND state <> 'Uploading';"
+         AND state <> 'ToUpload' \
+         AND state <> 'Uploading';"
     in
       Sqlite3.prepare db sql
 
@@ -430,6 +440,7 @@ struct
     type t =
         InSync
       | ToDownload
+      | Downloading
       | ToUpload
       | Uploading
       | NotFound
@@ -437,6 +448,7 @@ struct
     let to_string = function
         InSync -> "InSync"
       | ToDownload -> "ToDownload"
+      | Downloading -> "Downloading"
       | ToUpload -> "ToUpload"
       | Uploading -> "Uploading"
       | NotFound -> "NotFound"
@@ -444,6 +456,7 @@ struct
     let of_string = function
         "InSync" -> InSync
       | "ToDownload" -> ToDownload
+      | "Downloading" -> Downloading
       | "ToUpload" -> ToUpload
       | "Uploading" -> Uploading
       | "NotFound" -> NotFound
@@ -660,6 +673,15 @@ struct
          let stmt = ResourceStmts.prepare_update_stmt db in
          bind_resource_parameters stmt resource;
          bind_int stmt ":id" (Some resource.id);
+         final_step stmt;
+         finalize_stmt stmt)
+
+  let update_resource_state cache state id =
+    with_transaction cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_update_state_stmt db in
+         bind_text stmt ":state" (Some (State.to_string state));
+         bind_int stmt ":id" (Some id);
          final_step stmt;
          finalize_stmt stmt)
 
