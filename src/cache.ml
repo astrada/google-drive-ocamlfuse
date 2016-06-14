@@ -2,10 +2,6 @@ open GapiUtils.Infix
 open GapiLens.Infix
 
 (* Helpers *)
-let escape_sql sql =
-  ExtString.String.replace_chars
-    (function '\'' -> "''" | c -> String.make 1 c) sql
-
 let fail rc =
   failwith ("Sqlite3 error: " ^ (Sqlite3.Rc.to_string rc))
 
