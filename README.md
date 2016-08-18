@@ -63,22 +63,22 @@ How to build
 
 To build the executable, run
 
-    $ ocaml setup.ml -configure
-    $ ocaml setup.ml -build
+    ocaml setup.ml -configure
+    ocaml setup.ml -build
 
 To install it, run (as root, if your user doesn't have enough privileges)
 
-    $ ocaml setup.ml -install
+    ocaml setup.ml -install
 
 To uninstall anything that was previously installed, execute
 
-    $ ocaml setup.ml -uninstall
+    ocaml setup.ml -uninstall
 
 ### Usage
 
 The first time, you can run `google-drive-ocamlfuse` without parameters:
 
-    $ google-drive-ocamlfuse
+    google-drive-ocamlfuse
 
 This command will create the default application directory
 (`~/.gdfuse/default`), containing the configuration file `config` (see the
@@ -90,11 +90,11 @@ default configuration before mounting the filesystem.
 
 Then you can mount the filesystem:
 
-    $ google-drive-ocamlfuse mountpoint
+    google-drive-ocamlfuse mountpoint
 
 If you have more than one account, you can run:
 
-    $ google-drive-ocamlfuse -label label [mountpoint]
+    google-drive-ocamlfuse -label label [mountpoint]
 
 Using `label` to distinguish different accounts. The program will use the
 directory `~/.gdfuse/label` to host configuration, application state, and file
@@ -103,7 +103,7 @@ configuration for each one.
 
 To unmount the filesystem, issue this command:
 
-    $ fusermount -u mountpoint
+    fusermount -u mountpoint
 
 ### Troubleshooting
 
@@ -115,14 +115,14 @@ to avoid any write attempt to the server. Anyway, the `rm` command will simply
 trash your file, so you should always be able to rollback any changes. If you
 have problems, you can turn on debug logging:
 
-    $ google-drive-ocamlfuse -debug mountpoint
+    google-drive-ocamlfuse -debug mountpoint
 
 In `~/.gdfuse/default` you can find `curl.log` that will track every request
 to the Google Drive API, and `gdfuse.log` that will log FUSE operations and
 cache management. If something goes wrong, you can try clearing the cache,
 with this command:
 
-    $ google-drive-ocamlfuse -cc
+    google-drive-ocamlfuse -cc
 
 If something still doesn't work, try starting from scratch removing everything
 in `~/.gdfuse/default`. In this case you will need to reauthorize the
