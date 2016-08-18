@@ -36,9 +36,9 @@ I've uploaded .deb packages to my
 [PPA](https://launchpad.net/~alessandro-strada/+archive/ppa). In order to to
 install it, use the commands below:
 
-    $ sudo add-apt-repository ppa:alessandro-strada/ppa
-    $ sudo apt-get update
-    $ sudo apt-get install google-drive-ocamlfuse
+    sudo add-apt-repository ppa:alessandro-strada/ppa
+    sudo apt-get update
+    sudo apt-get install google-drive-ocamlfuse
 
 For other installation options, please refer to the [wiki](https://github.com/astrada/google-drive-ocamlfuse/wiki/Installation).
 
