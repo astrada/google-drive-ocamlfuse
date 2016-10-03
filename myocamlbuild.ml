@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: 2b686a81cec9fb16d1640bda36a68fbd) *)
+(* DO NOT EDIT (digest: 281aaf85771c9c831d1cae44e1e6f2b7) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -26,6 +26,166 @@ module OASISGettext = struct
   let init =
     []
 
+
+end
+
+module OASISString = struct
+(* # 22 "src/oasis/OASISString.ml" *)
+
+
+  (** Various string utilities.
+
+      Mostly inspired by extlib and batteries ExtString and BatString libraries.
+
+      @author Sylvain Le Gall
+    *)
+
+
+  let nsplitf str f =
+    if str = "" then
+      []
+    else
+      let buf = Buffer.create 13 in
+      let lst = ref [] in
+      let push () =
+        lst := Buffer.contents buf :: !lst;
+        Buffer.clear buf
+      in
+      let str_len = String.length str in
+        for i = 0 to str_len - 1 do
+          if f str.[i] then
+            push ()
+          else
+            Buffer.add_char buf str.[i]
+        done;
+        push ();
+        List.rev !lst
+
+
+  (** [nsplit c s] Split the string [s] at char [c]. It doesn't include the
+      separator.
+    *)
+  let nsplit str c =
+    nsplitf str ((=) c)
+
+
+  let find ~what ?(offset=0) str =
+    let what_idx = ref 0 in
+    let str_idx = ref offset in
+      while !str_idx < String.length str &&
+            !what_idx < String.length what do
+        if str.[!str_idx] = what.[!what_idx] then
+          incr what_idx
+        else
+          what_idx := 0;
+        incr str_idx
+      done;
+      if !what_idx <> String.length what then
+        raise Not_found
+      else
+        !str_idx - !what_idx
+
+
+  let sub_start str len =
+    let str_len = String.length str in
+    if len >= str_len then
+      ""
+    else
+      String.sub str len (str_len - len)
+
+
+  let sub_end ?(offset=0) str len =
+    let str_len = String.length str in
+    if len >= str_len then
+      ""
+    else
+      String.sub str 0 (str_len - len)
+
+
+  let starts_with ~what ?(offset=0) str =
+    let what_idx = ref 0 in
+    let str_idx = ref offset in
+    let ok = ref true in
+      while !ok &&
+            !str_idx < String.length str &&
+            !what_idx < String.length what do
+        if str.[!str_idx] = what.[!what_idx] then
+          incr what_idx
+        else
+          ok := false;
+        incr str_idx
+      done;
+      if !what_idx = String.length what then
+        true
+      else
+        false
+
+
+  let strip_starts_with ~what str =
+    if starts_with ~what str then
+      sub_start str (String.length what)
+    else
+      raise Not_found
+
+
+  let ends_with ~what ?(offset=0) str =
+    let what_idx = ref ((String.length what) - 1) in
+    let str_idx = ref ((String.length str) - 1) in
+    let ok = ref true in
+      while !ok &&
+            offset <= !str_idx &&
+            0 <= !what_idx do
+        if str.[!str_idx] = what.[!what_idx] then
+          decr what_idx
+        else
+          ok := false;
+        decr str_idx
+      done;
+      if !what_idx = -1 then
+        true
+      else
+        false
+
+
+  let strip_ends_with ~what str =
+    if ends_with ~what str then
+      sub_end str (String.length what)
+    else
+      raise Not_found
+
+
+  let replace_chars f s =
+    let buf = Buffer.create (String.length s) in
+    String.iter (fun c -> Buffer.add_char buf (f c)) s;
+    Buffer.contents buf
+
+  let lowercase_ascii =
+    replace_chars
+      (fun c ->
+         if (c >= 'A' && c <= 'Z') then
+           Char.chr (Char.code c + 32)
+         else
+           c)
+
+  let uncapitalize_ascii s =
+    if s <> "" then
+      (lowercase_ascii (String.sub s 0 1)) ^ (String.sub s 1 ((String.length s) - 1))
+    else
+      s
+
+  let uppercase_ascii =
+    replace_chars
+      (fun c ->
+         if (c >= 'a' && c <= 'z') then
+           Char.chr (Char.code c - 32)
+         else
+           c)
+
+  let capitalize_ascii s =
+    if s <> "" then
+      (uppercase_ascii (String.sub s 0 1)) ^ (String.sub s 1 ((String.length s) - 1))
+    else
+      s
 
 end
 
@@ -129,7 +289,7 @@ module OASISExpr = struct
 end
 
 
-# 132 "myocamlbuild.ml"
+# 292 "myocamlbuild.ml"
 module BaseEnvLight = struct
 (* # 22 "src/base/BaseEnvLight.ml" *)
 
@@ -234,7 +394,7 @@ module BaseEnvLight = struct
 end
 
 
-# 237 "myocamlbuild.ml"
+# 397 "myocamlbuild.ml"
 module MyOCamlbuildFindlib = struct
 (* # 22 "src/plugins/ocamlbuild/MyOCamlbuildFindlib.ml" *)
 
@@ -516,7 +676,7 @@ module MyOCamlbuildBase = struct
                  | nm, [], intf_modules ->
                      ocaml_lib nm;
                      let cmis =
-                       List.map (fun m -> (String.uncapitalize m) ^ ".cmi")
+                       List.map (fun m -> (OASISString.uncapitalize_ascii m) ^ ".cmi")
                                 intf_modules in
                      dep ["ocaml"; "link"; "library"; "file:"^nm^".cma"] cmis
                  | nm, dir :: tl, intf_modules ->
@@ -529,7 +689,7 @@ module MyOCamlbuildBase = struct
                             ["compile"; "infer_interface"; "doc"])
                        tl;
                      let cmis =
-                       List.map (fun m -> dir^"/"^(String.uncapitalize m)^".cmi")
+                       List.map (fun m -> dir^"/"^(OASISString.uncapitalize_ascii m)^".cmi")
                                 intf_modules in
                      dep ["ocaml"; "link"; "library"; "file:"^dir^"/"^nm^".cma"]
                          cmis)
@@ -603,7 +763,7 @@ module MyOCamlbuildBase = struct
 end
 
 
-# 606 "myocamlbuild.ml"
+# 766 "myocamlbuild.ml"
 open Ocamlbuild_plugin;;
 let package_default =
   {MyOCamlbuildBase.lib_ocaml = []; lib_c = []; flags = []; includes = []}
@@ -613,6 +773,6 @@ let conf = {MyOCamlbuildFindlib.no_automatic_syntax = false}
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default conf package_default;;
 
-# 617 "myocamlbuild.ml"
+# 777 "myocamlbuild.ml"
 (* OASIS_STOP *)
 Ocamlbuild_plugin.dispatch dispatch_default;;
