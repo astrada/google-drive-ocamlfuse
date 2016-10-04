@@ -1,3 +1,7 @@
+# Disable warning 3 (Deprecated feature), and 58 (Missing cmx file) for
+# compatibility with old compilers
+<src/*.ml>: warn(-d-58)
+
 # OASIS_START
 # DO NOT EDIT (digest: cee55c572acaf8f71fc73e45828085d3)
 # Ignore VCS directories, you can use the same kind of rule outside
