@@ -121,7 +121,7 @@ let start_browser url =
       false
     end
   in
-  let browsers = ["xdg-open"; "firefox"; "google-chrome"] in
+  let browsers = ["xdg-open"; "firefox"; "google-chrome"; "open"] in
   let status =
     List.fold_left
       (fun result browser ->
