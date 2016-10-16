@@ -313,7 +313,7 @@ let default = {
   low_speed_limit = 0;
   low_speed_time = 0;
   max_retries = 10;
-  max_upload_chunk_size = 1099511627776;
+  max_upload_chunk_size = 1073741824;
 }
 
 let default_debug = {
@@ -355,7 +355,7 @@ let default_debug = {
   low_speed_limit = 0;
   low_speed_time = 0;
   max_retries = 10;
-  max_upload_chunk_size = 1099511627776;
+  max_upload_chunk_size = 1073741824;
 }
 
 let of_table table =
