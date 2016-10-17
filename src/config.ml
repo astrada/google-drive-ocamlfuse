@@ -2,7 +2,7 @@ open GapiUtils.Infix
 open GapiLens.Infix
 
 let application_name = "google-drive-ocamlfuse"
-let version = "0.6.0"
+let version = "0.5.24"
 
 module ConflictResolutionStrategy =
 struct
@@ -107,6 +107,9 @@ type t = {
    * terminated. *)
   max_retries : int;
   (* Specifies the maximum number of attempts if an operation fails. *)
+  max_upload_chunk_size : int;
+  (* Specifies the maximum size (in bytes) of file chunks during upload
+   * operations. *)
 }
 
 let debug = {
@@ -261,6 +264,10 @@ let max_retries = {
   GapiLens.get = (fun x -> x.max_retries);
   GapiLens.set = (fun v x -> { x with max_retries = v })
 }
+let max_upload_chunk_size = {
+  GapiLens.get = (fun x -> x.max_upload_chunk_size);
+  GapiLens.set = (fun v x -> { x with max_upload_chunk_size = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -306,6 +313,7 @@ let default = {
   low_speed_limit = 0;
   low_speed_time = 0;
   max_retries = 10;
+  max_upload_chunk_size = 1073741824;
 }
 
 let default_debug = {
@@ -347,6 +355,7 @@ let default_debug = {
   low_speed_limit = 0;
   low_speed_time = 0;
   max_retries = 10;
+  max_upload_chunk_size = 1073741824;
 }
 
 let of_table table =
@@ -423,6 +432,9 @@ let of_table table =
       low_speed_time =
         get "low_speed_time" int_of_string default.low_speed_time;
       max_retries = get "max_retries" int_of_string default.max_retries;
+      max_upload_chunk_size =
+        get "max_upload_chunk_size" int_of_string
+          default.max_upload_chunk_size;
     }
 
 let to_table data =
@@ -469,6 +481,7 @@ let to_table data =
     add "low_speed_limit" (data.low_speed_limit |> string_of_int);
     add "low_speed_time" (data.low_speed_time |> string_of_int);
     add "max_retries" (data.max_retries |> string_of_int);
+    add "max_upload_chunk_size" (data.max_upload_chunk_size |> string_of_int);
     table
 
 let debug_print out_ch start_time curl info_type info =
@@ -502,6 +515,7 @@ let create_gapi_config config app_dir =
       |> GapiConfig.max_send_speed ^= config.max_upload_speed
       |> GapiConfig.low_speed_limit ^= config.low_speed_limit
       |> GapiConfig.low_speed_time ^= config.low_speed_time
+      |> GapiConfig.upload_chunk_size ^= config.max_upload_chunk_size
       (* If client_id and client_secret are not set, the authorization will
        * be handled by the GAE proxy *)
       |> GapiConfig.auth ^= GapiConfig.OAuth2
