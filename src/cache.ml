@@ -196,6 +196,7 @@ struct
          uid = :uid, \
          gid = :gid, \
          xattrs = :xattrs, \
+         parent_path = :parent_path, \
          path = :path, \
          state = :state, \
          last_update = :last_update \
