@@ -78,11 +78,8 @@ let refresh_token_lens =
 let saved_version_lens =
   StateFileStore.data |-- State.saved_version
 
-let largest_change_id_lens =
-  metadata |-- GapiLens.option_get |-- Cache.Metadata.largest_change_id
-
-let root_folder_id_lens =
-  metadata |-- GapiLens.option_get |-- Cache.Metadata.root_folder_id
+let metadata_last_update_lens =
+  metadata |-- GapiLens.option_get |-- Cache.Metadata.last_update
 
 module ConcurrentContext =
   ConcurrentGlobal.Make(struct type u = t let label = "context" end)

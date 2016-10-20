@@ -110,29 +110,36 @@ let prepare_rollback_tran_stmt db =
 
 module ResourceStmts =
 struct
-  let fields_without_id =
+  let api_fields_without_id =
     "etag, \
      remote_id, \
-     title, \
+     name, \
      mime_type, \
-     created_date, \
-     modified_date, \
-     last_viewed_by_me_date, \
-     parent_remote_ids, \
-     download_url, \
-     export_links, \
+     created_time, \
+     modified_time, \
+     viewed_by_me_time, \
      file_extension, \
      md5_checksum, \
-     file_size, \
-     editable, \
+     size, \
+     can_edit, \
      trashed, \
-     alternate_link, \
-     parent_path, \
+     web_view_link"
+  let app_properties_fields =
+    "file_mode_bits, \
+     parent_path_hash, \
+     local_name, \
+     uid, \
+     gid, \
+     xattrs"
+  let app_fields =
+    "parent_path, \
      path, \
      state, \
-     change_id, \
      last_update"
 
+  let fields_without_id = api_fields_without_id ^ ", " ^
+                          app_properties_fields ^ ", " ^
+                          app_fields
   let fields = "id, " ^ fields_without_id
 
   let prepare_insert_stmt db =
@@ -141,24 +148,26 @@ struct
        VALUES ( \
          :etag, \
          :remote_id, \
-         :title, \
+         :name, \
          :mime_type, \
-         :created_date, \
-         :modified_date, \
-         :last_viewed_by_me_date, \
-         :parent_remote_ids, \
-         :download_url, \
-         :export_links, \
+         :created_time, \
+         :modified_time, \
+         :viewed_by_me_time, \
          :file_extension, \
          :md5_checksum, \
-         :file_size, \
-         :editable, \
+         :size, \
+         :can_edit, \
          :trashed, \
-         :alternate_link, \
+         :web_view_link, \
+         :file_mode_bits, \
+         :parent_path_hash, \
+         :local_name, \
+         :uid, \
+         :gid, \
+         :xattrs, \
          :parent_path, \
          :path, \
          :state, \
-         :change_id, \
          :last_update
        );"
     in
@@ -170,24 +179,25 @@ struct
        SET \
          etag = :etag, \
          remote_id = :remote_id, \
-         title = :title, \
+         name = :name, \
          mime_type = :mime_type, \
-         created_date = :created_date, \
-         modified_date = :modified_date, \
-         last_viewed_by_me_date = :last_viewed_by_me_date, \
-         parent_remote_ids = :parent_remote_ids, \
-         download_url = :download_url, \
-         export_links = :export_links, \
+         created_time = :created_time, \
+         modified_time = :modified_time, \
+         viewed_by_me_time = :viewed_by_me_time, \
          file_extension = :file_extension, \
          md5_checksum = :md5_checksum, \
-         file_size = :file_size, \
-         editable = :editable, \
+         size = :size, \
+         can_edit = :can_edit, \
          trashed = :trashed, \
-         alternate_link = :alternate_link, \
-         parent_path = :parent_path, \
+         web_view_link = :web_view_link, \
+         file_mode_bits = :file_mode_bits, \
+         parent_path_hash = :parent_path_hash, \
+         local_name = :local_name, \
+         uid = :uid, \
+         gid = :gid, \
+         xattrs = :xattrs, \
          path = :path, \
          state = :state, \
-         change_id = :change_id, \
          last_update = :last_update \
        WHERE id = :id;"
     in
@@ -199,14 +209,6 @@ struct
        SET \
          state = :state \
        WHERE id = :id;"
-    in
-      Sqlite3.prepare db sql
-
-  let prepare_update_all_change_ids db =
-    let sql =
-      "UPDATE resource \
-       SET change_id = :change_id \
-       WHERE state <> 'NotFound'"
     in
       Sqlite3.prepare db sql
 
@@ -233,7 +235,6 @@ struct
       "UPDATE resource \
        SET \
          state = 'ToDownload', \
-         change_id = :change_id \
        WHERE id = :id \
          AND state <> 'ToUpload' \
          AND state <> 'Uploading';"
@@ -244,8 +245,7 @@ struct
     let sql =
       "UPDATE resource \
        SET \
-         state = 'ToDownload', \
-         change_id = :change_id \
+         state = 'ToDownload' \
        WHERE path LIKE '/' \
          AND trashed = 1;"
     in
@@ -255,8 +255,7 @@ struct
     let sql =
       "UPDATE resource \
        SET \
-         trashed = 1, \
-         change_id = :change_id \
+         trashed = 1 \
        WHERE id = :id;"
     in
       Sqlite3.prepare db sql
@@ -293,8 +292,7 @@ struct
        FROM resource \
        WHERE parent_path = :parent_path \
          AND trashed = :trashed \
-         AND (change_id < :change_id \
-           OR state <> 'NotFound');"
+         AND state <> 'NotFound';"
     in
       Sqlite3.prepare db sql
 
@@ -321,7 +319,7 @@ struct
        FROM resource \
        WHERE parent_path = :parent_path \
          AND trashed = :trashed \
-         AND state IN ('InSync', 'ToDownload');"
+         AND state IN ('Synchronized', 'ToDownload');"
     in
       Sqlite3.prepare db sql
 
@@ -329,8 +327,8 @@ struct
     let sql =
       "SELECT " ^ fields ^ " \
        FROM resource \
-       WHERE state = 'InSync' \
-         AND file_size > 0 \
+       WHERE state = 'Synchronized' \
+         AND size > 0 \
        ORDER BY last_update;"
     in
       Sqlite3.prepare db sql
@@ -339,20 +337,18 @@ end
 
 module MetadataStmts =
 struct
-  let fields_without_id =
+  let api_fields_without_id =
     "etag, \
-     username, \
-     quota_bytes_total, \
-     quota_bytes_used, \
-     largest_change_id, \
-     remaining_change_ids, \
-     root_folder_id, \
-     permission_id, \
-     cache_size, \
+     display_name, \
+     storage_quota_limit, \
+     storage_quota_usage, \
+     start_page_token"
+  let app_fields =
+    "cache_size, \
      last_update"
 
-  let fields =
-    "id, " ^ fields_without_id
+  let fields_without_id = api_fields_without_id ^ ", " ^ app_fields
+  let fields = "id, " ^ fields_without_id
 
   let prepare_insert_stmt db =
     let sql =
@@ -360,13 +356,10 @@ struct
        VALUES ( \
          1, \
          :etag, \
-         :username, \
-         :quota_bytes_total, \
-         :quota_bytes_used, \
-         :largest_change_id, \
-         :remaining_change_ids, \
-         :root_folder_id, \
-         :permission_id, \
+         :display_name, \
+         :storage_quota_limit, \
+         :storage_quota_usage, \
+         :start_page_token, \
          :cache_size, \
          :last_update \
        );"
@@ -434,7 +427,7 @@ struct
   module State =
   struct
     type t =
-        InSync
+        Synchronized
       | ToDownload
       | Downloading
       | ToUpload
@@ -442,7 +435,7 @@ struct
       | NotFound
 
     let to_string = function
-        InSync -> "InSync"
+        Synchronized -> "Synchronized"
       | ToDownload -> "ToDownload"
       | Downloading -> "Downloading"
       | ToUpload -> "ToUpload"
@@ -450,7 +443,7 @@ struct
       | NotFound -> "NotFound"
 
     let of_string = function
-        "InSync" -> InSync
+        "Synchronized" -> Synchronized
       | "ToDownload" -> ToDownload
       | "Downloading" -> Downloading
       | "ToUpload" -> ToUpload
@@ -466,25 +459,28 @@ struct
     (* remote data *)
     etag : string option;
     remote_id : string option;
-    title : string option;
+    name : string option;
     mime_type : string option;
-    created_date : float option;
-    modified_date : float option;
-    last_viewed_by_me_date : float option;
-    parent_remote_ids : string option;
-    download_url : string option;
-    export_links : string option;
+    created_time : float option;
+    modified_time : float option;
+    viewed_by_me_time : float option;
     file_extension : string option;
     md5_checksum : string option;
-    file_size : int64 option;
-    editable : bool option;
+    size : int64 option;
+    can_edit : bool option;
     trashed : bool option;
-    alternate_link : string option;
+    web_view_link : string option;
+    (* app data stored in Drive *)
+    file_mode_bits : int64 option;
+    parent_path_hash : string option;
+    local_name : string option;
+    uid : int64 option;
+    gid : int64 option;
+    xattrs : string;
     (* local data *)
     parent_path : string;
     path : string;
     state : State.t;
-    change_id : int64;
     last_update : float;
   }
 
@@ -500,37 +496,25 @@ struct
     GapiLens.get = (fun x -> x.remote_id);
     GapiLens.set = (fun v x -> { x with remote_id = v })
   }
-  let title = {
-    GapiLens.get = (fun x -> x.title);
-    GapiLens.set = (fun v x -> { x with title = v })
+  let name = {
+    GapiLens.get = (fun x -> x.name);
+    GapiLens.set = (fun v x -> { x with name = v })
   }
   let mime_type = {
     GapiLens.get = (fun x -> x.mime_type);
     GapiLens.set = (fun v x -> { x with mime_type = v })
   }
-  let created_date = {
-    GapiLens.get = (fun x -> x.created_date);
-    GapiLens.set = (fun v x -> { x with created_date = v })
+  let created_time = {
+    GapiLens.get = (fun x -> x.created_time);
+    GapiLens.set = (fun v x -> { x with created_time = v })
   }
-  let modified_date = {
-    GapiLens.get = (fun x -> x.modified_date);
-    GapiLens.set = (fun v x -> { x with modified_date = v })
+  let modified_time = {
+    GapiLens.get = (fun x -> x.modified_time);
+    GapiLens.set = (fun v x -> { x with modified_time = v })
   }
-  let last_viewed_by_me_date = {
-    GapiLens.get = (fun x -> x.last_viewed_by_me_date);
-    GapiLens.set = (fun v x -> { x with last_viewed_by_me_date = v })
-  }
-  let parent_remote_ids = {
-    GapiLens.get = (fun x -> x.parent_remote_ids);
-    GapiLens.set = (fun v x -> { x with parent_remote_ids = v })
-  }
-  let download_url = {
-    GapiLens.get = (fun x -> x.download_url);
-    GapiLens.set = (fun v x -> { x with download_url = v })
-  }
-  let export_links = {
-    GapiLens.get = (fun x -> x.export_links);
-    GapiLens.set = (fun v x -> { x with export_links = v })
+  let viewed_by_me_time = {
+    GapiLens.get = (fun x -> x.viewed_by_me_time);
+    GapiLens.set = (fun v x -> { x with viewed_by_me_time = v })
   }
   let file_extension = {
     GapiLens.get = (fun x -> x.file_extension);
@@ -540,21 +524,45 @@ struct
     GapiLens.get = (fun x -> x.md5_checksum);
     GapiLens.set = (fun v x -> { x with md5_checksum = v })
   }
-  let file_size = {
-    GapiLens.get = (fun x -> x.file_size);
-    GapiLens.set = (fun v x -> { x with file_size = v })
+  let size = {
+    GapiLens.get = (fun x -> x.size);
+    GapiLens.set = (fun v x -> { x with size = v })
   }
-  let editable = {
-    GapiLens.get = (fun x -> x.editable);
-    GapiLens.set = (fun v x -> { x with editable = v })
+  let can_edit = {
+    GapiLens.get = (fun x -> x.can_edit);
+    GapiLens.set = (fun v x -> { x with can_edit = v })
   }
   let trashed = {
     GapiLens.get = (fun x -> x.trashed);
     GapiLens.set = (fun v x -> { x with trashed = v })
   }
-  let alternate_link = {
-    GapiLens.get = (fun x -> x.alternate_link);
-    GapiLens.set = (fun v x -> { x with alternate_link = v })
+  let web_view_link = {
+    GapiLens.get = (fun x -> x.web_view_link);
+    GapiLens.set = (fun v x -> { x with web_view_link = v })
+  }
+  let file_mode_bits = {
+    GapiLens.get = (fun x -> x.file_mode_bits);
+    GapiLens.set = (fun v x -> { x with file_mode_bits = v })
+  }
+  let parent_path_hash = {
+    GapiLens.get = (fun x -> x.parent_path_hash);
+    GapiLens.set = (fun v x -> { x with parent_path_hash = v })
+  }
+  let local_name = {
+    GapiLens.get = (fun x -> x.local_name);
+    GapiLens.set = (fun v x -> { x with local_name = v })
+  }
+  let uid = {
+    GapiLens.get = (fun x -> x.uid);
+    GapiLens.set = (fun v x -> { x with uid = v })
+  }
+  let gid = {
+    GapiLens.get = (fun x -> x.gid);
+    GapiLens.set = (fun v x -> { x with gid = v })
+  }
+  let xattrs = {
+    GapiLens.get = (fun x -> x.xattrs);
+    GapiLens.set = (fun v x -> { x with xattrs = v })
   }
   let parent_path = {
     GapiLens.get = (fun x -> x.parent_path);
@@ -568,76 +576,81 @@ struct
     GapiLens.get = (fun x -> x.state);
     GapiLens.set = (fun v x -> { x with state = v })
   }
-  let change_id = {
-    GapiLens.get = (fun x -> x.change_id);
-    GapiLens.set = (fun v x -> { x with change_id = v })
-  }
   let last_update = {
     GapiLens.get = (fun x -> x.last_update);
     GapiLens.set = (fun v x -> { x with last_update = v })
   }
 
-  (* Export links *)
-  let render_export_links export_links =
+  (* app properties *)
+  let find_app_property name app_properties =
+    try
+      Some (List.assoc name app_properties)
+    with Not_found ->
+      None
+
+  let app_property_to_int64 p = Option.map (fun s -> Int64.of_string s) p
+
+  (* file mode bits *)
+  let file_mode_bits_to_kind m =
+    let s_ifmt = 0o170000 in
+    let file_type = (Int64.to_int m) land s_ifmt in
+    match file_type with
+        0o140000 -> Unix.S_SOCK
+      | 0o120000 -> Unix.S_LNK
+      | 0o100000 -> Unix.S_REG
+      | 0o060000 -> Unix.S_BLK
+      | 0o040000 -> Unix.S_DIR
+      | 0o020000 -> Unix.S_CHR
+      | 0o010000 -> Unix.S_FIFO
+      | _ -> failwith ("Unsupported file type: " ^ string_of_int file_type)
+
+  let file_mode_bits_to_perm m =
+    let mask = 0o7777 in
+    (Int64.to_int m) land mask
+
+  (* xattrs *)
+  let render_xattrs xattrs =
     let buffer = Buffer.create 64 in
     List.iter
-      (fun (fmt, link) ->
-         let s = Printf.sprintf "%S:%S;" fmt link in
+      (fun (name, value) ->
+         let s = Printf.sprintf "%S:%S;" name value in
          Buffer.add_string buffer s)
-      export_links;
+      xattrs;
     Buffer.contents buffer
 
-  let parse_export_links s =
+  let parse_xattrs s =
     let sb = Scanf.Scanning.from_string s in
-    let export_links = ref [] in
+    let xattrs = ref [] in
     while (not (Scanf.Scanning.end_of_input sb)) do
-      let (fmt, link) = Scanf.bscanf sb "%S:%S;" (fun f l -> (f, l)) in
-      export_links := (fmt, link) :: !export_links
+      let (name, value) = Scanf.bscanf sb "%S:%S;" (fun f l -> (f, l)) in
+      xattrs := (name, value) :: !xattrs
     done;
-    !export_links
-
-  (* Parent remote ids *)
-  let render_parent_remote_ids parents =
-    let buffer = Buffer.create 64 in
-    List.iter
-      (fun parent ->
-         let s =
-           Printf.sprintf "%S;" parent.GapiDriveV2Model.ParentReference.id in
-         Buffer.add_string buffer s)
-      parents;
-    Buffer.contents buffer
-
-  let parse_parent_remote_ids s =
-    let sb = Scanf.Scanning.from_string s in
-    let remote_ids = ref [] in
-    while (not (Scanf.Scanning.end_of_input sb)) do
-      let id = Scanf.bscanf sb "%S;" (fun x -> x) in
-      remote_ids := id :: !remote_ids
-    done;
-    !remote_ids
+    !xattrs
 
   (* Queries *)
   let bind_resource_parameters stmt resource =
     bind_text stmt ":etag" resource.etag;
     bind_text stmt ":remote_id" resource.remote_id;
-    bind_text stmt ":title" resource.title;
+    bind_text stmt ":name" resource.name;
     bind_text stmt ":mime_type" resource.mime_type;
-    bind_float stmt ":created_date" resource.created_date;
-    bind_float stmt ":modified_date" resource.modified_date;
-    bind_float stmt ":last_viewed_by_me_date" resource.last_viewed_by_me_date;
-    bind_text stmt ":parent_remote_ids" resource.parent_remote_ids;
-    bind_text stmt ":download_url" resource.download_url;
-    bind_text stmt ":export_links" resource.export_links;
+    bind_float stmt ":created_time" resource.created_time;
+    bind_float stmt ":modified_time" resource.modified_time;
+    bind_float stmt ":viewed_by_me_time" resource.viewed_by_me_time;
     bind_text stmt ":file_extension" resource.file_extension;
     bind_text stmt ":md5_checksum" resource.md5_checksum;
-    bind_int stmt ":file_size" resource.file_size;
-    bind_bool stmt ":editable" resource.editable;
+    bind_int stmt ":size" resource.size;
+    bind_bool stmt ":can_edit" resource.can_edit;
     bind_bool stmt ":trashed" resource.trashed;
-    bind_text stmt ":alternate_link" resource.alternate_link;
+    bind_text stmt ":web_view_link" resource.web_view_link;
+    bind_int stmt ":file_mode_bits" resource.file_mode_bits;
+    bind_text stmt ":parent_path_hash" resource.parent_path_hash;
+    bind_text stmt ":local_name" resource.local_name;
+    bind_int stmt ":uid" resource.uid;
+    bind_int stmt ":gid" resource.gid;
+    bind_text stmt ":xattrs" (Some resource.xattrs);
     bind_text stmt ":parent_path" (Some resource.parent_path);
     bind_text stmt ":path" (Some resource.path);
     bind_text stmt ":state" (Some (State.to_string resource.state));
-    bind_int stmt ":change_id" (Some resource.change_id);
     bind_float stmt ":last_update" (Some resource.last_update)
 
   let step_insert_resource db stmt resource =
@@ -702,10 +715,9 @@ struct
          final_step stmt;
          finalize_stmt stmt)
 
-  let _delete_resources_with_parent_path db parent_path change_id trashed =
+  let _delete_resources_with_parent_path db parent_path trashed =
     let stmt = ResourceStmts.prepare_delete_with_parent_path_stmt db in
     bind_text stmt ":parent_path" (Some parent_path);
-    bind_int stmt ":change_id" (Some change_id);
     bind_bool stmt ":trashed" (Some trashed);
     final_step stmt;
     finalize_stmt stmt
@@ -720,10 +732,10 @@ struct
            resources;
          finalize_stmt stmt)
 
-  let insert_resources cache resources parent_path change_id trashed =
+  let insert_resources cache resources parent_path trashed =
     with_transaction cache
       (fun db ->
-         _delete_resources_with_parent_path db parent_path change_id trashed;
+         _delete_resources_with_parent_path db parent_path trashed;
          let stmt = ResourceStmts.prepare_insert_stmt db in
          let results =
            List.map
@@ -732,40 +744,33 @@ struct
          finalize_stmt stmt;
          results)
 
-  let invalidate_resources cache ids change_id =
+  let invalidate_resources cache ids =
     with_transaction cache
       (fun db ->
-         let all_stmt = ResourceStmts.prepare_update_all_change_ids db in
-         bind_int all_stmt ":change_id" (Some change_id);
-         final_step all_stmt;
-         finalize_stmt all_stmt;
          let stmt = ResourceStmts.prepare_invalidate_stmt db in
          List.iter
            (fun id ->
               reset_stmt stmt;
-              bind_int stmt ":change_id" (Some change_id);
               bind_int stmt ":id" (Some id);
               final_step stmt)
            ids;
          finalize_stmt stmt)
 
-  let invalidate_trash_bin cache change_id =
+  let invalidate_trash_bin cache =
     with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_invalidate_trash_bin_stmt db in
          reset_stmt stmt;
-         bind_int stmt ":change_id" (Some change_id);
          final_step stmt;
          finalize_stmt stmt)
 
-  let trash_resources cache resources change_id =
+  let trash_resources cache resources =
     with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_trash_stmt db in
          List.iter
            (fun resource ->
               reset_stmt stmt;
-              bind_int stmt ":change_id" (Some change_id);
               bind_int stmt ":id" (Some resource.id);
               final_step stmt)
            resources;
@@ -794,25 +799,27 @@ struct
     { id = row_data.(0) |> data_to_int64 |> Option.get;
       etag = row_data.(1) |> data_to_string;
       remote_id = row_data.(2) |> data_to_string;
-      title = row_data.(3) |> data_to_string;
+      name = row_data.(3) |> data_to_string;
       mime_type = row_data.(4) |> data_to_string;
-      created_date = row_data.(5) |> data_to_float;
-      modified_date = row_data.(6) |> data_to_float;
-      last_viewed_by_me_date = row_data.(7) |> data_to_float;
-      parent_remote_ids = row_data.(8) |> data_to_string;
-      download_url = row_data.(9) |> data_to_string;
-      export_links = row_data.(10) |> data_to_string;
-      file_extension = row_data.(11) |> data_to_string;
-      md5_checksum = row_data.(12) |> data_to_string;
-      file_size = row_data.(13) |> data_to_int64;
-      editable = row_data.(14) |> data_to_bool;
-      trashed = row_data.(15) |> data_to_bool;
-      alternate_link = row_data.(16) |> data_to_string;
-      parent_path = row_data.(17) |> data_to_string |> Option.get;
-      path = row_data.(18) |> data_to_string |> Option.get;
-      state = row_data.(19) |> data_to_string |> Option.get |> State.of_string;
-      change_id = row_data.(20) |> data_to_int64 |> Option.get;
-      last_update = row_data.(21) |> data_to_float |> Option.get;
+      created_time = row_data.(5) |> data_to_float;
+      modified_time = row_data.(6) |> data_to_float;
+      viewed_by_me_time = row_data.(7) |> data_to_float;
+      file_extension = row_data.(8) |> data_to_string;
+      md5_checksum = row_data.(9) |> data_to_string;
+      size = row_data.(10) |> data_to_int64;
+      can_edit = row_data.(11) |> data_to_bool;
+      trashed = row_data.(12) |> data_to_bool;
+      web_view_link = row_data.(13) |> data_to_string;
+      file_mode_bits = row_data.(14) |> data_to_int64;
+      parent_path_hash = row_data.(15) |> data_to_string;
+      local_name = row_data.(16) |> data_to_string;
+      uid = row_data.(17) |> data_to_int64;
+      gid = row_data.(18) |> data_to_int64;
+      xattrs = row_data.(19) |> data_to_string |> Option.get;
+      parent_path = row_data.(20) |> data_to_string |> Option.get;
+      path = row_data.(21) |> data_to_string |> Option.get;
+      state = row_data.(22) |> data_to_string |> Option.get |> State.of_string;
+      last_update = row_data.(23) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -881,8 +888,8 @@ struct
         Some mime_type -> is_document_mime_type mime_type
       | _ -> false
 
-  let is_valid resource largest_change_id =
-    resource.change_id >= largest_change_id
+  let is_valid resource metadata_last_update =
+    resource.last_update >= metadata_last_update
 
   let get_format_from_mime_type mime_type config =
     match mime_type with
@@ -953,13 +960,10 @@ module Metadata =
 struct
   type t = {
     etag : string;
-    username : string;
-    quota_bytes_total : int64;
-    quota_bytes_used : int64;
-    largest_change_id : int64;
-    remaining_change_ids : int64;
-    root_folder_id : string;
-    permission_id : string;
+    display_name : string;
+    storage_quota_limit : int64;
+    storage_quota_usage : int64;
+    start_page_token : string;
     cache_size : int64;
     last_update : float;
   }
@@ -968,33 +972,21 @@ struct
     GapiLens.get = (fun x -> x.etag);
     GapiLens.set = (fun v x -> { x with etag = v })
   }
-  let username = {
-    GapiLens.get = (fun x -> x.username);
-    GapiLens.set = (fun v x -> { x with username = v })
+  let display_name = {
+    GapiLens.get = (fun x -> x.display_name);
+    GapiLens.set = (fun v x -> { x with display_name = v })
   }
-  let quota_bytes_total = {
-    GapiLens.get = (fun x -> x.quota_bytes_total);
-    GapiLens.set = (fun v x -> { x with quota_bytes_total = v })
+  let storage_quota_limit = {
+    GapiLens.get = (fun x -> x.storage_quota_limit);
+    GapiLens.set = (fun v x -> { x with storage_quota_limit = v })
   }
-  let quota_bytes_used = {
-    GapiLens.get = (fun x -> x.quota_bytes_used);
-    GapiLens.set = (fun v x -> { x with quota_bytes_used = v })
+  let storage_quota_usage = {
+    GapiLens.get = (fun x -> x.storage_quota_usage);
+    GapiLens.set = (fun v x -> { x with storage_quota_usage = v })
   }
-  let largest_change_id = {
-    GapiLens.get = (fun x -> x.largest_change_id);
-    GapiLens.set = (fun v x -> { x with largest_change_id = v })
-  }
-  let remaining_change_ids = {
-    GapiLens.get = (fun x -> x.remaining_change_ids);
-    GapiLens.set = (fun v x -> { x with remaining_change_ids = v })
-  }
-  let root_folder_id = {
-    GapiLens.get = (fun x -> x.root_folder_id);
-    GapiLens.set = (fun v x -> { x with root_folder_id = v })
-  }
-  let permission_id = {
-    GapiLens.get = (fun x -> x.permission_id);
-    GapiLens.set = (fun v x -> { x with permission_id = v })
+  let start_page_token = {
+    GapiLens.get = (fun x -> x.start_page_token);
+    GapiLens.set = (fun v x -> { x with start_page_token = v })
   }
   let cache_size = {
     GapiLens.get = (fun x -> x.cache_size);
@@ -1008,13 +1000,10 @@ struct
   (* Queries *)
   let save_metadata stmt metadata =
     bind_text stmt ":etag" (Some metadata.etag);
-    bind_text stmt ":username" (Some metadata.username);
-    bind_int stmt ":quota_bytes_total" (Some metadata.quota_bytes_total);
-    bind_int stmt ":quota_bytes_used" (Some metadata.quota_bytes_used);
-    bind_int stmt ":largest_change_id" (Some metadata.largest_change_id);
-    bind_int stmt ":remaining_change_ids" (Some metadata.remaining_change_ids);
-    bind_text stmt ":root_folder_id" (Some metadata.root_folder_id);
-    bind_text stmt ":permission_id" (Some metadata.permission_id);
+    bind_text stmt ":display_name" (Some metadata.display_name);
+    bind_int stmt ":storage_quota_limit" (Some metadata.storage_quota_limit);
+    bind_int stmt ":storage_quota_usage" (Some metadata.storage_quota_usage);
+    bind_text stmt ":start_page_token" (Some metadata.start_page_token);
     bind_int stmt ":cache_size" (Some metadata.cache_size);
     bind_float stmt ":last_update" (Some metadata.last_update);
     final_step stmt
@@ -1028,15 +1017,12 @@ struct
 
   let row_to_metadata row_data =
     { etag = row_data.(0) |> data_to_string |> Option.get;
-      username = row_data.(1) |> data_to_string |> Option.get;
-      quota_bytes_total = row_data.(2) |> data_to_int64 |> Option.get;
-      quota_bytes_used = row_data.(3) |> data_to_int64 |> Option.get;
-      largest_change_id = row_data.(4) |> data_to_int64 |> Option.get;
-      remaining_change_ids = row_data.(5) |> data_to_int64 |> Option.get;
-      root_folder_id = row_data.(6) |> data_to_string |> Option.get;
-      permission_id = row_data.(7) |> data_to_string |> Option.get;
-      cache_size = row_data.(8) |> data_to_int64 |> Option.get;
-      last_update = row_data.(9) |> data_to_float |> Option.get;
+      display_name = row_data.(1) |> data_to_string |> Option.get;
+      storage_quota_limit = row_data.(2) |> data_to_int64 |> Option.get;
+      storage_quota_usage = row_data.(3) |> data_to_int64 |> Option.get;
+      start_page_token = row_data.(4) |> data_to_string |> Option.get;
+      cache_size = row_data.(5) |> data_to_int64 |> Option.get;
+      last_update = row_data.(6) |> data_to_float |> Option.get;
     }
 
   let select_metadata cache =
@@ -1096,24 +1082,26 @@ let setup_db cache =
             id INTEGER PRIMARY KEY, \
             etag TEXT NULL, \
             remote_id TEXT NULL, \
-            title TEXT NULL, \
+            name TEXT NULL, \
             mime_type TEXT NULL, \
-            created_date REAL NULL, \
-            modified_date REAL NULL, \
-            last_viewed_by_me_date REAL NULL, \
-            parent_remote_ids TEXT NULL, \
-            download_url TEXT NULL, \
-            export_links TEXT NULL, \
+            created_time REAL NULL, \
+            modified_time REAL NULL, \
+            viewed_by_me_time REAL NULL, \
             file_extension TEXT NULL, \
             md5_checksum TEXT NULL, \
-            file_size INTEGER NULL, \
-            editable INTEGER NULL, \
+            size INTEGER NULL, \
+            can_edit INTEGER NULL, \
             trashed INTEGER NULL, \
-            alternate_link TEXT NULL, \
+            web_view_link TEXT NULL, \
+            file_mode_bits INTEGER NULL, \
+            parent_path_hash TEXT NULL, \
+            local_name TEXT NULL, \
+            uid INTEGER NULL, \
+            gid INTEGER NULL, \
+            xattrs TEXT NOT NULL, \
             parent_path TEXT NOT NULL, \
             path TEXT NOT NULL, \
             state TEXT NOT NULL, \
-            change_id INTEGER NOT NULL, \
             last_update REAL NOT NULL \
          ); \
          CREATE INDEX IF NOT EXISTS path_index ON resource (path, trashed); \
@@ -1123,13 +1111,10 @@ let setup_db cache =
          CREATE TABLE IF NOT EXISTS metadata ( \
             id INTEGER PRIMARY KEY, \
             etag TEXT NOT NULL, \
-            username TEXT NOT NULL, \
-            quota_bytes_total INTEGER NOT NULL, \
-            quota_bytes_used INTEGER NOT NULL, \
-            largest_change_id INTEGER NOT NULL, \
-            remaining_change_ids INTEGER NOT NULL, \
-            root_folder_id TEXT NOT NULL, \
-            permission_id TEXT NOT NULL, \
+            display_name TEXT NOT NULL, \
+            storage_quota_limit INTEGER NOT NULL, \
+            storage_quota_usage INTEGER NOT NULL, \
+            start_page_token TEXT NOT NULL, \
             cache_size INTEGER NOT NULL, \
             last_update REAL NOT NULL \
          ); \

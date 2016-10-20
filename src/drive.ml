@@ -2,8 +2,8 @@ open GapiUtils.Infix
 open GapiLens.Infix
 open GapiMonad
 open GapiMonad.SessionM.Infix
-open GapiDriveV2Model
-open GapiDriveV2Service
+open GapiDriveV3Model
+open GapiDriveV3Service
 
 exception File_not_found
 exception Permission_denied
@@ -12,9 +12,9 @@ exception Directory_not_empty
 
 let folder_mime_type = "application/vnd.google-apps.folder"
 let file_fields =
-  "alternateLink,createdDate,downloadUrl,editable,etag,explicitlyTrashed,\
-   exportLinks,fileExtension,fileSize,id,labels,lastViewedByMeDate,\
-   md5Checksum,mimeType,modifiedDate,parents,title"
+  "appProperties,capabilities(canEdit),createdTime,explicitlyTrashed,\
+   fileExtension,id,md5Checksum,mimeType,modifiedTime,name,parents,\
+   size,trashed,viewedByMeTime,webViewLink"
 let file_std_params =
   { GapiService.StandardParameters.default with
         GapiService.StandardParameters.fields = file_fields
@@ -22,7 +22,7 @@ let file_std_params =
 let file_list_std_params =
   { GapiService.StandardParameters.default with
         GapiService.StandardParameters.fields =
-          "items(" ^ file_fields ^ "),nextPageToken"
+          "files(" ^ file_fields ^ "),nextPageToken"
   }
 
 let do_request = Oauth2.do_request
@@ -32,19 +32,20 @@ let async_do_request f =
   Utils.log_with_header "Spawning new thread id=%d\n%!" thread_id
 
 let root_directory = "/"
+let root_folder_id = "root"
 let trash_directory = "/.Trash"
 let trash_directory_name_length = String.length trash_directory
 let trash_directory_base_path = "/.Trash/"
 let f_bsize = 4096L
-let change_id_limit = 50L
+let change_limit = 50
 let mb = 1048576L
 
 (* Utilities *)
 let chars_blacklist_regexp = Str.regexp "[/\000]"
-let clean_filename title = Str.global_replace chars_blacklist_regexp "_" title
+let clean_filename name = Str.global_replace chars_blacklist_regexp "_" name
 
 let apostrophe_regexp = Str.regexp (Str.quote "'")
-let escape_apostrophe title = Str.global_replace apostrophe_regexp "\\'" title
+let escape_apostrophe name = Str.global_replace apostrophe_regexp "\\'" name
 
 let common_double_extension_suffixes = [".gz"; ".z"; ".bz2"]
 let split_filename filename =
@@ -73,34 +74,46 @@ let split_filename filename =
   in
   (base_name, extension)
 
+let get_path_hash path =
+  if path == "" then None
+  else begin
+    let md5 = Cryptokit.Hash.md5 () in
+    md5#add_string path;
+    let md5_result = md5#result in
+    let base64 = Cryptokit.Base64.encode_compact () in
+    base64#put_string md5_result;
+    base64#finish;
+    Some base64#get_string
+  end
+
 let disambiguate_filename filename without_extension filename_table  =
-  let rec find_first_unique_filename filename copy_number =
+  let rec find_first_unique_filename filename name_counter =
     let new_candidate =
       if without_extension then
-        Printf.sprintf "%s (%d)" filename copy_number
+        Printf.sprintf "%s (%d)" filename name_counter
       else
         let (base_name, extension) = split_filename filename in
-        Printf.sprintf "%s (%d)%s" base_name copy_number extension
+        Printf.sprintf "%s (%d)%s" base_name name_counter extension
     in
     if not (Hashtbl.mem filename_table new_candidate) then begin
       Utils.log_with_header "Checking: %s: OK\n%!" new_candidate;
-      (new_candidate, copy_number)
+      (new_candidate, name_counter)
     end else begin
       Utils.log_with_header "Checking: %s: KO\n%!" new_candidate;
-      find_first_unique_filename filename (copy_number + 1)
+      find_first_unique_filename filename (succ name_counter)
     end
   in
   if Hashtbl.mem filename_table filename then begin
     Utils.log_with_header "Filename collision detected: %s\n%!" filename;
-    let last_copy_number = Hashtbl.find filename_table filename in
-    let (unique_filename, copy_number) =
-      find_first_unique_filename filename (last_copy_number + 1) in
-    Hashtbl.replace filename_table filename copy_number;
-    unique_filename
+    let old_name_counter = Hashtbl.find filename_table filename in
+    let (unique_filename, name_counter) =
+      find_first_unique_filename filename (succ old_name_counter) in
+    Hashtbl.replace filename_table filename name_counter;
+    (unique_filename, name_counter)
   end else begin
     Utils.log_with_header "Filename (unused): %s\n%!" filename;
     Hashtbl.add filename_table filename 0;
-    filename
+    (filename, 0)
   end
 
 let is_in_trash_directory path =
@@ -153,19 +166,19 @@ let try_with_default f s =
   with_try f handle_default_exceptions s
 
 (* Resource cache *)
-let get_filename title is_document get_document_format =
+let get_filename name is_document get_document_format =
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
-  let clean_title = clean_filename title in
+  let clean_name = clean_filename name in
   let document_format =
     if is_document then get_document_format config
     else "" in
   if is_document &&
       config.Config.docs_file_extension &&
       document_format <> "" then
-    (clean_title ^ "." ^ document_format, false)
+    (clean_name ^ "." ^ document_format, false)
   else
-    (clean_title, is_document)
+    (clean_name, is_document)
 
 let build_resource_tables parent_path trashed =
   let context = Context.get_ctx () in
@@ -177,21 +190,21 @@ let build_resource_tables parent_path trashed =
   let remote_id_table = Hashtbl.create (List.length resources) in
   List.iter
     (fun resource ->
-       let title = Option.get resource.Cache.Resource.title in
-       let (clean_title, _) =
+       let name = Option.get resource.Cache.Resource.name in
+       let (clean_name, _) =
          get_filename
-           title
+           name
            (Cache.Resource.is_document resource)
            (fun config -> Cache.Resource.get_format resource config)
        in
        let filename = Filename.basename resource.Cache.Resource.path in
-       if clean_title <> filename then begin
-         let copy_number =
+       if clean_name <> filename then begin
+         let name_counter =
            try
-             Hashtbl.find filename_table clean_title
+             Hashtbl.find filename_table clean_name
            with Not_found -> 0
          in
-         Hashtbl.replace filename_table clean_title copy_number;
+         Hashtbl.replace filename_table clean_name name_counter;
        end;
        Hashtbl.add filename_table filename 0;
        Hashtbl.add remote_id_table
@@ -199,115 +212,132 @@ let build_resource_tables parent_path trashed =
     resources;
   (filename_table, remote_id_table)
 
-let create_resource path change_id =
+let create_resource ?local_name path =
+  let parent_path = Filename.dirname path in
   { Cache.Resource.id = 0L;
     etag = None;
     remote_id = None;
-    title = None;
+    name = None;
     mime_type = None;
-    created_date = None;
-    modified_date = None;
-    last_viewed_by_me_date = None;
-    parent_remote_ids = None;
-    download_url = None;
-    export_links = None;
+    created_time = None;
+    modified_time = None;
+    viewed_by_me_time = None;
     file_extension = None;
     md5_checksum = None;
-    file_size = None;
-    editable = None;
+    size = None;
+    can_edit = None;
     trashed = None;
-    alternate_link = None;
-    parent_path = Filename.dirname path;
+    web_view_link = None;
+    file_mode_bits = None;
+    parent_path_hash = get_path_hash parent_path;
+    local_name;
+    uid = None;
+    gid = None;
+    xattrs = "";
+    parent_path;
     path;
     state = Cache.Resource.State.ToDownload;
-    change_id;
     last_update = Unix.gettimeofday ();
   }
 
-let create_root_resource root_folder_id change_id trashed =
-  let resource = create_resource root_directory change_id in
+let create_root_resource trashed =
+  let resource = create_resource root_directory in
     { resource with
           Cache.Resource.remote_id = Some root_folder_id;
           mime_type = Some folder_mime_type;
-          file_size = Some 0L;
+          size = Some 0L;
           parent_path = "";
           trashed = Some trashed;
     }
 
-let get_unique_filename title is_document get_document_format filename_table =
-  let (complete_title, without_extension) =
-    get_filename title is_document get_document_format
+let get_unique_filename name is_document get_document_format filename_table =
+  let (complete_name, without_extension) =
+    get_filename name is_document get_document_format
   in
-  disambiguate_filename complete_title without_extension filename_table
+  disambiguate_filename complete_name without_extension filename_table
 
-let get_unique_filename_from_resource resource title filename_table =
-  get_unique_filename
-    title
-    (Cache.Resource.is_document resource)
-    (fun config -> Cache.Resource.get_format resource config)
-    filename_table
+let get_unique_filename_from_resource resource name filename_table =
+  if Option.is_some resource.Cache.Resource.local_name &&
+     get_path_hash resource.Cache.Resource.parent_path =
+       resource.Cache.Resource.parent_path_hash then
+    let local_name = resource.Cache.Resource.local_name |> Option.get in
+    (local_name, resource.Cache.Resource.local_name)
+  else
+    let (filename, name_counter) =
+      get_unique_filename
+        name
+        (Cache.Resource.is_document resource)
+        (fun config -> Cache.Resource.get_format resource config)
+        filename_table in
+    let local_name = if name_counter > 0 then Some filename else None in
+    (filename, local_name)
 
 let get_unique_filename_from_file file filename_table =
   get_unique_filename
-    file.File.title
+    file.File.name
     (Cache.Resource.is_document_mime_type file.File.mimeType)
     (fun config ->
       Cache.Resource.get_format_from_mime_type file.File.mimeType config)
     filename_table
 
-let recompute_path resource title =
+let recompute_path resource name =
   (* TODO: make an optimized version of build_resource_tables that
    * doesn't create resource table (useful for large directories). *)
   let (filename_table, _) =
     build_resource_tables
       resource.Cache.Resource.parent_path
       (Option.default false resource.Cache.Resource.trashed) in
-  let filename =
-    get_unique_filename_from_resource resource title filename_table
+  let (filename, local_name) =
+    get_unique_filename_from_resource resource name filename_table
   in
-  Filename.concat resource.Cache.Resource.parent_path filename
+  let path = Filename.concat resource.Cache.Resource.parent_path filename in
+  (path, local_name)
 
 let update_resource_from_file ?state resource file =
-  let largest_change_id =
-    Context.get_ctx () |. Context.largest_change_id_lens in
-  let path =
-    match resource.Cache.Resource.title with
-        Some cached_title ->
-          if cached_title <> file.File.title then
-            recompute_path resource file.File.title
-          else resource.Cache.Resource.path
-      | None -> resource.Cache.Resource.path
+  let (path, local_name) =
+    match resource.Cache.Resource.name with
+        Some cached_name ->
+          if cached_name <> file.File.name then
+            recompute_path resource file.File.name
+          else (resource.Cache.Resource.path, None)
+      | None -> (resource.Cache.Resource.path, None)
   in
+  let parent_path = Filename.dirname path in
   { resource with
-        Cache.Resource.etag = Some file.File.etag;
+        Cache.Resource.etag = None;
         remote_id = Some file.File.id;
-        title = Some file.File.title;
+        name = Some file.File.name;
         mime_type = Some file.File.mimeType;
-        created_date = Some (Netdate.since_epoch file.File.createdDate);
-        modified_date = Some (Netdate.since_epoch file.File.modifiedDate);
-        last_viewed_by_me_date =
-          Some (Netdate.since_epoch file.File.lastViewedByMeDate);
-        parent_remote_ids =
-          Some (Cache.Resource.render_parent_remote_ids file.File.parents);
-        download_url = Some file.File.downloadUrl;
-        export_links =
-          Some (Cache.Resource.render_export_links file.File.exportLinks);
+        created_time = Some (Netdate.since_epoch file.File.createdTime);
+        modified_time = Some (Netdate.since_epoch file.File.modifiedTime);
+        viewed_by_me_time =
+          Some (Netdate.since_epoch file.File.viewedByMeTime);
         file_extension = Some file.File.fileExtension;
         md5_checksum = Some file.File.md5Checksum;
-        file_size = Some file.File.fileSize;
-        editable = Some file.File.editable;
-        trashed = Some file.File.labels.File.Labels.trashed;
-        alternate_link = Some file.File.alternateLink;
-        change_id = largest_change_id;
+        size = Some file.File.size;
+        can_edit = Some file.File.capabilities.File.Capabilities.canEdit;
+        trashed = Some file.File.trashed;
+        web_view_link = Some file.File.webViewLink;
+        file_mode_bits =
+          Cache.Resource.app_property_to_int64
+            (Cache.Resource.find_app_property "mode" file.File.appProperties);
+        parent_path_hash = get_path_hash parent_path;
+        local_name;
+        uid =
+          Cache.Resource.app_property_to_int64
+            (Cache.Resource.find_app_property "uid" file.File.appProperties);
+        gid =
+          Cache.Resource.app_property_to_int64
+            (Cache.Resource.find_app_property "uid" file.File.appProperties);
+        xattrs = Cache.Resource.render_xattrs
+            (List.filter
+               (fun (n, _) -> ExtString.String.starts_with "x-" n)
+               file.File.appProperties);
         last_update = Unix.gettimeofday ();
         path;
+        parent_path;
         state = Option.default resource.Cache.Resource.state state;
   }
-
-let get_parent_resource_ids file =
-  List.map
-    (fun parent -> parent.ParentReference.id)
-    file.File.parents
 
 let insert_resource_into_cache ?state cache resource file =
   let resource = update_resource_from_file ?state resource file in
@@ -360,34 +390,29 @@ let lookup_resource path trashed =
 let get_root_resource trashed =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
-  let metadata = context.Context.metadata |> Option.get in
-    match lookup_resource root_directory trashed with
-        None ->
-          let root_resource =
-            create_root_resource
-              metadata.Cache.Metadata.root_folder_id
-              metadata.Cache.Metadata.largest_change_id
-              trashed in
-            Utils.log_with_header
-              "BEGIN: Saving root resource to db (id=%Ld)\n%!"
-              root_resource.Cache.Resource.id;
-            let inserted =
-              Cache.Resource.insert_resource cache root_resource in
-            Utils.log_with_header
-              "END: Saving root resource to db (id=%Ld)\n%!"
-              root_resource.Cache.Resource.id;
-            inserted
-      | Some resource -> resource
+  match lookup_resource root_directory trashed with
+      None ->
+        let root_resource = create_root_resource trashed in
+          Utils.log_with_header
+            "BEGIN: Saving root resource to db (id=%Ld)\n%!"
+            root_resource.Cache.Resource.id;
+          let inserted =
+            Cache.Resource.insert_resource cache root_resource in
+          Utils.log_with_header
+            "END: Saving root resource to db (id=%Ld)\n%!"
+            root_resource.Cache.Resource.id;
+          inserted
+    | Some resource -> resource
 
 let cache_size_mutex = Mutex.create ()
 
 let update_cache_size new_size metadata cache =
-  let updated_metadata = metadata
+  let metadata = metadata
     |> Cache.Metadata.cache_size ^= new_size in
   Utils.log_with_header "BEGIN: Updating cache size (%Ld) in db\n%!" new_size;
-  Cache.Metadata.insert_metadata cache updated_metadata;
+  Cache.Metadata.insert_metadata cache metadata;
   Utils.log_with_header "END: Updating cache size (%Ld) in db\n%!" new_size;
-  Context.update_ctx (Context.metadata ^= Some updated_metadata)
+  Context.update_ctx (Context.metadata ^= Some metadata)
 
 let shrink_cache file_size max_cache_size_mb metadata cache =
   Utils.try_finally
@@ -410,7 +435,7 @@ let shrink_cache file_size max_cache_size_mb metadata cache =
                 else begin
                   let new_size = Int64.sub
                     new_cache_size
-                    (Option.get resource.Cache.Resource.file_size) in
+                    (Option.get resource.Cache.Resource.size) in
                   (new_size, resource :: rs)
                 end)
               (target_size, [])
@@ -442,7 +467,7 @@ let update_cache_size_for_documents cache resource content_path op =
   Utils.try_finally
     (fun () ->
       Mutex.lock cache_size_mutex;
-      if resource.Cache.Resource.file_size = Some 0L &&
+      if resource.Cache.Resource.size = Some 0L &&
           Sys.file_exists content_path then begin
         try
           let stats = Unix.LargeFile.stat content_path in
@@ -459,29 +484,41 @@ let update_cache_size_for_documents cache resource content_path op =
 
 (* Metadata *)
 let get_metadata () =
-  let request_metadata last_change_id etag cache_size =
+  let request_new_start_page_token =
     let std_params =
       { GapiService.StandardParameters.default with
             GapiService.StandardParameters.fields =
-              "etag,largestChangeId,name,permissionId,quotaBytesTotal,\
-               quotaBytesUsed,remainingChangeIds,rootFolderId"
+              "startPageToken"
       } in
-    let startChangeId = Int64.succ last_change_id in
+    ChangesResource.getStartPageToken
+      ~std_params >>= fun startPageToken ->
+    SessionM.return startPageToken.StartPageToken.startPageToken
+  in
+
+  let get_start_page_token start_page_token_db =
+    if start_page_token_db = "" then
+      request_new_start_page_token
+    else
+      SessionM.return start_page_token_db
+  in
+
+  let request_metadata start_page_token_db etag cache_size =
+    let std_params =
+      { GapiService.StandardParameters.default with
+            GapiService.StandardParameters.fields =
+              "user(displayName),storageQuota(limit,usage)"
+      } in
     AboutResource.get
       ~std_params
-      ?etag
-      ~startChangeId
-      ~maxChangeIdCount:500L >>= fun about ->
+      ?etag >>= fun about ->
+    SessionM.get >>= fun session ->
+    get_start_page_token start_page_token_db >>= fun start_page_token ->
     let metadata = {
-      Cache.Metadata.etag = about.About.etag;
-      username = about.About.name;
-      quota_bytes_total = about.About.quotaBytesTotal;
-      quota_bytes_used =
-        Int64.add about.About.quotaBytesUsed about.About.quotaBytesUsedInTrash;
-      largest_change_id = about.About.largestChangeId;
-      remaining_change_ids = about.About.remainingChangeIds;
-      root_folder_id = about.About.rootFolderId;
-      permission_id = about.About.permissionId;
+      Cache.Metadata.etag = session.GapiConversation.Session.etag;
+      display_name = about.About.user.User.displayName;
+      storage_quota_limit = about.About.storageQuota.About.StorageQuota.limit;
+      storage_quota_usage = about.About.storageQuota.About.StorageQuota.usage;
+      start_page_token;
       cache_size;
       last_update = Unix.gettimeofday ();
     } in
@@ -501,35 +538,33 @@ let get_metadata () =
       context.Context.metadata
     end in
 
-  let update_resource_cache last_change_id new_metadata =
-    let get_all_changes startChangeId =
-      let rec loop ?pageToken accu =
+  let update_resource_cache start_page_token new_metadata =
+    let get_all_changes =
+      let rec loop pageToken accu =
         let std_params =
           { GapiService.StandardParameters.default with
                 GapiService.StandardParameters.fields =
-                  "items(deleted,file(" ^ file_fields
-                  ^ "),fileId),nextPageToken"
+                  "changes(removed,file(" ^ file_fields
+                  ^ "),fileId),nextPageToken,newStartPageToken"
           } in
         ChangesResource.list
           ~std_params
-          ~includeDeleted:true
-          ~startChangeId
-          ?pageToken >>= fun change_list ->
-        let changes = change_list.ChangeList.items @ accu in
+          ~includeRemoved:true
+          ~pageToken >>= fun change_list ->
+        let changes = change_list.ChangeList.changes @ accu in
         if change_list.ChangeList.nextPageToken = "" then
-          SessionM.return changes
+          SessionM.return (changes, change_list.ChangeList.newStartPageToken)
         else
-          loop ~pageToken:change_list.ChangeList.nextPageToken changes
+          loop change_list.ChangeList.nextPageToken changes
       in
-      loop []
+      loop start_page_token []
     in
 
     let request_changes =
       Utils.log_with_header "BEGIN: Getting changes from server\n%!";
-      let startChangeId = Int64.succ last_change_id in
-      get_all_changes startChangeId >>= fun changes ->
+      get_all_changes >>= fun (changes, new_start_page_token) ->
       Utils.log_with_header "END: Getting changes from server\n%!";
-      SessionM.return changes
+      SessionM.return (changes, new_start_page_token)
     in
 
     let get_ids_to_update change =
@@ -541,8 +576,8 @@ let get_metadata () =
         match selected_resource with
             None ->
               let remote_ids =
-                match get_parent_resource_ids file with
-                    [] -> [context |. Context.root_folder_id_lens]
+                match file.File.parents with
+                    [] -> [root_folder_id]
                   | ids -> ids
               in
               List.map
@@ -564,22 +599,42 @@ let get_metadata () =
          change.Change.fileId]
     in
 
-    let remaining_change_ids =
-      new_metadata.Cache.Metadata.remaining_change_ids in
-    if remaining_change_ids = 0L then
+    let request_remaining_changes start_page_token_db =
+      if start_page_token_db = "" then
+        SessionM.return change_limit
+      else
+        let std_params =
+          { GapiService.StandardParameters.default with
+            GapiService.StandardParameters.fields =
+              "changes(kind),newStartPageToken"
+          } in
+        ChangesResource.list
+          ~std_params
+          ~includeRemoved:true
+          ~pageSize:change_limit
+          ~pageToken:start_page_token_db >>= fun change_list ->
+        if change_list.ChangeList.newStartPageToken = "" then
+          SessionM.return change_limit
+        else
+          SessionM.return (List.length change_list.ChangeList.changes)
+    in
+
+    request_remaining_changes start_page_token >>= fun remaining_changes ->
+    if remaining_changes = 0 then begin
       Utils.log_with_header
-        "END: Getting metadata: No need to update resource cache\n%!"
-    else if remaining_change_ids > change_id_limit then
+        "END: Getting metadata: No need to update resource cache\n%!";
+      SessionM.return new_metadata
+    end else if remaining_changes = change_limit then begin
       Utils.log_with_header
-        "END: Getting metadata: Too many changes (remaining_change_ids=%Ld)\n%!"
-        remaining_change_ids
-    else match metadata with
-        None -> ()
-      | Some old_metadata ->
-          let change_id =
-            new_metadata.Cache.Metadata.largest_change_id in
-          let changes = do_request request_changes |> fst in
-          let update_resource_cache filter_changes map_change update_cache =
+        "END: Getting metadata: Too many changes\n%!";
+      SessionM.return new_metadata
+    end else begin match metadata with
+        None ->
+          SessionM.return new_metadata
+      | Some _ ->
+          request_changes >>= fun (changes, new_start_page_token) ->
+          let update_resource_cache_from_changes
+              filter_changes map_change update_cache =
             let filtered_changes =
               List.filter filter_changes changes in
             let xs =
@@ -602,47 +657,51 @@ let get_metadata () =
           in
 
           Utils.log_with_header "BEGIN: Updating resource cache\n%!";
-          update_resource_cache
+          update_resource_cache_from_changes
             (fun change ->
-               not change.Change.deleted &&
-               not change.Change.file.File.labels.File.Labels.trashed)
+               not change.Change.removed &&
+               not change.Change.file.File.trashed)
             get_ids_to_update
             (fun cache ids ->
-               Cache.Resource.invalidate_resources cache ids change_id);
+               Cache.Resource.invalidate_resources cache ids);
           Utils.log_with_header "END: Updating resource cache\n";
           Utils.log_with_header "BEGIN: Updating trashed resources\n%!";
-          update_resource_cache
-            (fun change -> change.Change.file.File.labels.File.Labels.trashed)
+          update_resource_cache_from_changes
+            (fun change -> change.Change.file.File.trashed)
             get_file_id_from_change
             (fun cache resources ->
-               Cache.Resource.trash_resources cache resources change_id);
+               Cache.Resource.trash_resources cache resources);
           Utils.log_with_header "END: Updating trashed resources\n";
           Utils.log_with_header "BEGIN: Removing deleted resources\n%!";
-          update_resource_cache
-            (fun change -> change.Change.deleted)
+          update_resource_cache_from_changes
+            (fun change -> change.Change.removed)
             get_file_id_from_change
             (delete_resources new_metadata);
-          Utils.log_with_header
-            "END: Removing deleted resources\n%!";
+          Utils.log_with_header "END: Removing deleted resources\n%!";
           if List.length changes > 0 then begin
             Utils.log_with_header "BEGIN: Invalidating trash bin resource\n%!";
-            Cache.Resource.invalidate_trash_bin cache change_id;
+            Cache.Resource.invalidate_trash_bin cache;
             Utils.log_with_header "END: Invalidating trash bin resource\n%!";
           end;
+          SessionM.return {
+            new_metadata with
+                Cache.Metadata.start_page_token = new_start_page_token;
+          }
+    end
   in
 
-  let refresh_metadata () =
-    let last_change_id =
+  let refresh_metadata =
+    let start_page_token =
       Option.map_default
-        Cache.Metadata.largest_change_id.GapiLens.get 0L metadata in
+        Cache.Metadata.start_page_token.GapiLens.get "" metadata in
     let etag = Option.map Cache.Metadata.etag.GapiLens.get metadata in
     let cache_size =
       Option.map_default
         Cache.Metadata.cache_size.GapiLens.get 0L metadata in
     Utils.log_with_header "BEGIN: Refreshing metadata\n%!";
-    let update_metadata =
+    let get_server_metadata =
       with_try
-        (request_metadata last_change_id etag cache_size)
+        (request_metadata start_page_token etag cache_size)
         (function
             GapiRequest.NotModified session ->
               Utils.log_with_header
@@ -653,22 +712,23 @@ let get_metadata () =
                 m |> Cache.Metadata.last_update ^= Unix.gettimeofday () in
               SessionM.return m'
           | e -> throw e) in
-    let updated_metadata = do_request update_metadata |> fst in
+    get_server_metadata >>= fun server_metadata ->
     Utils.log_with_header "END: Refreshing metadata\n";
+    update_resource_cache
+      start_page_token server_metadata >>= fun updated_metadata ->
     Utils.log_with_header "BEGIN: Updating metadata in db\n%!";
     Cache.Metadata.insert_metadata context.Context.cache updated_metadata;
     Utils.log_with_header "END: Updating metadata in db\n";
     Utils.log_with_header "BEGIN: Updating context\n%!";
     Context.update_ctx (Context.metadata ^= Some updated_metadata);
     Utils.log_with_header "END: Updating context\n%!";
-    update_resource_cache last_change_id updated_metadata;
-    updated_metadata
+    SessionM.return updated_metadata
   in
 
   match metadata with
       None ->
         Utils.log_with_header "END: Getting metadata: Not found\n%!";
-        refresh_metadata ()
+        do_request refresh_metadata |> fst
     | Some m ->
         let metadata_cache_time =
           context |. Context.config_lens |. Config.metadata_cache_time
@@ -678,15 +738,16 @@ let get_metadata () =
           m
         end else begin
           Utils.log_with_header "END: Getting metadata: Not valid\n%!";
-          refresh_metadata ()
+          do_request refresh_metadata |> fst
         end
 
 let statfs () =
   let metadata = get_metadata () in
-  let f_blocks = Int64.div metadata.Cache.Metadata.quota_bytes_total f_bsize in
+  let f_blocks =
+    Int64.div metadata.Cache.Metadata.storage_quota_limit f_bsize in
   let free_bytes = Int64.sub
-                     metadata.Cache.Metadata.quota_bytes_total
-                     metadata.Cache.Metadata.quota_bytes_used in
+                     metadata.Cache.Metadata.storage_quota_limit
+                     metadata.Cache.Metadata.storage_quota_usage in
   let f_bfree = Int64.div free_bytes f_bsize in
     { Unix_util.f_bsize;
       f_blocks;
@@ -733,16 +794,16 @@ let get_file_from_server parent_folder_id title trashed =
     "BEGIN: Getting resource %s (in folder %s) from server\n%!"
     title parent_folder_id;
   let q =
-    Printf.sprintf "title = '%s' and '%s' in parents and trashed = %b"
+    Printf.sprintf "title='%s' and '%s' in parents and trashed=%b"
       (escape_apostrophe title) parent_folder_id trashed in
   FilesResource.list
     ~std_params:file_list_std_params
     ~q
-    ~maxResults:1 >>= fun file_list ->
+    ~pageSize:1 >>= fun file_list ->
   Utils.log_with_header
     "END: Getting resource %s (in folder %s) from server\n%!"
     title parent_folder_id;
-  let files = file_list.FileList.items in
+  let files = file_list.FileList.files in
   if List.length files = 0 then
     SessionM.return None
   else
@@ -770,35 +831,35 @@ let get_resource_from_server parent_folder_id title new_resource trashed cache =
         SessionM.return inserted
 
 let check_resource_in_cache cache path trashed =
-  let change_id = Context.get_ctx () |. Context.largest_change_id_lens in
-    match lookup_resource path trashed with
-        None -> false
-      | Some resource ->
-          if Cache.Resource.is_valid resource change_id then
-            if Cache.Resource.is_folder resource then
-              resource.Cache.Resource.state = Cache.Resource.State.InSync
-            else true
-          else false
+  let metadata_last_update =
+    Context.get_ctx () |. Context.metadata_last_update_lens in
+  match lookup_resource path trashed with
+      None -> false
+    | Some resource ->
+        if Cache.Resource.is_valid resource metadata_last_update then
+          if Cache.Resource.is_folder resource then
+            resource.Cache.Resource.state = Cache.Resource.State.Synchronized
+          else true
+        else false
 
 let rec get_folder_id path trashed =
   if path = root_directory then
-    let root_folder_id =
-      get_metadata () |. Cache.Metadata.root_folder_id in
     SessionM.return root_folder_id
   else
     get_resource path trashed >>= fun resource ->
-    let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+    let remote_id =
+      resource |. Cache.Resource.remote_id |. GapiLens.option_get in
     SessionM.return remote_id
 and get_resource path trashed =
-  let change_id =
-    get_metadata () |. Cache.Metadata.largest_change_id in
+  let metadata_last_update =
+    Context.get_ctx () |. Context.metadata_last_update_lens in
 
   let get_new_resource cache =
     let parent_path = Filename.dirname path in
       if check_resource_in_cache cache parent_path trashed then begin
         throw File_not_found
       end else begin
-        let new_resource = create_resource path change_id in
+        let new_resource = create_resource path in
         let title = Filename.basename path in
         get_folder_id
           new_resource.Cache.Resource.parent_path
@@ -849,7 +910,7 @@ and get_resource path trashed =
         None ->
           get_new_resource cache
       | Some resource ->
-          if Cache.Resource.is_valid resource change_id then
+          if Cache.Resource.is_valid resource metadata_last_update then
             SessionM.return resource
           else
             with_try
@@ -958,35 +1019,6 @@ let with_retry f resource =
 let is_desktop_format resource config =
   Cache.Resource.get_format resource config = "desktop"
 
-let get_export_link fmt resource config =
-  if fmt = "desktop" || fmt = "" then ""
-  else begin
-    let mime_type = Cache.Resource.mime_type_of_format fmt in
-    let export_links =
-      Option.map_default
-        Cache.Resource.parse_export_links
-        []
-        resource.Cache.Resource.export_links
-    in
-    let first_export_link =
-      if config.Config.force_docs_export && List.length export_links > 0 then
-        List.hd export_links |> snd
-      else
-        "" in
-    let custom_export_link =
-      try
-        let last_equal_char = String.rindex first_export_link '=' in
-        let export_link_without_format =
-          String.sub first_export_link 0 last_equal_char in
-        export_link_without_format ^ "=" ^ fmt
-      with Not_found -> first_export_link in
-    List.fold_left
-      (fun accu (m, l) ->
-         if m = mime_type then l else accu)
-      custom_export_link
-      export_links
-  end
-
 let create_desktop_entry resource content_path config =
   Utils.with_out_channel
     ~mode:[Open_creat; Open_trunc; Open_wronly] content_path
@@ -1001,8 +1033,8 @@ let create_desktop_entry resource content_path config =
          Type=Link\n\
          Name=%s\n\
          URL=%s\n%s"
-        (Option.default "" resource.Cache.Resource.title)
-        (Option.default "" resource.Cache.Resource.alternate_link)
+        (Option.default "" resource.Cache.Resource.name)
+        (Option.default "" resource.Cache.Resource.web_view_link)
         icon_entry;
       SessionM.return ())
 
@@ -1011,12 +1043,13 @@ let download_resource resource =
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
   let content_path = Cache.get_content_path cache resource in
-  let create_empty_file () =
+  (* TODO: check
+    let create_empty_file () =
     Utils.log_with_header
       "BEGIN: Creating resource without content (path=%s)\n%!"
       content_path;
     close_out (open_out content_path);
-    SessionM.return () in
+    SessionM.return () in*)
   let shrink_cache () =
     Option.may
       (fun file_size ->
@@ -1026,42 +1059,61 @@ let download_resource resource =
            config.Config.max_cache_size_mb
            metadata
            cache)
-      resource.Cache.Resource.file_size;
+      resource.Cache.Resource.size;
     SessionM.return () in
+  let do_api_download () =
+    let destination = GapiMediaResource.TargetFile content_path in
+    let media_download = {
+      GapiMediaResource.destination;
+      range_spec = "";
+    } in
+    let fileId = resource |. Cache.Resource.remote_id |> Option.get in
+    if Cache.Resource.is_document resource then begin
+      let fmt = Cache.Resource.get_format resource config in
+      let mimeType = Cache.Resource.mime_type_of_format fmt in
+      FilesResource.export
+        ~media_download
+        ~fileId
+        ~mimeType >>= fun () ->
+      SessionM.return ()
+    end else begin
+      let std_params =
+        { GapiService.StandardParameters.default with
+              GapiService.StandardParameters.alt = "media"
+        }
+      in
+      FilesResource.get
+        ~std_params
+        ~media_download
+        ~fileId >>= fun _ ->
+      SessionM.return ()
+    end
+  in
   let do_download () =
     Utils.log_with_header
       "BEGIN: Downloading resource (id=%Ld)\n%!"
       resource.Cache.Resource.id;
-    let download_link =
-      if Cache.Resource.is_document resource then
-        let fmt = Cache.Resource.get_format resource config in
-        get_export_link fmt resource config
-      else
-        Option.default "" resource.Cache.Resource.download_url in
-    begin if download_link <> "" then begin
+    if is_desktop_format resource config then
+      create_desktop_entry resource content_path config
+    else begin
       shrink_cache () >>= fun () ->
       update_cached_resource_state cache
         Cache.Resource.State.Downloading resource.Cache.Resource.id;
       update_cache_size_for_documents cache resource content_path Int64.sub;
       with_try
-        (let media_destination = GapiMediaResource.TargetFile content_path in
-         GapiService.download_resource download_link media_destination)
+        (do_api_download ())
         (fun e ->
            update_cached_resource_state cache
              Cache.Resource.State.ToDownload resource.Cache.Resource.id;
            handle_default_exceptions e)
-    end else if is_desktop_format resource config then
-      create_desktop_entry resource content_path config
-    else
-      create_empty_file ()
     end >>= fun () ->
     update_cache_size_for_documents cache resource content_path Int64.add;
     Utils.log_with_header
       "END: Downloading resource (id=%Ld)\n%!"
       resource.Cache.Resource.id;
     update_cached_resource_state cache
-      Cache.Resource.State.InSync resource.Cache.Resource.id;
-    SessionM.return content_path
+      Cache.Resource.State.Synchronized resource.Cache.Resource.id;
+    SessionM.return ()
   in
   let rec check_state n =
     let reloaded_resource = Option.map_default
@@ -1076,17 +1128,17 @@ let download_resource resource =
     let download_if_not_updated () =
       if check_md5_checksum resource cache then begin
         update_cached_resource_state cache
-          Cache.Resource.State.InSync resource.Cache.Resource.id;
-        SessionM.return content_path
+          Cache.Resource.State.Synchronized resource.Cache.Resource.id;
+        SessionM.return ()
       end else
         do_download ()
     in
     begin match reloaded_state with
-        Cache.Resource.State.InSync
+        Cache.Resource.State.Synchronized
       | Cache.Resource.State.ToUpload
       | Cache.Resource.State.Uploading ->
           if Sys.file_exists content_path then
-            SessionM.return content_path
+            SessionM.return ()
           else
             do_download ()
       | Cache.Resource.State.ToDownload ->
@@ -1110,23 +1162,33 @@ let download_resource resource =
           throw File_not_found
     end
   in
-  check_state 0 >>
+  check_state 0 >>= fun () ->
   SessionM.return content_path
 
 let stream_resource offset buffer resource =
-  let download_link = Option.get resource.Cache.Resource.download_url in
   let length = Bigarray.Array1.dim buffer in
   let finish = Int64.add offset (Int64.of_int (length - 1)) in
   Utils.log_with_header
     "BEGIN: Stream resource (id=%Ld, offset=%Ld, finish=%Ld, length=%d)\n%!"
     resource.Cache.Resource.id offset finish length;
+  let std_params =
+    { GapiService.StandardParameters.default with
+      GapiService.StandardParameters.alt = "media"
+    } in
+  let destination = GapiMediaResource.ArrayBuffer buffer in
+  let range_spec =
+    GapiMediaResource.generate_range_spec [(Some offset, Some finish)] in
+  let media_download = {
+    GapiMediaResource.destination;
+    range_spec;
+  } in
+  let fileId = resource |. Cache.Resource.remote_id |> Option.get in
   try_with_default
-    (let media_destination = GapiMediaResource.ArrayBuffer buffer in
-     GapiService.download_resource
-       ~ranges:[(Some offset, Some finish)]
-       download_link
-       media_destination)
-    >>= fun () ->
+    (FilesResource.get
+       ~std_params
+       ~media_download
+       ~fileId
+    ) >>= fun _ ->
   Utils.log_with_header
     "END: Stream resource (id=%Ld, offset=%Ld, finish=%Ld, length=%d)\n%!"
     resource.Cache.Resource.id offset finish length;
@@ -1136,7 +1198,7 @@ let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only
 
 let is_file_read_only resource =
-  not (Option.default true resource.Cache.Resource.editable) ||
+  not (Option.default true resource.Cache.Resource.can_edit) ||
   Cache.Resource.is_document resource
 (* END Resources *)
 
@@ -1173,38 +1235,57 @@ let get_attr path =
     let stat =
       if content_path <> "" then Some (Unix.LargeFile.stat content_path)
       else None in
-    let st_nlink =
-      if Cache.Resource.is_folder resource then 2
-      else 1 in
     let st_kind =
       if Cache.Resource.is_folder resource then Unix.S_DIR
-      else Unix.S_REG in
+      else
+        Option.map_default
+          Cache.Resource.file_mode_bits_to_kind
+          Unix.S_REG
+          resource.Cache.Resource.file_mode_bits
+    in
     let st_perm =
-      let perm =
+      let default_perm =
         if Cache.Resource.is_folder resource then 0o777
-        else if Cache.Resource.is_document resource then 0o444
         else 0o666 in
+      let perm =
+        Option.map_default
+          Cache.Resource.file_mode_bits_to_perm
+          default_perm
+          resource.Cache.Resource.file_mode_bits
+      in
       let mask =
         lnot config.Config.umask land (
           if config.Config.read_only ||
-             not (Option.default true resource.Cache.Resource.editable)
+             not (Option.default true resource.Cache.Resource.can_edit) ||
+             Cache.Resource.is_document resource
           then 0o555
           else 0o777)
       in
       perm land mask in
+    let st_nlink =
+      if Cache.Resource.is_folder resource then 2
+      else 1 in
+    let st_uid =
+      Option.map_default 
+        Int64.to_int
+        context.Context.mountpoint_stats.Unix.LargeFile.st_uid
+        resource.Cache.Resource.uid in
+    let st_gid =
+      Option.map_default 
+        Int64.to_int
+        context.Context.mountpoint_stats.Unix.LargeFile.st_gid
+        resource.Cache.Resource.gid in
     let st_size =
       match stat with
           None ->
             if Cache.Resource.is_folder resource then f_bsize
-            else Option.default 0L (resource |. Cache.Resource.file_size )
+            else Option.default 0L resource.Cache.Resource.size
         | Some st ->
             st.Unix.LargeFile.st_size in
     let st_atime =
       match stat with
           None ->
-            resource
-              |. Cache.Resource.last_viewed_by_me_date
-              |. GapiLens.option_get
+            resource.Cache.Resource.viewed_by_me_time |> Option.get
         | Some st ->
             st.Unix.LargeFile.st_atime in
     let is_to_upload =
@@ -1214,7 +1295,7 @@ let get_attr path =
           Some st when is_to_upload ->
             st.Unix.LargeFile.st_mtime
         | _ ->
-            resource |. Cache.Resource.modified_date |. GapiLens.option_get in
+            resource.Cache.Resource.modified_time |> Option.get in
     let st_ctime =
       match stat with
           Some st when is_to_upload ->
@@ -1223,9 +1304,11 @@ let get_attr path =
             st_mtime
     in
     { context.Context.mountpoint_stats with
-          Unix.LargeFile.st_nlink;
-          st_kind;
+          Unix.LargeFile.st_kind;
           st_perm;
+          st_nlink;
+          st_uid;
+          st_gid;
           st_size;
           st_atime;
           st_mtime;
@@ -1242,7 +1325,7 @@ let read_dir path =
         ~std_params:file_list_std_params
         ~q
         ?pageToken >>= fun file_list ->
-      let files = file_list.FileList.items @ accu in
+      let files = file_list.FileList.files @ accu in
       if file_list.FileList.nextPageToken = "" then
         SessionM.return files
       else
@@ -1296,7 +1379,6 @@ let read_dir path =
       resources
     end else begin
       let (files, folder_resource) = do_request request_folder |> fst in
-      let change_id = folder_resource.Cache.Resource.change_id in
       let (filename_table, remote_id_table) =
         build_resource_tables path_in_cache trashed in
       let resources_and_files =
@@ -1318,11 +1400,13 @@ let read_dir path =
              match resource with
                  Some r -> r
                | None ->
-                   let filename =
+                   let (filename, name_counter) =
                      get_unique_filename_from_file file filename_table in
+                   let local_name =
+                     if name_counter > 0 then Some filename else None in
                    let resource_path =
                      Filename.concat path_in_cache filename in
-                   let resource = create_resource resource_path change_id in
+                   let resource = create_resource ?local_name resource_path in
                    update_resource_from_file resource file)
           resources_and_files
       in
@@ -1331,15 +1415,13 @@ let read_dir path =
         trashed;
       let inserted_resources =
         Cache.Resource.insert_resources
-          cache resources path_in_cache change_id trashed in
+          cache resources path_in_cache trashed in
       Utils.log_with_header
         "END: Inserting folder resources into db (trashed=%b)\n%!"
         trashed;
-      let change_id =
-        Context.get_ctx () |. Context.largest_change_id_lens in
       let updated_resource = folder_resource
-        |> Cache.Resource.change_id ^= change_id
-        |> Cache.Resource.state ^= Cache.Resource.State.InSync
+        |> Cache.Resource.state ^= Cache.Resource.State.Synchronized
+        |> Cache.Resource.last_update ^= Unix.gettimeofday ()
       in
       update_cached_resource cache updated_resource;
       inserted_resources
@@ -1432,7 +1514,8 @@ let update_remote_resource path
           begin match update_file_in_cache with
               None -> ()
             | Some go ->
-                if resource.Cache.Resource.state = Cache.Resource.State.InSync
+                if resource.Cache.Resource.state =
+                   Cache.Resource.State.Synchronized
                 then begin
                   let content_path = Cache.get_content_path cache resource in
                   if Sys.file_exists content_path then
@@ -1458,18 +1541,12 @@ let utime path atime mtime =
   let update =
     let touch resource =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-      Utils.log_with_header "BEGIN: Touching file (remote id=%s)\n%!" remote_id;
-      FilesResource.touch
-        ~std_params:file_std_params
-        ~fileId:remote_id >>= fun touched_file ->
-      Utils.log_with_header "END: Touching file (remote id=%s)\n%!" remote_id;
       Utils.log_with_header "BEGIN: Updating file mtime (remote id=%s, mtime=%f)\n%!"
         remote_id mtime;
       let file_patch = File.empty
-            |> File.modifiedDate ^= Netdate.create mtime in
-      FilesResource.patch
+            |> File.modifiedTime ^= Netdate.create mtime in
+      FilesResource.update
         ~std_params:file_std_params
-        ~setModifiedDate:true
         ~fileId:remote_id
         file_patch >>= fun patched_file ->
       Utils.log_with_header "END: Updating file mtime (remote id=%s, mtime=%f)\n%!"
@@ -1500,7 +1577,7 @@ let read path buf offset file_descr =
     let to_stream = config |. Config.stream_large_files &&
       not (Cache.Resource.is_document resource) &&
       resource.Cache.Resource.state = Cache.Resource.State.ToDownload &&
-      (Option.default 0L resource.Cache.Resource.file_size) >
+      (Option.default 0L resource.Cache.Resource.size) >
         large_file_threshold in
     if to_stream then
       with_retry (stream_resource offset buf) resource >>= fun () ->
@@ -1565,7 +1642,6 @@ let start_uploading_if_dirty path =
 let upload resource =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
-  let config = context |. Context.config_lens in
   update_cached_resource_state cache
     Cache.Resource.State.Uploading resource.Cache.Resource.id;
   let content_path = Cache.get_content_path cache resource in
@@ -1590,10 +1666,11 @@ let upload resource =
   FilesResource.get
     ~std_params:file_std_params
     ~fileId:remote_id >>= fun refreshed_file ->
-  let newRevision = config |. Config.new_revision in
+  (* TODO check:
+     let config = context |. Context.config_lens in
+     let newRevision = config |. Config.new_revision in*)
   FilesResource.update
     ~std_params:file_std_params
-    ~newRevision
     ?media_source
     ~fileId:remote_id
     refreshed_file >>= fun updated_file ->
@@ -1608,7 +1685,8 @@ let upload resource =
   let resource = Option.default resource reloaded_resource in
   let state =
     match resource.Cache.Resource.state with
-        Cache.Resource.State.Uploading -> Some Cache.Resource.State.InSync
+        Cache.Resource.State.Uploading ->
+          Some Cache.Resource.State.Synchronized
       | _ -> None in
   let updated_resource =
     update_resource_from_file ?state resource file in
@@ -1622,7 +1700,7 @@ let upload resource =
          config.Config.max_cache_size_mb
          metadata
          cache)
-    updated_resource.Cache.Resource.file_size;
+    updated_resource.Cache.Resource.size;
   SessionM.return ()
 
 let upload_with_retry path =
@@ -1660,7 +1738,6 @@ let create_remote_resource is_folder path mode =
   if trashed then raise Permission_denied;
 
   let context = Context.get_ctx () in
-  let largest_change_id = context |. Context.largest_change_id_lens in
   let cache = context.Context.cache in
   let parent_path = Filename.dirname path_in_cache in
   let create_file =
@@ -1668,29 +1745,27 @@ let create_remote_resource is_folder path mode =
     let parent_id =
       parent_resource |. Cache.Resource.remote_id |> Option.get
     in
-    let parent_reference = ParentReference.empty
-      |> ParentReference.id ^= parent_id in
-    let title = Filename.basename path_in_cache in
+    let name = Filename.basename path_in_cache in
     let mimeType =
       if is_folder
       then folder_mime_type
-      else Mime.map_filename_to_mime_type title in
+      else Mime.map_filename_to_mime_type name in
     let file = {
       File.empty with
-          File.title;
-          parents = [parent_reference];
+          File.name;
+          parents = [parent_id];
           mimeType;
     } in
     Utils.log_with_header
       "BEGIN: Creating %s (path=%s, trashed=%b) on server\n%!"
       (if is_folder then "folder" else "file") path_in_cache trashed;
-    FilesResource.insert
+    FilesResource.create
       ~std_params:file_std_params
       file >>= fun created_file ->
     Utils.log_with_header
       "END: Creating file/folder (path=%s, trashed=%b) on server\n%!"
       path_in_cache trashed;
-    let new_resource = create_resource path_in_cache largest_change_id in
+    let new_resource = create_resource path_in_cache in
     Utils.log_with_header
       "BEGIN: Deleting 'NotFound' resources (path=%s) from cache\n%!"
       path_in_cache;
@@ -1700,7 +1775,8 @@ let create_remote_resource is_folder path mode =
       path_in_cache;
     let inserted =
       insert_resource_into_cache
-        ~state:Cache.Resource.State.InSync cache new_resource created_file in
+        ~state:Cache.Resource.State.Synchronized
+        cache new_resource created_file in
     SessionM.return inserted
   in
   if is_filesystem_read_only () then
@@ -1722,12 +1798,18 @@ let mkdir path mode =
 (* Check if a folder is empty or not *)
 let check_if_empty remote_id is_folder trashed =
   if is_folder then begin
-    let q = Printf.sprintf "trashed = %b" trashed in
-    ChildrenResource.list
-      ~maxResults:1
-      ~q
-      ~folderId:remote_id >>= fun children ->
-    if children.ChildList.items = [] then begin
+    let q = Printf.sprintf "'%s' in parents and trashed = %b"
+        remote_id trashed in
+    let std_params =
+      { GapiService.StandardParameters.default with
+            GapiService.StandardParameters.fields = "files(id)"
+      }
+    in
+    FilesResource.list
+      ~std_params
+      ~pageSize:1
+      ~q >>= fun children ->
+    if children.FileList.files = [] then begin
       Utils.log_with_header "Folder (remote id=%s) is empty\n%!" remote_id;
       SessionM.return ()
     end else begin
@@ -1745,9 +1827,15 @@ let trash_resource is_folder trashed path =
     let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
     check_if_empty remote_id is_folder trashed >>= fun () ->
     Utils.log_with_header "BEGIN: Trashing file (remote id=%s)\n%!" remote_id;
-    FilesResource.trash
+    let file_patch =
+      { File.empty with
+            File.trashed = true;
+      }
+    in
+    FilesResource.update
       ~std_params:file_std_params
-      ~fileId:remote_id >>= fun trashed_file ->
+      ~fileId:remote_id
+      file_patch >>= fun trashed_file ->
     Utils.log_with_header "END: Trashing file (remote id=%s)\n%!" remote_id;
     SessionM.return (Some trashed_file)
   in
@@ -1757,8 +1845,7 @@ let trash_resource is_folder trashed path =
         let updated_resource = resource
           |> Cache.Resource.trashed ^= Some true in
         update_cached_resource cache updated_resource;
-        Cache.Resource.invalidate_trash_bin
-          cache resource.Cache.Resource.change_id;
+        Cache.Resource.invalidate_trash_bin cache;
         if is_folder then begin
           let (path_in_cache, _) = get_path_in_cache path in
           Utils.log_with_header
@@ -1869,14 +1956,14 @@ let rename path new_path =
         delete_target_path >>= fun () ->
         Utils.log_with_header "BEGIN: Renaming file (remote id=%s) from %s to %s\n%!"
           remote_id old_name new_name;
-        let etag = Option.default "" resource.Cache.Resource.etag in
+        (* TODO: check
+           let etag = Option.default "" resource.Cache.Resource.etag in*)
         let file_patch =
           { File.empty with
-                File.etag = if use_etag then etag else "";
-                title = new_name;
+                File.name = new_name;
           }
         in
-        FilesResource.patch
+        FilesResource.update
           ~std_params:file_std_params
           ~fileId:remote_id
           file_patch >>= fun patched_file ->
@@ -1898,11 +1985,9 @@ let rename path new_path =
         let new_parent_id =
           new_parent_resource |. Cache.Resource.remote_id |> Option.get
         in
-        let parent_reference = ParentReference.empty
-          |> ParentReference.id ^= new_parent_id in
         let file_patch = File.empty
-          |> File.parents ^= [parent_reference] in
-        FilesResource.patch
+          |> File.parents ^= [new_parent_id] in
+        FilesResource.update
           ~std_params:file_std_params
           ~fileId:remote_id
           file_patch >>= fun patched_file ->
@@ -1934,13 +2019,18 @@ let rename path new_path =
                 (if Cache.Resource.is_folder resource ||
                     Cache.Resource.is_document resource
                  then Cache.Resource.State.ToDownload
-                 else Cache.Resource.State.InSync) in
+                 else Cache.Resource.State.Synchronized) in
           let resource_to_save =
             if new_parent_path <> old_parent_path &&
                new_name = old_name then
+              let (path, local_name) =
+                recompute_path resource_with_new_path new_name in
+              let parent_path = Filename.dirname path in
               resource_with_new_path
-                |> Cache.Resource.path ^=
-                  recompute_path resource_with_new_path new_name
+                |> Cache.Resource.path ^= path
+                |> Cache.Resource.local_name ^= local_name
+                |> Cache.Resource.parent_path ^= parent_path
+                |> Cache.Resource.parent_path_hash ^= get_path_hash parent_path
             else resource_with_new_path
           in
           update_cached_resource cache resource_to_save;
@@ -1979,11 +2069,11 @@ let truncate path size =
     let metadata = context.Context.metadata |> Option.get in
     let config = context |. Context.config_lens in
     let updated_resource = resource
-      |> Cache.Resource.file_size ^= Some size
+      |> Cache.Resource.size ^= Some size
       |> Cache.Resource.state ^= Cache.Resource.State.ToUpload in
     update_cached_resource cache updated_resource;
     shrink_cache
-      (Int64.sub size (Option.default 0L resource.Cache.Resource.file_size))
+      (Int64.sub size (Option.default 0L resource.Cache.Resource.size))
       config.Config.max_cache_size_mb
       metadata cache;
     Unix.LargeFile.truncate content_path size;
