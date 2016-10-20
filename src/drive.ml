@@ -789,20 +789,20 @@ let refresh_remote_resource resource current_file =
     remote_id;
   SessionM.return file
 
-let get_file_from_server parent_folder_id title trashed =
+let get_file_from_server parent_folder_id name trashed =
   Utils.log_with_header
     "BEGIN: Getting resource %s (in folder %s) from server\n%!"
-    title parent_folder_id;
+    name parent_folder_id;
   let q =
-    Printf.sprintf "title='%s' and '%s' in parents and trashed=%b"
-      (escape_apostrophe title) parent_folder_id trashed in
+    Printf.sprintf "name='%s' and '%s' in parents and trashed=%b"
+      (escape_apostrophe name) parent_folder_id trashed in
   FilesResource.list
     ~std_params:file_list_std_params
     ~q
     ~pageSize:1 >>= fun file_list ->
   Utils.log_with_header
     "END: Getting resource %s (in folder %s) from server\n%!"
-    title parent_folder_id;
+    name parent_folder_id;
   let files = file_list.FileList.files in
   if List.length files = 0 then
     SessionM.return None
@@ -810,20 +810,20 @@ let get_file_from_server parent_folder_id title trashed =
     let file = files |. GapiLens.head in
     SessionM.return (Some file)
 
-let get_resource_from_server parent_folder_id title new_resource trashed cache =
-  get_file_from_server parent_folder_id title trashed >>= fun file ->
+let get_resource_from_server parent_folder_id name new_resource trashed cache =
+  get_file_from_server parent_folder_id name trashed >>= fun file ->
   match file with
       None ->
         Utils.log_with_header
-          "BEGIN: Saving not found resource to db (title=%s)\n%!"
-          title;
+          "BEGIN: Saving not found resource to db (name=%s)\n%!"
+          name;
         let resource = new_resource
           |> Cache.Resource.trashed ^= Some trashed
           |> Cache.Resource.state ^= Cache.Resource.State.NotFound in
         let inserted = Cache.Resource.insert_resource cache resource in
         Utils.log_with_header
-          "END: Saving not found resource to db (title=%s)\n%!"
-          title;
+          "END: Saving not found resource to db (name=%s)\n%!"
+          name;
         SessionM.return inserted
     | Some entry ->
         let inserted =
@@ -852,7 +852,7 @@ let rec get_folder_id path trashed =
     SessionM.return remote_id
 and get_resource path trashed =
   let metadata_last_update =
-    Context.get_ctx () |. Context.metadata_last_update_lens in
+    get_metadata () |. Cache.Metadata.last_update in
 
   let get_new_resource cache =
     let parent_path = Filename.dirname path in
@@ -860,12 +860,12 @@ and get_resource path trashed =
         throw File_not_found
       end else begin
         let new_resource = create_resource path in
-        let title = Filename.basename path in
+        let name = Filename.basename path in
         get_folder_id
           new_resource.Cache.Resource.parent_path
           trashed >>= fun parent_folder_id ->
         get_resource_from_server
-          parent_folder_id title new_resource trashed cache >>= fun resource ->
+          parent_folder_id name new_resource trashed cache >>= fun resource ->
         SessionM.return resource
       end
   in
