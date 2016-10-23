@@ -159,6 +159,10 @@ let setup_application params =
     if params.multi_threading &&
        current_config.Config.sqlite3_busy_timeout = 500 then 5000
     else current_config.Config.sqlite3_busy_timeout in
+  (* Check max_upload_chunk_size *)
+  let max_upload_chunk_size = current_config.Config.max_upload_chunk_size in
+  if max_upload_chunk_size <= 0 then
+    failwith "max_upload_chunk_size should be > 0";
   let config =
     { current_config with
           Config.debug = params.debug;
