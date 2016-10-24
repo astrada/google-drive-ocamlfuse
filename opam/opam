@@ -10,6 +10,10 @@ build: [
   ["ocaml" "setup.ml" "-build"]
 ]
 install: ["ocaml" "setup.ml" "-install"]
+remove: [
+  ["ocaml" "%{etc}%/google-drive-ocamlfuse/_oasis_remove_.ml"
+    "%{etc}%/google-drive-ocamlfuse"]
+]
 depends: [
   "base-threads"
   "camlidl"
