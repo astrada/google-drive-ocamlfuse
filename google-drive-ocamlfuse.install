@@ -1,0 +1,6 @@
+etc: [
+  "setup.ml"
+  "setup.data"
+  "setup.log"
+  "_oasis_remove_.ml"
+]
