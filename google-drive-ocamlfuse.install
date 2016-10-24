@@ -1,4 +1,0 @@
-bin: [
-  "?_build/src/gdfuse.byte" {"google-drive-ocamlfuse"}
-  "?_build/src/gdfuse.native" {"google-drive-ocamlfuse"}
-]
