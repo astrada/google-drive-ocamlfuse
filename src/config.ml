@@ -58,6 +58,10 @@ type t = {
   map_format : string;
   (* Map icon *)
   map_icon : string;
+  (* Fusion tables export format *)
+  fusion_table_format : string;
+  (* Fusion tables icon *)
+  fusion_table_icon : string;
   (* OAuth2 Client ID *)
   client_id : string;
   (* OAuth2 Client secret *)
@@ -184,6 +188,14 @@ let map_icon = {
   GapiLens.get = (fun x -> x.map_icon);
   GapiLens.set = (fun v x -> { x with map_icon = v })
 }
+let fusion_table_format = {
+  GapiLens.get = (fun x -> x.fusion_table_format);
+  GapiLens.set = (fun v x -> { x with fusion_table_format = v })
+}
+let fusion_table_icon = {
+  GapiLens.get = (fun x -> x.fusion_table_icon);
+  GapiLens.set = (fun v x -> { x with fusion_table_icon = v })
+}
 let client_id = {
   GapiLens.get = (fun x -> x.client_id);
   GapiLens.set = (fun v x -> { x with client_id = v })
@@ -298,6 +310,8 @@ let default = {
   spreadsheet_icon = "";
   map_format = "desktop";
   map_icon = "";
+  fusion_table_format = "desktop";
+  fusion_table_icon = "";
   client_id = "";
   client_secret = "";
   verification_code = "";
@@ -340,6 +354,8 @@ let default_debug = {
   spreadsheet_icon = "";
   map_format = "desktop";
   map_icon = "";
+  fusion_table_format = "desktop";
+  fusion_table_icon = "";
   client_id = "";
   client_secret = "";
   verification_code = "";
@@ -396,6 +412,10 @@ let of_table table =
         get "spreadsheet_icon" Std.identity default.spreadsheet_icon;
       map_format = get "map_format" Std.identity default.map_format;
       map_icon = get "map_icon" Std.identity default.map_icon;
+      fusion_table_format =
+        get "fusion_table_format" Std.identity default.fusion_table_format;
+      fusion_table_icon =
+        get "fusion_table_icon" Std.identity default.fusion_table_icon;
       client_id = get "client_id" Std.identity default.client_id;
       client_secret = get "client_secret" Std.identity default.client_secret;
       verification_code =
@@ -463,6 +483,8 @@ let to_table data =
     add "spreadsheet_icon" data.spreadsheet_icon;
     add "map_format" data.map_format;
     add "map_icon" data.map_icon;
+    add "fusion_table_format" data.fusion_table_format;
+    add "fusion_table_icon" data.fusion_table_icon;
     add "client_id" data.client_id;
     add "client_secret" data.client_secret;
     add "verification_code" data.verification_code;

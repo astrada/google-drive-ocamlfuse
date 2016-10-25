@@ -881,7 +881,8 @@ struct
       | "application/vnd.google-apps.form"
       | "application/vnd.google-apps.presentation"
       | "application/vnd.google-apps.spreadsheet"
-      | "application/vnd.google-apps.map" -> true
+      | "application/vnd.google-apps.map"
+      | "application/vnd.google-apps.fusiontable" -> true
       | _ -> false
 
   let is_document resource =
@@ -906,6 +907,8 @@ struct
           config.Config.spreadsheet_format
       | "application/vnd.google-apps.map" ->
           config.Config.map_format
+      | "application/vnd.google-apps.fusiontable" ->
+          config.Config.fusion_table_format
       | _ -> "html"
 
   let get_format resource config =
@@ -927,6 +930,8 @@ struct
           config.Config.spreadsheet_icon
       | "application/vnd.google-apps.map" ->
           config.Config.map_icon
+      | "application/vnd.google-apps.fusiontable" ->
+          config.Config.fusion_table_icon
       | _ -> ""
 
   let get_icon resource config =
