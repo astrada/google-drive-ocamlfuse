@@ -7,7 +7,7 @@ open GapiDriveV3Service
 
 exception File_not_found
 exception Permission_denied
-exception Resource_busy
+exception IO_error
 exception Directory_not_empty
 
 let folder_mime_type = "application/vnd.google-apps.folder"
@@ -151,14 +151,14 @@ let handle_default_exceptions =
         throw Permission_denied
     | GapiRequest.RequestTimeout _ ->
         Utils.log_with_header "Server error: Request Timeout.\n%!";
-        throw Resource_busy
+        throw IO_error
     | GapiRequest.PreconditionFailed _
     | GapiRequest.Conflict _ ->
         Utils.log_with_header "Server error: Conflict.\n%!";
-        throw Resource_busy
+        throw IO_error
     | GapiRequest.Forbidden _ ->
         Utils.log_with_header "Server error: Forbidden.\n%!";
-        throw Resource_busy
+        throw IO_error
     | e -> throw e
 
 (* with_try with a default exception handler *)
@@ -215,7 +215,6 @@ let build_resource_tables parent_path trashed =
 let create_resource ?local_name path =
   let parent_path = Filename.dirname path in
   { Cache.Resource.id = 0L;
-    etag = None;
     remote_id = None;
     name = None;
     mime_type = None;
@@ -304,8 +303,7 @@ let update_resource_from_file ?state resource file =
   in
   let parent_path = Filename.dirname path in
   { resource with
-        Cache.Resource.etag = None;
-        remote_id = Some file.File.id;
+        Cache.Resource.remote_id = Some file.File.id;
         name = Some file.File.name;
         mime_type = Some file.File.mimeType;
         created_time = Some (Netdate.since_epoch file.File.createdTime);
@@ -502,20 +500,18 @@ let get_metadata () =
       SessionM.return start_page_token_db
   in
 
-  let request_metadata start_page_token_db etag cache_size =
+  let request_metadata start_page_token_db cache_size =
     let std_params =
       { GapiService.StandardParameters.default with
             GapiService.StandardParameters.fields =
               "user(displayName),storageQuota(limit,usage)"
       } in
     AboutResource.get
-      ~std_params
-      ?etag >>= fun about ->
+      ~std_params >>= fun about ->
     SessionM.get >>= fun session ->
     get_start_page_token start_page_token_db >>= fun start_page_token ->
     let metadata = {
-      Cache.Metadata.etag = session.GapiConversation.Session.etag;
-      display_name = about.About.user.User.displayName;
+      Cache.Metadata.display_name = about.About.user.User.displayName;
       storage_quota_limit = about.About.storageQuota.About.StorageQuota.limit;
       storage_quota_usage = about.About.storageQuota.About.StorageQuota.usage;
       start_page_token;
@@ -694,14 +690,13 @@ let get_metadata () =
     let start_page_token =
       Option.map_default
         Cache.Metadata.start_page_token.GapiLens.get "" metadata in
-    let etag = Option.map Cache.Metadata.etag.GapiLens.get metadata in
     let cache_size =
       Option.map_default
         Cache.Metadata.cache_size.GapiLens.get 0L metadata in
     Utils.log_with_header "BEGIN: Refreshing metadata\n%!";
     let get_server_metadata =
       with_try
-        (request_metadata start_page_token etag cache_size)
+        (request_metadata start_page_token cache_size)
         (function
             GapiRequest.NotModified session ->
               Utils.log_with_header
@@ -767,14 +762,12 @@ let statfs () =
 (* Resources *)
 let refresh_remote_resource resource current_file =
   let remote_id = resource.Cache.Resource.remote_id |> Option.get in
-  let etag = resource.Cache.Resource.etag in
   Utils.log_with_header
-    "BEGIN: Refreshing remote resource (remote id=%s, etag=%s)\n%!"
-    remote_id (Option.default "" etag);
+    "BEGIN: Refreshing remote resource (remote id=%s)\n%!"
+    remote_id;
   with_try
     (FilesResource.get
        ~std_params:file_std_params
-       ?etag
        ~fileId:remote_id)
     (function
         GapiRequest.NotModified session ->
@@ -826,8 +819,7 @@ let get_resource_from_server parent_folder_id name new_resource trashed cache =
           name;
         SessionM.return inserted
     | Some entry ->
-        let inserted =
-          insert_resource_into_cache cache new_resource entry in
+        let inserted = insert_resource_into_cache cache new_resource entry in
         SessionM.return inserted
 
 let check_resource_in_cache cache path trashed =
@@ -873,13 +865,11 @@ and get_resource path trashed =
   let refresh_resource resource cache =
     begin if Option.is_some resource.Cache.Resource.remote_id then begin
       let remote_id = resource.Cache.Resource.remote_id |> Option.get in
-      let etag = resource.Cache.Resource.etag in
       Utils.log_with_header
         "BEGIN: Getting file from server (remote id=%s)\n%!"
         remote_id;
       FilesResource.get
         ~std_params:file_std_params
-        ?etag
         ~fileId:remote_id >>= fun file ->
       Utils.log_with_header
         "END: Getting file from server (remote id=%s)\n%!"
@@ -893,7 +883,9 @@ and get_resource path trashed =
           Cache.Resource.delete_resource cache resource;
           get_new_resource cache
       | Some file ->
-          let updated_resource = update_resource_from_file resource file in
+          SessionM.get >>= fun session ->
+          let updated_resource = update_resource_from_file
+              resource file in
           update_cached_resource cache updated_resource;
           Utils.log_with_header
             "END: Refreshing resource (id=%Ld)\n%!"
@@ -975,7 +967,7 @@ let with_retry f resource =
     with_try
       (f res)
       (function
-           Resource_busy as e ->
+           IO_error as e ->
              if n >= !Utils.max_retries then begin
                let context = Context.get_ctx () in
                let conflict_resolution = context
@@ -1001,8 +993,10 @@ let with_retry f resource =
                    (Cache.Resource.State.ToUpload, "uploading")
                  else
                    (Cache.Resource.State.ToDownload, "downloading") in
+               SessionM.get >>= fun session ->
                let refreshed_resource =
-                 update_resource_from_file ~state res file in
+                 update_resource_from_file
+                   ~state res file in
                let context = Context.get_ctx () in
                let cache = context.Context.cache in
                update_cached_resource cache refreshed_resource;
@@ -1492,9 +1486,7 @@ let update_remote_resource path
              begin match config.Config.conflict_resolution with
                  Config.ConflictResolutionStrategy.Client ->
                    Utils.log_with_header "Retrying after conflict\n%!";
-                   let resource_without_etag =
-                     resource |> Cache.Resource.etag ^= None in
-                   retry_update resource_without_etag >>= fun file ->
+                   retry_update resource >>= fun file ->
                    Utils.log_with_header "END: Conflict detected: Local changes successfully submitted\n%!";
                    SessionM.return file
                | Config.ConflictResolutionStrategy.Server ->
@@ -1504,7 +1496,7 @@ let update_remote_resource path
                      "Deleting resource (id=%Ld) from cache\n%!"
                      resource.Cache.Resource.id;
                    Cache.Resource.delete_resource cache resource;
-                   throw Resource_busy
+                   throw IO_error
              end
          | e -> throw e) >>= fun file_option ->
     begin match file_option with
@@ -1663,17 +1655,12 @@ let upload resource =
   Utils.log_with_header
     "BEGIN: Uploading file (id=%Ld, path=%s, cache path=%s, content type=%s).\n%!"
     resource.Cache.Resource.id resource.Cache.Resource.path content_path mime_type;
-  FilesResource.get
-    ~std_params:file_std_params
-    ~fileId:remote_id >>= fun refreshed_file ->
-  (* TODO check:
-     let config = context |. Context.config_lens in
-     let newRevision = config |. Config.new_revision in*)
+  let file_patch = File.empty |> File.modifiedTime ^= GapiDate.now () in
   FilesResource.update
     ~std_params:file_std_params
     ?media_source
     ~fileId:remote_id
-    refreshed_file >>= fun updated_file ->
+    file_patch >>= fun updated_file ->
   let updated_resource =
     update_resource_from_file resource updated_file in
   refresh_remote_resource updated_resource updated_file >>= fun file ->
@@ -1762,6 +1749,7 @@ let create_remote_resource is_folder path mode =
     FilesResource.create
       ~std_params:file_std_params
       file >>= fun created_file ->
+    SessionM.get >>= fun session ->
     Utils.log_with_header
       "END: Creating file/folder (path=%s, trashed=%b) on server\n%!"
       path_in_cache trashed;
@@ -1950,19 +1938,16 @@ let rename path new_path =
     end
   in
   let update =
-    let rename_file use_etag resource =
+    let rename_file resource =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       if old_name <> new_name then begin
         delete_target_path >>= fun () ->
         Utils.log_with_header "BEGIN: Renaming file (remote id=%s) from %s to %s\n%!"
           remote_id old_name new_name;
-        (* TODO: check
-           let etag = Option.default "" resource.Cache.Resource.etag in*)
         let file_patch =
           { File.empty with
                 File.name = new_name;
-          }
-        in
+          } in
         FilesResource.update
           ~std_params:file_std_params
           ~fileId:remote_id
@@ -1997,7 +1982,7 @@ let rename path new_path =
       end else
         SessionM.return None
       end >>= fun moved_file ->
-      rename_file true resource >>= fun renamed_file ->
+      rename_file resource >>= fun renamed_file ->
       if Option.is_some renamed_file
       then SessionM.return renamed_file
       else SessionM.return moved_file
@@ -2005,7 +1990,7 @@ let rename path new_path =
     update_remote_resource
       path
       move
-      (rename_file false)
+      rename_file
       ~save_to_db:(
         fun cache resource file ->
           let updated_resource =

@@ -262,12 +262,12 @@ let handle_exception e label param =
     | Drive.Directory_not_empty ->
         Utils.log_with_header "Directory not empty: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.ENOTEMPTY, label, param))
-    | Drive.Resource_busy ->
-        Utils.log_with_header "Resource busy: %s %s\n%!" label param;
-        raise (Unix.Unix_error (Unix.EBUSY, label, param))
+    | Drive.IO_error ->
+        Utils.log_with_header "Input/output error: %s %s\n%!" label param;
+        raise (Unix.Unix_error (Unix.EIO, label, param))
     | e ->
         Utils.log_exception e;
-        raise (Unix.Unix_error (Unix.EBUSY, label, param))
+        raise (Unix.Unix_error (Unix.EIO, label, param))
 
 let init_filesystem () =
   Utils.log_with_header "init_filesystem\n%!"
@@ -278,7 +278,7 @@ let statfs path =
     Drive.statfs ()
   with e ->
     Utils.log_exception e;
-    raise (Unix.Unix_error (Unix.EBUSY, "statfs", path))
+    raise (Unix.Unix_error (Unix.EIO, "statfs", path))
 
 let getattr path =
   Utils.log_with_header "getattr %s\n%!" path;

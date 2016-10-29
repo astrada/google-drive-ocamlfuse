@@ -111,8 +111,7 @@ let prepare_rollback_tran_stmt db =
 module ResourceStmts =
 struct
   let api_fields_without_id =
-    "etag, \
-     remote_id, \
+    "remote_id, \
      name, \
      mime_type, \
      created_time, \
@@ -146,7 +145,6 @@ struct
     let sql =
       "INSERT INTO resource (" ^ fields_without_id ^ ") \
        VALUES ( \
-         :etag, \
          :remote_id, \
          :name, \
          :mime_type, \
@@ -177,7 +175,6 @@ struct
     let sql =
       "UPDATE resource \
        SET \
-         etag = :etag, \
          remote_id = :remote_id, \
          name = :name, \
          mime_type = :mime_type, \
@@ -235,7 +232,7 @@ struct
     let sql =
       "UPDATE resource \
        SET \
-         state = 'ToDownload', \
+         state = 'ToDownload' \
        WHERE id = :id \
          AND state <> 'ToUpload' \
          AND state <> 'Uploading';"
@@ -339,8 +336,7 @@ end
 module MetadataStmts =
 struct
   let api_fields_without_id =
-    "etag, \
-     display_name, \
+    "display_name, \
      storage_quota_limit, \
      storage_quota_usage, \
      start_page_token"
@@ -356,7 +352,6 @@ struct
       "INSERT OR REPLACE INTO metadata (" ^ fields ^ ") \
        VALUES ( \
          1, \
-         :etag, \
          :display_name, \
          :storage_quota_limit, \
          :storage_quota_usage, \
@@ -458,7 +453,6 @@ struct
     (* rowid *)
     id : int64;
     (* remote data *)
-    etag : string option;
     remote_id : string option;
     name : string option;
     mime_type : string option;
@@ -488,10 +482,6 @@ struct
   let id = {
     GapiLens.get = (fun x -> x.id);
     GapiLens.set = (fun v x -> { x with id = v })
-  }
-  let etag = {
-    GapiLens.get = (fun x -> x.etag);
-    GapiLens.set = (fun v x -> { x with etag = v })
   }
   let remote_id = {
     GapiLens.get = (fun x -> x.remote_id);
@@ -630,7 +620,6 @@ struct
 
   (* Queries *)
   let bind_resource_parameters stmt resource =
-    bind_text stmt ":etag" resource.etag;
     bind_text stmt ":remote_id" resource.remote_id;
     bind_text stmt ":name" resource.name;
     bind_text stmt ":mime_type" resource.mime_type;
@@ -798,29 +787,28 @@ struct
 
   let row_to_resource row_data =
     { id = row_data.(0) |> data_to_int64 |> Option.get;
-      etag = row_data.(1) |> data_to_string;
-      remote_id = row_data.(2) |> data_to_string;
-      name = row_data.(3) |> data_to_string;
-      mime_type = row_data.(4) |> data_to_string;
-      created_time = row_data.(5) |> data_to_float;
-      modified_time = row_data.(6) |> data_to_float;
-      viewed_by_me_time = row_data.(7) |> data_to_float;
-      file_extension = row_data.(8) |> data_to_string;
-      md5_checksum = row_data.(9) |> data_to_string;
-      size = row_data.(10) |> data_to_int64;
-      can_edit = row_data.(11) |> data_to_bool;
-      trashed = row_data.(12) |> data_to_bool;
-      web_view_link = row_data.(13) |> data_to_string;
-      file_mode_bits = row_data.(14) |> data_to_int64;
-      parent_path_hash = row_data.(15) |> data_to_string;
-      local_name = row_data.(16) |> data_to_string;
-      uid = row_data.(17) |> data_to_int64;
-      gid = row_data.(18) |> data_to_int64;
-      xattrs = row_data.(19) |> data_to_string |> Option.get;
-      parent_path = row_data.(20) |> data_to_string |> Option.get;
-      path = row_data.(21) |> data_to_string |> Option.get;
-      state = row_data.(22) |> data_to_string |> Option.get |> State.of_string;
-      last_update = row_data.(23) |> data_to_float |> Option.get;
+      remote_id = row_data.(1) |> data_to_string;
+      name = row_data.(2) |> data_to_string;
+      mime_type = row_data.(3) |> data_to_string;
+      created_time = row_data.(4) |> data_to_float;
+      modified_time = row_data.(5) |> data_to_float;
+      viewed_by_me_time = row_data.(6) |> data_to_float;
+      file_extension = row_data.(7) |> data_to_string;
+      md5_checksum = row_data.(8) |> data_to_string;
+      size = row_data.(9) |> data_to_int64;
+      can_edit = row_data.(10) |> data_to_bool;
+      trashed = row_data.(11) |> data_to_bool;
+      web_view_link = row_data.(12) |> data_to_string;
+      file_mode_bits = row_data.(13) |> data_to_int64;
+      parent_path_hash = row_data.(14) |> data_to_string;
+      local_name = row_data.(15) |> data_to_string;
+      uid = row_data.(16) |> data_to_int64;
+      gid = row_data.(17) |> data_to_int64;
+      xattrs = row_data.(18) |> data_to_string |> Option.get;
+      parent_path = row_data.(19) |> data_to_string |> Option.get;
+      path = row_data.(20) |> data_to_string |> Option.get;
+      state = row_data.(21) |> data_to_string |> Option.get |> State.of_string;
+      last_update = row_data.(22) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -965,7 +953,6 @@ end
 module Metadata =
 struct
   type t = {
-    etag : string;
     display_name : string;
     storage_quota_limit : int64;
     storage_quota_usage : int64;
@@ -974,10 +961,6 @@ struct
     last_update : float;
   }
 
-  let etag = {
-    GapiLens.get = (fun x -> x.etag);
-    GapiLens.set = (fun v x -> { x with etag = v })
-  }
   let display_name = {
     GapiLens.get = (fun x -> x.display_name);
     GapiLens.set = (fun v x -> { x with display_name = v })
@@ -1005,7 +988,6 @@ struct
 
   (* Queries *)
   let save_metadata stmt metadata =
-    bind_text stmt ":etag" (Some metadata.etag);
     bind_text stmt ":display_name" (Some metadata.display_name);
     bind_int stmt ":storage_quota_limit" (Some metadata.storage_quota_limit);
     bind_int stmt ":storage_quota_usage" (Some metadata.storage_quota_usage);
@@ -1022,13 +1004,12 @@ struct
          finalize_stmt stmt)
 
   let row_to_metadata row_data =
-    { etag = row_data.(0) |> data_to_string |> Option.get;
-      display_name = row_data.(1) |> data_to_string |> Option.get;
-      storage_quota_limit = row_data.(2) |> data_to_int64 |> Option.get;
-      storage_quota_usage = row_data.(3) |> data_to_int64 |> Option.get;
-      start_page_token = row_data.(4) |> data_to_string |> Option.get;
-      cache_size = row_data.(5) |> data_to_int64 |> Option.get;
-      last_update = row_data.(6) |> data_to_float |> Option.get;
+    { display_name = row_data.(0) |> data_to_string |> Option.get;
+      storage_quota_limit = row_data.(1) |> data_to_int64 |> Option.get;
+      storage_quota_usage = row_data.(2) |> data_to_int64 |> Option.get;
+      start_page_token = row_data.(3) |> data_to_string |> Option.get;
+      cache_size = row_data.(4) |> data_to_int64 |> Option.get;
+      last_update = row_data.(5) |> data_to_float |> Option.get;
     }
 
   let select_metadata cache =
@@ -1086,7 +1067,6 @@ let setup_db cache =
         "BEGIN IMMEDIATE TRANSACTION; \
          CREATE TABLE IF NOT EXISTS resource ( \
             id INTEGER PRIMARY KEY, \
-            etag TEXT NULL, \
             remote_id TEXT NULL, \
             name TEXT NULL, \
             mime_type TEXT NULL, \
@@ -1116,7 +1096,6 @@ let setup_db cache =
          CREATE INDEX IF NOT EXISTS last_update_index ON resource (last_update); \
          CREATE TABLE IF NOT EXISTS metadata ( \
             id INTEGER PRIMARY KEY, \
-            etag TEXT NOT NULL, \
             display_name TEXT NOT NULL, \
             storage_quota_limit INTEGER NOT NULL, \
             storage_quota_usage INTEGER NOT NULL, \
