@@ -129,6 +129,7 @@ struct
      local_name, \
      uid, \
      gid, \
+     link_target, \
      xattrs"
   let app_fields =
     "parent_path, \
@@ -162,6 +163,7 @@ struct
          :local_name, \
          :uid, \
          :gid, \
+         :link_target, \
          :xattrs, \
          :parent_path, \
          :path, \
@@ -192,6 +194,7 @@ struct
          local_name = :local_name, \
          uid = :uid, \
          gid = :gid, \
+         link_target = :link_target, \
          xattrs = :xattrs, \
          parent_path = :parent_path, \
          path = :path, \
@@ -471,6 +474,7 @@ struct
     local_name : string option;
     uid : int64 option;
     gid : int64 option;
+    link_target : string option;
     xattrs : string;
     (* local data *)
     parent_path : string;
@@ -551,6 +555,10 @@ struct
     GapiLens.get = (fun x -> x.gid);
     GapiLens.set = (fun v x -> { x with gid = v })
   }
+  let link_target = {
+    GapiLens.get = (fun x -> x.link_target);
+    GapiLens.set = (fun v x -> { x with link_target = v })
+  }
   let xattrs = {
     GapiLens.get = (fun x -> x.xattrs);
     GapiLens.set = (fun v x -> { x with xattrs = v })
@@ -571,15 +579,6 @@ struct
     GapiLens.get = (fun x -> x.last_update);
     GapiLens.set = (fun v x -> { x with last_update = v })
   }
-
-  (* app properties *)
-  let find_app_property name app_properties =
-    try
-      Some (List.assoc name app_properties)
-    with Not_found ->
-      None
-
-  let app_property_to_int64 p = Option.map (fun s -> Int64.of_string s) p
 
   (* file mode bits *)
   let file_mode_bits_to_kind m =
@@ -618,6 +617,57 @@ struct
     done;
     !xattrs
 
+  (* app properties *)
+  let find_app_property name app_properties =
+    try
+      Some (List.assoc name app_properties)
+    with Not_found ->
+      None
+
+  let app_property_to_int64 p = Option.map (fun s -> Int64.of_string s) p
+
+  let get_file_mode_bits app_properties =
+    app_property_to_int64
+      (find_app_property "mode" app_properties)
+
+  let file_mode_bits_to_app_property file_mode_bits =
+    ("mode", Option.map_default Int64.to_string "" file_mode_bits)
+
+  let mode_to_app_property mode =
+    ("mode", string_of_int mode)
+
+  let get_uid app_properties =
+    app_property_to_int64
+      (find_app_property "uid" app_properties)
+
+  let uid_to_app_property uid =
+    ("uid", string_of_int uid)
+
+  let get_gid app_properties =
+    app_property_to_int64
+      (find_app_property "gid" app_properties)
+
+  let gid_to_app_property gid =
+    ("gid", string_of_int gid)
+
+  let get_link_target app_properties =
+    find_app_property "l" app_properties
+
+  let link_target_to_app_property link_target =
+    ("l", link_target)
+
+  let get_xattrs app_properties =
+    render_xattrs
+      (List.filter
+         (fun (n, _) -> ExtString.String.starts_with "x-" n)
+         app_properties)
+
+  let xattr_to_app_property name value =
+    ("x-" ^ name, value)
+
+  let xattr_no_value_to_app_property name =
+    ("x-" ^ name, "")
+
   (* Queries *)
   let bind_resource_parameters stmt resource =
     bind_text stmt ":remote_id" resource.remote_id;
@@ -637,6 +687,7 @@ struct
     bind_text stmt ":local_name" resource.local_name;
     bind_int stmt ":uid" resource.uid;
     bind_int stmt ":gid" resource.gid;
+    bind_text stmt ":link_target" resource.link_target;
     bind_text stmt ":xattrs" (Some resource.xattrs);
     bind_text stmt ":parent_path" (Some resource.parent_path);
     bind_text stmt ":path" (Some resource.path);
@@ -804,11 +855,12 @@ struct
       local_name = row_data.(15) |> data_to_string;
       uid = row_data.(16) |> data_to_int64;
       gid = row_data.(17) |> data_to_int64;
-      xattrs = row_data.(18) |> data_to_string |> Option.get;
-      parent_path = row_data.(19) |> data_to_string |> Option.get;
-      path = row_data.(20) |> data_to_string |> Option.get;
-      state = row_data.(21) |> data_to_string |> Option.get |> State.of_string;
-      last_update = row_data.(22) |> data_to_float |> Option.get;
+      link_target = row_data.(18) |> data_to_string;
+      xattrs = row_data.(19) |> data_to_string |> Option.get;
+      parent_path = row_data.(20) |> data_to_string |> Option.get;
+      path = row_data.(21) |> data_to_string |> Option.get;
+      state = row_data.(22) |> data_to_string |> Option.get |> State.of_string;
+      last_update = row_data.(23) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -1084,6 +1136,7 @@ let setup_db cache =
             local_name TEXT NULL, \
             uid INTEGER NULL, \
             gid INTEGER NULL, \
+            link_target TEXT NULL, \
             xattrs TEXT NOT NULL, \
             parent_path TEXT NOT NULL, \
             path TEXT NOT NULL, \
