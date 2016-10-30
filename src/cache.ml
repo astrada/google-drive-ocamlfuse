@@ -122,7 +122,8 @@ struct
      size, \
      can_edit, \
      trashed, \
-     web_view_link"
+     web_view_link, \
+     version, "
   let app_properties_fields =
     "file_mode_bits, \
      parent_path_hash, \
@@ -130,15 +131,15 @@ struct
      uid, \
      gid, \
      link_target, \
-     xattrs"
+     xattrs, "
   let app_fields =
     "parent_path, \
      path, \
      state, \
      last_update"
 
-  let fields_without_id = api_fields_without_id ^ ", " ^
-                          app_properties_fields ^ ", " ^
+  let fields_without_id = api_fields_without_id ^
+                          app_properties_fields ^
                           app_fields
   let fields = "id, " ^ fields_without_id
 
@@ -158,6 +159,7 @@ struct
          :can_edit, \
          :trashed, \
          :web_view_link, \
+         :version, \
          :file_mode_bits, \
          :parent_path_hash, \
          :local_name, \
@@ -168,7 +170,7 @@ struct
          :parent_path, \
          :path, \
          :state, \
-         :last_update
+         :last_update \
        );"
     in
       Sqlite3.prepare db sql
@@ -189,6 +191,7 @@ struct
          can_edit = :can_edit, \
          trashed = :trashed, \
          web_view_link = :web_view_link, \
+         version = :version, \
          file_mode_bits = :file_mode_bits, \
          parent_path_hash = :parent_path_hash, \
          local_name = :local_name, \
@@ -342,12 +345,12 @@ struct
     "display_name, \
      storage_quota_limit, \
      storage_quota_usage, \
-     start_page_token"
+     start_page_token, "
   let app_fields =
     "cache_size, \
      last_update"
 
-  let fields_without_id = api_fields_without_id ^ ", " ^ app_fields
+  let fields_without_id = api_fields_without_id ^ app_fields
   let fields = "id, " ^ fields_without_id
 
   let prepare_insert_stmt db =
@@ -468,6 +471,7 @@ struct
     can_edit : bool option;
     trashed : bool option;
     web_view_link : string option;
+    version : int64 option;
     (* app data stored in Drive *)
     file_mode_bits : int64 option;
     parent_path_hash : string option;
@@ -534,6 +538,10 @@ struct
   let web_view_link = {
     GapiLens.get = (fun x -> x.web_view_link);
     GapiLens.set = (fun v x -> { x with web_view_link = v })
+  }
+  let version = {
+    GapiLens.get = (fun x -> x.version);
+    GapiLens.set = (fun v x -> { x with version = v })
   }
   let file_mode_bits = {
     GapiLens.get = (fun x -> x.file_mode_bits);
@@ -682,6 +690,7 @@ struct
     bind_bool stmt ":can_edit" resource.can_edit;
     bind_bool stmt ":trashed" resource.trashed;
     bind_text stmt ":web_view_link" resource.web_view_link;
+    bind_int stmt ":version" resource.version;
     bind_int stmt ":file_mode_bits" resource.file_mode_bits;
     bind_text stmt ":parent_path_hash" resource.parent_path_hash;
     bind_text stmt ":local_name" resource.local_name;
@@ -850,17 +859,18 @@ struct
       can_edit = row_data.(10) |> data_to_bool;
       trashed = row_data.(11) |> data_to_bool;
       web_view_link = row_data.(12) |> data_to_string;
-      file_mode_bits = row_data.(13) |> data_to_int64;
-      parent_path_hash = row_data.(14) |> data_to_string;
-      local_name = row_data.(15) |> data_to_string;
-      uid = row_data.(16) |> data_to_int64;
-      gid = row_data.(17) |> data_to_int64;
-      link_target = row_data.(18) |> data_to_string;
-      xattrs = row_data.(19) |> data_to_string |> Option.get;
-      parent_path = row_data.(20) |> data_to_string |> Option.get;
-      path = row_data.(21) |> data_to_string |> Option.get;
-      state = row_data.(22) |> data_to_string |> Option.get |> State.of_string;
-      last_update = row_data.(23) |> data_to_float |> Option.get;
+      version = row_data.(13) |> data_to_int64;
+      file_mode_bits = row_data.(14) |> data_to_int64;
+      parent_path_hash = row_data.(15) |> data_to_string;
+      local_name = row_data.(16) |> data_to_string;
+      uid = row_data.(17) |> data_to_int64;
+      gid = row_data.(18) |> data_to_int64;
+      link_target = row_data.(19) |> data_to_string;
+      xattrs = row_data.(20) |> data_to_string |> Option.get;
+      parent_path = row_data.(21) |> data_to_string |> Option.get;
+      path = row_data.(22) |> data_to_string |> Option.get;
+      state = row_data.(23) |> data_to_string |> Option.get |> State.of_string;
+      last_update = row_data.(24) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -1131,6 +1141,7 @@ let setup_db cache =
             can_edit INTEGER NULL, \
             trashed INTEGER NULL, \
             web_view_link TEXT NULL, \
+            version INTEGER NULL, \
             file_mode_bits INTEGER NULL, \
             parent_path_hash TEXT NULL, \
             local_name TEXT NULL, \

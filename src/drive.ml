@@ -17,7 +17,7 @@ let folder_mime_type = "application/vnd.google-apps.folder"
 let file_fields =
   "appProperties,capabilities(canEdit),createdTime,explicitlyTrashed,\
    fileExtension,id,md5Checksum,mimeType,modifiedTime,name,parents,\
-   size,trashed,viewedByMeTime,webViewLink"
+   size,trashed,version,viewedByMeTime,webViewLink"
 let file_std_params =
   { GapiService.StandardParameters.default with
         GapiService.StandardParameters.fields = file_fields
@@ -236,6 +236,7 @@ let create_resource ?local_name path =
     can_edit = None;
     trashed = None;
     web_view_link = None;
+    version = None;
     file_mode_bits = None;
     parent_path_hash = get_path_hash parent_path;
     local_name;
@@ -326,6 +327,7 @@ let update_resource_from_file ?state resource file =
         can_edit = Some file.File.capabilities.File.Capabilities.canEdit;
         trashed = Some file.File.trashed;
         web_view_link = Some file.File.webViewLink;
+        version = Some file.File.version;
         file_mode_bits = Cache.Resource.get_file_mode_bits
             file.File.appProperties;
         parent_path_hash = get_path_hash parent_path;
@@ -1040,13 +1042,6 @@ let download_resource resource =
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
   let content_path = Cache.get_content_path cache resource in
-  (* TODO: check
-    let create_empty_file () =
-    Utils.log_with_header
-      "BEGIN: Creating resource without content (path=%s)\n%!"
-      content_path;
-    close_out (open_out content_path);
-    SessionM.return () in*)
   let shrink_cache () =
     Option.may
       (fun file_size ->
@@ -1073,11 +1068,17 @@ let download_resource resource =
         ~fileId
         ~mimeType >>= fun () ->
       SessionM.return ()
-    end else begin
+    end else if Option.default 0L resource.Cache.Resource.size > 0L then begin
       FilesResource.get
         ~std_params:file_download_std_params
         ~media_download
         ~fileId >>= fun _ ->
+      SessionM.return ()
+    end else begin
+      Utils.log_with_header
+        "BEGIN: Creating resource without content (path=%s)\n%!"
+        content_path;
+      close_out (open_out content_path);
       SessionM.return ()
     end
   in
@@ -1735,7 +1736,10 @@ let create_remote_resource ?link_target is_folder path mode =
     let appProperties = match link_target with
         None -> appProperties
       | Some link ->
-          Cache.Resource.link_target_to_app_property link :: appProperties in
+          if String.length link > max_link_target_length then
+            raise Invalid_operation
+          else
+            Cache.Resource.link_target_to_app_property link :: appProperties in
     let file = {
       File.empty with
           File.name;
