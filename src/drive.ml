@@ -1243,12 +1243,14 @@ let get_attr path =
           resource.Cache.Resource.file_mode_bits
       in
       let mask =
-        lnot config.Config.umask land (
-          if config.Config.read_only ||
-             not (Option.default true resource.Cache.Resource.can_edit) ||
-             Cache.Resource.is_document resource
-          then 0o555
-          else 0o777)
+        if Cache.Resource.is_symlink resource then 0o777
+        else
+          lnot config.Config.umask land (
+            if config.Config.read_only ||
+               not (Option.default true resource.Cache.Resource.can_edit) ||
+               Cache.Resource.is_document resource
+            then 0o555
+            else 0o777)
       in
       perm land mask in
     let st_nlink =
@@ -1265,7 +1267,12 @@ let get_attr path =
         context.Context.mountpoint_stats.Unix.LargeFile.st_gid
         resource.Cache.Resource.gid in
     let st_size =
-      match stat with
+      if Cache.Resource.is_symlink resource then
+        resource.Cache.Resource.link_target
+          |> Option.get
+          |> String.length
+          |> Int64.of_int
+      else match stat with
           None ->
             if Cache.Resource.is_folder resource then f_bsize
             else Option.default 0L resource.Cache.Resource.size

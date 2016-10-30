@@ -940,6 +940,9 @@ struct
         Some mime_type -> is_document_mime_type mime_type
       | _ -> false
 
+  let is_symlink resource =
+    Option.is_some resource.link_target
+
   let is_valid resource metadata_last_update =
     resource.last_update >= metadata_last_update
 
