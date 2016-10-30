@@ -21,7 +21,7 @@ let get_authorization_url request_id =
 let rng =
   let open Cryptokit.Random in
   let dev_rng = device_rng "/dev/urandom" in
-    string dev_rng 20 |> pseudo_rng
+  string dev_rng 20 |> pseudo_rng
 
 (* Application configuration *)
 let create_default_config_store debug app_dir =
@@ -34,19 +34,19 @@ let create_default_config_store debug app_dir =
     data = config
   }
   in
-    Context.save_config_store config_store;
-    config_store
+  Context.save_config_store config_store;
+  config_store
 
 let get_config_store debug app_dir =
   let config_path = app_dir |. AppDir.config_path in
-    try
-      Utils.log_with_header "Loading configuration from %s..." config_path;
-      let config_store = Context.ConfigFileStore.load config_path in
-        Utils.log_message "done\n";
-        config_store
-    with KeyValueStore.File_not_found ->
-      Utils.log_message "not found.\n";
-      create_default_config_store debug app_dir
+  try
+    Utils.log_with_header "Loading configuration from %s..." config_path;
+    let config_store = Context.ConfigFileStore.load config_path in
+    Utils.log_message "done\n";
+    config_store
+  with KeyValueStore.File_not_found ->
+    Utils.log_message "not found.\n";
+    create_default_config_store debug app_dir
 (* END Application configuration *)
 
 (* Application state *)
@@ -103,16 +103,16 @@ let setup_application params =
     let context = Context.get_ctx () in
     let request_id =
       let rid = context |. Context.request_id_lens in
-        if rid = "" then generate_request_id ()
-        else rid
+      if rid = "" then generate_request_id ()
+      else rid
     in
       context
         |> Context.request_id_lens ^= request_id
         |> Context.save_state_from_context;
       try
         let url = get_authorization_url request_id in
-          Utils.start_browser url;
-          GaeProxy.start_server_polling ()
+        Utils.start_browser url;
+        GaeProxy.start_server_polling ()
       with
           GaeProxy.ServerError e ->
             Utils.log_with_header "Removing invalid request_id=%s\n%!"
@@ -237,17 +237,17 @@ let setup_application params =
   } in
   Context.set_ctx context;
   let refresh_token = context |. Context.refresh_token_lens in
-    if refresh_token = "" then
-      if client_id = "" || client_secret = "" then
-        if headless then
-          failwith ("In headless mode, you should specify a client id and a \
-                     client secret")
-        else
-          get_auth_tokens_from_server ()
+  if refresh_token = "" then
+    if client_id = "" || client_secret = "" then
+      if headless then
+        failwith ("In headless mode, you should specify a client id and a \
+                   client secret")
       else
-        Oauth2.get_access_token headless
+        get_auth_tokens_from_server ()
     else
-      Utils.log_message "Refresh token already present.\n%!"
+      Oauth2.get_access_token headless
+  else
+    Utils.log_message "Refresh token already present.\n%!"
 (* END setup *)
 
 (* FUSE bindings *)
@@ -265,6 +265,12 @@ let handle_exception e label param =
     | Drive.IO_error ->
         Utils.log_with_header "Input/output error: %s %s\n%!" label param;
         raise (Unix.Unix_error (Unix.EIO, label, param))
+    | Drive.No_attribute ->
+        raise (Unix.Unix_error (Unix.EUNKNOWNERR 61, label, param))
+    | Drive.Existing_attribute ->
+        raise (Unix.Unix_error (Unix.EEXIST, label, param))
+    | Drive.Invalid_operation ->
+        raise (Unix.Unix_error (Unix.EINVAL, label, param))
     | e ->
         Utils.log_exception e;
         raise (Unix.Unix_error (Unix.EIO, label, param))
@@ -293,7 +299,7 @@ let readdir path hnd =
       Drive.read_dir path
     with e -> handle_exception e "readdir" path
   in
-    Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
+  Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
 
 let opendir path flags =
   Utils.log_with_header "opendir %s %s\n%!" path (Utils.flags_to_string flags);
@@ -306,7 +312,7 @@ let releasedir path flags hnd =
     path (Utils.flags_to_string flags)
 
 let fsyncdir path ds hnd =
-  Utils.log_with_header "fsyncdir %s %b\n%!" path ds
+  Utils.log_with_header "fsyncdir %s %b %d\n%!" path ds hnd
 
 let utime path atime mtime =
   Utils.log_with_header "utime %s %f %f\n%!" path atime mtime;
@@ -321,25 +327,27 @@ let fopen path flags =
   with e -> handle_exception e "fopen" path
 
 let read path buf offset file_descr =
-  Utils.log_with_header "read %s buf %Ld %d\n%!" path offset file_descr;
+  Utils.log_with_header "read %s [%d bytes] %Ld %d\n%!"
+    path (Bigarray.Array1.dim buf) offset file_descr;
   try
     Drive.read path buf offset file_descr
   with e -> handle_exception e "read" path
 
 let write path buf offset file_descr =
-  Utils.log_with_header "write %s buf %Ld %d\n%!" path offset file_descr;
+  Utils.log_with_header "write %s [%d bytes] %Ld %d\n%!"
+    path (Bigarray.Array1.dim buf) offset file_descr;
   try
     Drive.write path buf offset file_descr
   with e -> handle_exception e "write" path
 
 let mknod path mode =
-  Utils.log_with_header "mknod %s %d\n%!" path mode;
+  Utils.log_with_header "mknod %s %o\n%!" path mode;
   try
     Drive.mknod path mode
   with e -> handle_exception e "mknod" path
 
 let mkdir path mode =
-  Utils.log_with_header "mkdir %s %d\n%!" path mode;
+  Utils.log_with_header "mkdir %s %o\n%!" path mode;
   try
     Drive.mkdir path mode
   with e -> handle_exception e "mkdir" path
@@ -386,15 +394,55 @@ let fsync path ds file_descr =
     Drive.fsync path ds file_descr
   with e -> handle_exception e "fsync" path
 
-let setxattr path name value xflags =
-  Utils.log_with_header "setxattr %s %s %s %s\n%!"
-    path name value (Utils.xattr_flags_to_string xflags)
-
 let chmod path mode =
-  Utils.log_with_header "chmod %s %d\n%!" path mode
+  Utils.log_with_header "chmod %s %o\n%!" path mode;
+  try
+    Drive.chmod path mode
+  with e -> handle_exception e "chmod" path
 
 let chown path uid gid =
-  Utils.log_with_header "chown %s %d %d\n%!" path uid gid
+  Utils.log_with_header "chown %s %d %d\n%!" path uid gid;
+  try
+    Drive.chown path uid gid
+  with e -> handle_exception e "chown" path
+
+let getxattr path name =
+  Utils.log_with_header "getxattr %s %s\n%!" path name;
+  try
+    Drive.get_xattr path name
+  with e -> handle_exception e "getxattr" path
+
+let setxattr path name value xflags =
+  Utils.log_with_header "setxattr %s %s %s %s\n%!"
+    path name value (Utils.xattr_flags_to_string xflags);
+  try
+    Drive.set_xattr path name value xflags
+  with e -> handle_exception e "setxattr" path
+
+let listxattr path =
+  Utils.log_with_header "listxattr %s\n%!" path;
+  try
+    Drive.list_xattr path
+  with e -> handle_exception e "listxattr" path
+
+let removexattr path name =
+  Utils.log_with_header "removexattr %s %s\n%!" path name;
+  try
+    Drive.remove_xattr path name
+  with e -> handle_exception e "removexattr" path
+
+let readlink path =
+  Utils.log_with_header "readlink %s\n%!" path;
+  try
+    Drive.read_link path
+  with e -> handle_exception e "readlink" path
+
+let symlink target linkpath =
+  Utils.log_with_header "symlink %s %s\n%!" target linkpath;
+  try
+    Drive.symlink target linkpath
+  with e -> handle_exception e "symlink" target
+(* END FUSE bindings *)
 
 let start_filesystem mountpoint fuse_args =
   Utils.log_with_header "Starting filesystem %s\n%!" mountpoint;
@@ -402,32 +450,37 @@ let start_filesystem mountpoint fuse_args =
     Sys.argv.(0) :: (fuse_args @ [mountpoint])
     |> Array.of_list
   in
-    Fuse.main fuse_argv {
-      Fuse.default_operations with
-          Fuse.init = init_filesystem;
-          statfs;
-          getattr;
-          readdir;
-          opendir;
-          releasedir;
-          fsyncdir;
-          utime;
-          fopen;
-          read;
-          write;
-          mknod;
-          mkdir;
-          unlink;
-          rmdir;
-          rename;
-          truncate;
-          release;
-          flush;
-          fsync;
-          setxattr;
-          chmod;
-          chown;
-    }
+  Fuse.main fuse_argv {
+    Fuse.default_operations with
+        Fuse.init = init_filesystem;
+        statfs;
+        getattr;
+        readdir;
+        opendir;
+        releasedir;
+        fsyncdir;
+        utime;
+        fopen;
+        read;
+        write;
+        mknod;
+        mkdir;
+        unlink;
+        rmdir;
+        rename;
+        truncate;
+        release;
+        flush;
+        fsync;
+        chmod;
+        chown;
+        getxattr;
+        setxattr;
+        listxattr;
+        removexattr;
+        readlink;
+        symlink;
+  }
 (* END FUSE bindings *)
 
 (* Main program *)
@@ -572,7 +625,7 @@ let () =
         Failure error_message -> quit error_message
       | e ->
           let error_message = Printexc.to_string e in
-            quit error_message
+          quit error_message
   end
 (* END Main program *)
 

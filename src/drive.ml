@@ -9,6 +9,9 @@ exception File_not_found
 exception Permission_denied
 exception IO_error
 exception Directory_not_empty
+exception No_attribute
+exception Existing_attribute
+exception Invalid_operation
 
 let folder_mime_type = "application/vnd.google-apps.folder"
 let file_fields =
@@ -23,6 +26,10 @@ let file_list_std_params =
   { GapiService.StandardParameters.default with
         GapiService.StandardParameters.fields =
           "files(" ^ file_fields ^ "),nextPageToken"
+  }
+let file_download_std_params =
+  { GapiService.StandardParameters.default with
+        GapiService.StandardParameters.alt = "media"
   }
 
 let do_request = Oauth2.do_request
@@ -39,6 +46,8 @@ let trash_directory_base_path = "/.Trash/"
 let f_bsize = 4096L
 let change_limit = 50
 let mb = 1048576L
+let max_link_target_length = 127
+let max_attribute_length = 126
 
 (* Utilities *)
 let chars_blacklist_regexp = Str.regexp "[/\000]"
@@ -232,6 +241,7 @@ let create_resource ?local_name path =
     local_name;
     uid = None;
     gid = None;
+    link_target = None;
     xattrs = "";
     parent_path;
     path;
@@ -316,21 +326,14 @@ let update_resource_from_file ?state resource file =
         can_edit = Some file.File.capabilities.File.Capabilities.canEdit;
         trashed = Some file.File.trashed;
         web_view_link = Some file.File.webViewLink;
-        file_mode_bits =
-          Cache.Resource.app_property_to_int64
-            (Cache.Resource.find_app_property "mode" file.File.appProperties);
+        file_mode_bits = Cache.Resource.get_file_mode_bits
+            file.File.appProperties;
         parent_path_hash = get_path_hash parent_path;
         local_name;
-        uid =
-          Cache.Resource.app_property_to_int64
-            (Cache.Resource.find_app_property "uid" file.File.appProperties);
-        gid =
-          Cache.Resource.app_property_to_int64
-            (Cache.Resource.find_app_property "uid" file.File.appProperties);
-        xattrs = Cache.Resource.render_xattrs
-            (List.filter
-               (fun (n, _) -> ExtString.String.starts_with "x-" n)
-               file.File.appProperties);
+        uid = Cache.Resource.get_uid file.File.appProperties;
+        gid = Cache.Resource.get_gid file.File.appProperties;
+        link_target = Cache.Resource.get_link_target file.File.appProperties;
+        xattrs = Cache.Resource.get_xattrs file.File.appProperties;
         last_update = Unix.gettimeofday ();
         path;
         parent_path;
@@ -1071,13 +1074,8 @@ let download_resource resource =
         ~mimeType >>= fun () ->
       SessionM.return ()
     end else begin
-      let std_params =
-        { GapiService.StandardParameters.default with
-              GapiService.StandardParameters.alt = "media"
-        }
-      in
       FilesResource.get
-        ~std_params
+        ~std_params:file_download_std_params
         ~media_download
         ~fileId >>= fun _ ->
       SessionM.return ()
@@ -1165,10 +1163,6 @@ let stream_resource offset buffer resource =
   Utils.log_with_header
     "BEGIN: Stream resource (id=%Ld, offset=%Ld, finish=%Ld, length=%d)\n%!"
     resource.Cache.Resource.id offset finish length;
-  let std_params =
-    { GapiService.StandardParameters.default with
-      GapiService.StandardParameters.alt = "media"
-    } in
   let destination = GapiMediaResource.ArrayBuffer buffer in
   let range_spec =
     GapiMediaResource.generate_range_spec [(Some offset, Some finish)] in
@@ -1179,7 +1173,7 @@ let stream_resource offset buffer resource =
   let fileId = resource |. Cache.Resource.remote_id |> Option.get in
   try_with_default
     (FilesResource.get
-       ~std_params
+       ~std_params:file_download_std_params
        ~media_download
        ~fileId
     ) >>= fun _ ->
@@ -1553,7 +1547,7 @@ let utime path atime mtime =
       touch
       touch
   in
-    do_request update |> ignore
+  do_request update |> ignore
 (* END utime *)
 
 (* read *)
@@ -1720,7 +1714,7 @@ let release path flags hnd =
   upload_if_dirty path
 
 (* Create resources *)
-let create_remote_resource is_folder path mode =
+let create_remote_resource ?link_target is_folder path mode =
   let (path_in_cache, trashed) = get_path_in_cache path in
   if trashed then raise Permission_denied;
 
@@ -1737,11 +1731,17 @@ let create_remote_resource is_folder path mode =
       if is_folder
       then folder_mime_type
       else Mime.map_filename_to_mime_type name in
+    let appProperties = [Cache.Resource.mode_to_app_property mode] in
+    let appProperties = match link_target with
+        None -> appProperties
+      | Some link ->
+          Cache.Resource.link_target_to_app_property link :: appProperties in
     let file = {
       File.empty with
           File.name;
           parents = [parent_id];
           mimeType;
+          appProperties;
     } in
     Utils.log_with_header
       "BEGIN: Creating %s (path=%s, trashed=%b) on server\n%!"
@@ -1894,7 +1894,8 @@ let delete_remote_resource is_folder path =
         trashed && config.Config.delete_forever_in_trash_folder then
       delete_resource is_folder path
     else
-      trash_resource is_folder trashed path in
+      trash_resource is_folder trashed path
+  in
   do_request trash_or_delete_file |> ignore
 (* END Delete (trash) resources *)
 
@@ -2038,7 +2039,7 @@ let rename path new_path =
               path_in_cache trashed;
           end)
   in
-    do_request update |> ignore
+  do_request update |> ignore
 (* END rename *)
 
 (* truncate *)
@@ -2067,4 +2068,171 @@ let truncate path size =
   in
   do_request truncate_resource |> ignore
 (* END truncate *)
+
+(* chmod *)
+let chmod path mode =
+  let update =
+    let chmod resource =
+      let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+      Utils.log_with_header "BEGIN: Updating mode (remote id=%s, mode=%o)\n%!"
+        remote_id mode;
+      let file_patch = File.empty
+        |> File.appProperties ^= [Cache.Resource.mode_to_app_property mode] in
+      FilesResource.update
+        ~std_params:file_std_params
+        ~fileId:remote_id
+        file_patch >>= fun patched_file ->
+      Utils.log_with_header "END: Updating mode (remote id=%s, mode=%o)\n%!"
+        remote_id mode;
+      SessionM.return (Some patched_file)
+    in
+    update_remote_resource
+      path
+      chmod
+      chmod
+  in
+  do_request update |> ignore
+(* END chmod *)
+
+(* chown *)
+let chown path uid gid =
+  let update =
+    let chown resource =
+      let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+      Utils.log_with_header "BEGIN: Updating owner (remote id=%s, uid=%d gid=%d)\n%!"
+        remote_id uid gid;
+      let file_patch = File.empty
+        |> File.appProperties ^= [
+             Cache.Resource.uid_to_app_property uid;
+             Cache.Resource.gid_to_app_property gid;
+           ] in
+      FilesResource.update
+        ~std_params:file_std_params
+        ~fileId:remote_id
+        file_patch >>= fun patched_file ->
+      Utils.log_with_header "End: Updating owner (remote id=%s, uid=%d gid=%d)\n%!"
+        remote_id uid gid;
+      SessionM.return (Some patched_file)
+    in
+    update_remote_resource
+      path
+      chown
+      chown
+  in
+  do_request update |> ignore
+(* END chown *)
+
+(* getxattr *)
+let get_xattr path name =
+  let (path_in_cache, trashed) = get_path_in_cache path in
+  let fetch_xattr =
+    get_resource path_in_cache trashed >>= fun resource ->
+    let xattrs = Cache.Resource.parse_xattrs resource.Cache.Resource.xattrs in
+    let value =
+      try
+        List.assoc name xattrs
+      with Not_found -> raise No_attribute
+    in
+    SessionM.return value
+  in
+  do_request fetch_xattr |> fst
+(* END getxattr *)
+
+(* setxattr *)
+let set_xattr path name value xflags =
+  let update =
+    let setxattr resource =
+      let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+      Utils.log_with_header "BEGIN: Setting xattr (remote id=%s, name=%s value=%s xflags=%s)\n%!"
+        remote_id name value (Utils.xattr_flags_to_string xflags);
+      let xattrs = Cache.Resource.parse_xattrs resource.Cache.Resource.xattrs in
+      let existing = List.mem_assoc name xattrs in
+      begin match xflags with
+          Fuse.CREATE -> if existing then raise Existing_attribute
+        | Fuse.REPLACE -> if not existing then raise No_attribute
+        | Fuse.AUTO -> ()
+      end;
+      let attribute_length = (String.length name) + (String.length value) in
+      if attribute_length > max_attribute_length then raise Invalid_operation;
+      let file_patch = File.empty
+        |> File.appProperties ^= [
+             Cache.Resource.xattr_to_app_property name value;
+           ] in
+      FilesResource.update
+        ~std_params:file_std_params
+        ~fileId:remote_id
+        file_patch >>= fun patched_file ->
+      Utils.log_with_header "END: Setting xattr (remote id=%s, name=%s value=%s xflags=%s)\n%!"
+        remote_id name value (Utils.xattr_flags_to_string xflags);
+      SessionM.return (Some patched_file)
+    in
+    update_remote_resource
+      path
+      setxattr
+      setxattr
+  in
+  do_request update |> ignore
+(* END setxattr *)
+
+(* listxattr *)
+let list_xattr path =
+  let (path_in_cache, trashed) = get_path_in_cache path in
+  let fetch_xattrs =
+    get_resource path_in_cache trashed >>= fun resource ->
+    let xattrs = Cache.Resource.parse_xattrs resource.Cache.Resource.xattrs in
+    let keys = List.map (fun (n, _) -> n) xattrs in
+    SessionM.return keys
+  in
+  do_request fetch_xattrs |> fst
+(* END listxattr *)
+
+(* removexattr *)
+let remove_xattr path name =
+  let update =
+    let removexattr resource =
+      let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+      Utils.log_with_header "BEGIN: Removing xattr (remote id=%s, name=%s)\n%!"
+        remote_id name;
+      let xattrs = Cache.Resource.parse_xattrs resource.Cache.Resource.xattrs in
+      let existing = List.mem_assoc name xattrs in
+      if not existing then raise No_attribute;
+      let file_patch = File.empty
+        |> File.appProperties ^= [
+             Cache.Resource.xattr_no_value_to_app_property name;
+           ] in
+      FilesResource.update
+        ~std_params:file_std_params
+        ~fileId:remote_id
+        file_patch >>= fun patched_file ->
+      Utils.log_with_header "END: Removing xattr (remote id=%s, name=%s)\n%!"
+        remote_id name;
+      SessionM.return (Some patched_file)
+    in
+    update_remote_resource
+      path
+      removexattr
+      removexattr
+  in
+  do_request update |> ignore
+(* END removexattr *)
+
+(* readlink *)
+let read_link path =
+  let (path_in_cache, trashed) = get_path_in_cache path in
+  let fetch_link_target =
+    get_resource path_in_cache trashed >>= fun resource ->
+    let link_target =
+      match resource.Cache.Resource.link_target with
+          None -> raise Invalid_operation
+        | Some link -> link
+    in
+    SessionM.return link_target
+  in
+  do_request fetch_link_target |> fst
+(* END readlink *)
+
+(* symlink *)
+let symlink target linkpath =
+  create_remote_resource ~link_target:target false linkpath 0o120777
+(* END symlink *)
 
