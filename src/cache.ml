@@ -593,7 +593,7 @@ struct
       | 0o040000 -> Unix.S_DIR
       | 0o020000 -> Unix.S_CHR
       | 0o010000 -> Unix.S_FIFO
-      | _ -> failwith ("Unsupported file type: " ^ string_of_int file_type)
+      | _ -> Unix.S_REG
 
   let file_mode_bits_to_perm m =
     let mask = 0o7777 in
