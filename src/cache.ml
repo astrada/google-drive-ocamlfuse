@@ -42,13 +42,13 @@ let final_step stmt =
 
 (* Query helpers *)
 let bind to_data stmt name value =
-  Option.may
-    (fun v ->
-       Sqlite3.bind stmt
-         (Sqlite3.bind_parameter_index stmt name)
-         (to_data v)
-       |> fail_if_not_ok)
-    value
+  let sql_value = match value with
+      None -> Sqlite3.Data.NULL
+    | Some v -> to_data v in
+  Sqlite3.bind stmt
+    (Sqlite3.bind_parameter_index stmt name)
+    sql_value
+  |> fail_if_not_ok
 
 let bind_text = bind (fun v -> Sqlite3.Data.TEXT v)
 let bind_int = bind (fun v -> Sqlite3.Data.INT v)
