@@ -68,19 +68,12 @@ type t = {
   client_secret : string;
   (* OAuth2 verification code *)
   verification_code : string;
-  (* Conflict resolution strategy:
-   * - client: (in case of conflict) always update server (client side wins)
-   * - server: (in case of conflict) always maintain server version (server side
-   * wins) *)
-  conflict_resolution : ConflictResolutionStrategy.t;
   (* Specifies whether to keep files with duplicated names (no overwrite) *)
   keep_duplicates : bool;
   (* Specifies whether to put file extension to Google Docs *)
   docs_file_extension : bool;
   (* Maximum cache size in megabytes *)
   max_cache_size_mb : int;
-  (* Specifies whether a file overwrite should instead create a new revision *)
-  new_revision : bool;
   (* Specifies whether not to log requests/responses (CURL). Set to true to
    * avoid a segmentation fault on some architectures. *)
   curl_debug_off : bool;
@@ -92,9 +85,6 @@ type t = {
   stream_large_files : bool;
   (* Specifies the minimum size (in megabytes) of large files *)
   large_file_threshold_mb : int;
-  (* Specifies whether to force document export even if the requested format
-   * is not available *)
-  force_docs_export : bool;
   (* Specifies whether to start uploading in a parallel thread. Warning! This
    * flag is EXPERIMENTAL *)
   async_upload : bool;
@@ -208,10 +198,6 @@ let verification_code = {
   GapiLens.get = (fun x -> x.verification_code);
   GapiLens.set = (fun v x -> { x with verification_code = v })
 }
-let conflict_resolution = {
-  GapiLens.get = (fun x -> x.conflict_resolution);
-  GapiLens.set = (fun v x -> { x with conflict_resolution = v })
-}
 let keep_duplicates = {
   GapiLens.get = (fun x -> x.keep_duplicates);
   GapiLens.set = (fun v x -> { x with keep_duplicates = v })
@@ -223,10 +209,6 @@ let docs_file_extension = {
 let max_cache_size_mb = {
   GapiLens.get = (fun x -> x.max_cache_size_mb);
   GapiLens.set = (fun v x -> { x with max_cache_size_mb = v })
-}
-let new_revision = {
-  GapiLens.get = (fun x -> x.new_revision);
-  GapiLens.set = (fun v x -> { x with new_revision = v })
 }
 let curl_debug_off = {
   GapiLens.get = (fun x -> x.curl_debug_off);
@@ -243,10 +225,6 @@ let stream_large_files = {
 let large_file_threshold_mb = {
   GapiLens.get = (fun x -> x.large_file_threshold_mb);
   GapiLens.set = (fun v x -> { x with large_file_threshold_mb = v })
-}
-let force_docs_export = {
-  GapiLens.get = (fun x -> x.force_docs_export);
-  GapiLens.set = (fun v x -> { x with force_docs_export = v })
 }
 let async_upload = {
   GapiLens.get = (fun x -> x.async_upload);
@@ -315,16 +293,13 @@ let default = {
   client_id = "";
   client_secret = "";
   verification_code = "";
-  conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
   docs_file_extension = true;
   max_cache_size_mb = 512;
-  new_revision = true;
   curl_debug_off = false;
   delete_forever_in_trash_folder = false;
   stream_large_files = false;
   large_file_threshold_mb = 16;
-  force_docs_export = true;
   async_upload = false;
   connect_timeout_ms = 5000;
   max_download_speed = 0L;
@@ -359,16 +334,13 @@ let default_debug = {
   client_id = "";
   client_secret = "";
   verification_code = "";
-  conflict_resolution = ConflictResolutionStrategy.Server;
   keep_duplicates = false;
   docs_file_extension = true;
   max_cache_size_mb = 512;
-  new_revision = true;
   curl_debug_off = false;
   delete_forever_in_trash_folder = false;
   stream_large_files = false;
   large_file_threshold_mb = 16;
-  force_docs_export = true;
   async_upload = false;
   connect_timeout_ms = 5000;
   max_download_speed = 0L;
@@ -420,17 +392,12 @@ let of_table table =
       client_secret = get "client_secret" Std.identity default.client_secret;
       verification_code =
         get "verification_code" Std.identity default.verification_code;
-      conflict_resolution =
-        get "conflict_resolution" ConflictResolutionStrategy.of_string
-          default.conflict_resolution;
       keep_duplicates =
         get "keep_duplicates" bool_of_string default.keep_duplicates;
       docs_file_extension =
         get "docs_file_extension" bool_of_string default.docs_file_extension;
       max_cache_size_mb =
         get "max_cache_size_mb" int_of_string default.max_cache_size_mb;
-      new_revision =
-        get "new_revision" bool_of_string default.new_revision;
       curl_debug_off =
         get "curl_debug_off" bool_of_string default.curl_debug_off;
       delete_forever_in_trash_folder =
@@ -442,8 +409,6 @@ let of_table table =
       large_file_threshold_mb =
         get "large_file_threshold_mb" int_of_string
           default.large_file_threshold_mb;
-      force_docs_export =
-        get "force_docs_export" bool_of_string default.force_docs_export;
       async_upload =
         get "async_upload" bool_of_string default.async_upload;
       connect_timeout_ms =
@@ -488,19 +453,15 @@ let to_table data =
     add "client_id" data.client_id;
     add "client_secret" data.client_secret;
     add "verification_code" data.verification_code;
-    add "conflict_resolution"
-      (data.conflict_resolution |> ConflictResolutionStrategy.to_string);
     add "keep_duplicates" (data.keep_duplicates |> string_of_bool);
     add "docs_file_extension" (data.docs_file_extension |> string_of_bool);
     add "max_cache_size_mb" (data.max_cache_size_mb |> string_of_int);
-    add "new_revision" (data.new_revision |> string_of_bool);
     add "curl_debug_off" (data.curl_debug_off |> string_of_bool);
     add "delete_forever_in_trash_folder"
       (data.delete_forever_in_trash_folder |> string_of_bool);
     add "stream_large_files" (data.stream_large_files |> string_of_bool);
     add "large_file_threshold_mb"
       (data.large_file_threshold_mb |> string_of_int);
-    add "force_docs_export" (data.force_docs_export |> string_of_bool);
     add "async_upload" (data.async_upload |> string_of_bool);
     add "connect_timeout_ms" (data.connect_timeout_ms |> string_of_int);
     add "max_download_speed" (data.max_download_speed |> Int64.to_string);

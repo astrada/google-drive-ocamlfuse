@@ -5,14 +5,13 @@ open GapiMonad.SessionM.Infix
 open GapiDriveV3Model
 open GapiDriveV3Service
 
-exception File_not_found
-exception Permission_denied
-exception IO_error
 exception Directory_not_empty
-exception No_attribute
 exception Existing_attribute
+exception File_not_found
+exception IO_error
 exception Invalid_operation
-exception Not_modified
+exception No_attribute
+exception Permission_denied
 
 let folder_mime_type = "application/vnd.google-apps.folder"
 let file_fields =
@@ -168,7 +167,7 @@ let handle_default_exceptions =
         throw IO_error
     | GapiRequest.Forbidden _ ->
         Utils.log_with_header "Server error: Forbidden.\n%!";
-        throw IO_error
+        throw Invalid_operation
     | e -> throw e
 
 (* with_try with a default exception handler *)
@@ -700,9 +699,8 @@ let get_metadata () =
       Option.map_default
         Cache.Metadata.cache_size.GapiLens.get 0L metadata in
     Utils.log_with_header "BEGIN: Refreshing metadata\n%!";
-    with_try
-      (request_metadata start_page_token cache_size)
-      handle_default_exceptions >>= fun server_metadata ->
+    try_with_default
+      (request_metadata start_page_token cache_size) >>= fun server_metadata ->
     Utils.log_with_header "END: Refreshing metadata\n";
     update_resource_cache server_metadata >>= fun updated_metadata ->
     Utils.log_with_header "BEGIN: Updating metadata in db\n%!";
@@ -759,18 +757,10 @@ let refresh_remote_resource resource current_file =
   Utils.log_with_header
     "BEGIN: Refreshing remote resource (remote id=%s)\n%!"
     remote_id;
-  with_try
+  try_with_default
     (FilesResource.get
        ~std_params:file_std_params
-       ~fileId:remote_id)
-    (function
-        GapiRequest.NotModified session ->
-        Utils.log_with_header
-          "END: Refreshing remote resource (remote id=%s): Not modified\n%!"
-          remote_id;
-        SessionM.put session >>= fun () ->
-        SessionM.return current_file
-      | e -> throw e) >>= fun file ->
+       ~fileId:remote_id) >>= fun file ->
   Utils.log_with_header
     "END: Refreshing remote resource (remote id=%s)\n%!"
     remote_id;
@@ -899,20 +889,7 @@ and get_resource path trashed =
           if Cache.Resource.is_valid resource metadata_last_update then
             SessionM.return resource
           else
-            with_try
-              (refresh_resource resource cache)
-              (function
-                   GapiRequest.NotModified session ->
-                     Utils.log_with_header
-                       "END: Refreshing resource (id=%Ld): Remote id=%s not modified\n%!"
-                       resource.Cache.Resource.id
-                       (resource.Cache.Resource.remote_id |> Option.get);
-                     SessionM.put session >>= fun () ->
-                     let updated_resource = resource
-                       |> Cache.Resource.last_update ^= Unix.gettimeofday () in
-                     update_cached_resource cache updated_resource;
-                     SessionM.return updated_resource
-                 | e -> throw e)
+            try_with_default (refresh_resource resource cache)
     end >>= fun resource ->
     begin match resource.Cache.Resource.state with
         Cache.Resource.State.NotFound ->
@@ -963,18 +940,6 @@ let with_retry f resource =
       (function
            IO_error as e ->
              if n >= !Utils.max_retries then begin
-               let context = Context.get_ctx () in
-               let conflict_resolution = context
-                 |. Context.config_lens
-                 |. Config.conflict_resolution in
-               if resource.Cache.Resource.state =
-                     Cache.Resource.State.ToUpload
-                   && conflict_resolution =
-                     Config.ConflictResolutionStrategy.Server then begin
-                 let cache = context.Context.cache in
-                 update_cached_resource_state cache
-                   Cache.Resource.State.ToDownload resource.Cache.Resource.id;
-               end;
                throw e
              end else begin
                GapiUtils.wait_exponential_backoff n;
@@ -983,7 +948,8 @@ let with_retry f resource =
                  ~std_params:file_std_params
                  ~fileId >>= fun file ->
                let (state, verb) =
-                 if resource.Cache.Resource.state = Cache.Resource.State.ToUpload then
+                 if resource.Cache.Resource.state =
+                    Cache.Resource.State.ToUpload then
                    (Cache.Resource.State.ToUpload, "uploading")
                  else
                    (Cache.Resource.State.ToDownload, "downloading") in
@@ -1462,34 +1428,11 @@ let update_remote_resource path
       do_remote_update
       retry_update =
   let context = Context.get_ctx () in
-  let config = context |. Context.config_lens in
   let cache = context.Context.cache in
   let (path_in_cache, trashed) = get_path_in_cache path in
   let update_file =
     get_resource path_in_cache trashed >>= fun resource ->
-    with_try
-      (do_remote_update resource)
-      (function
-           GapiRequest.PreconditionFailed session
-         | GapiRequest.Conflict session ->
-             Utils.log_with_header "BEGIN: Conflict detected\n%!";
-             GapiMonad.SessionM.put session >>
-             begin match config.Config.conflict_resolution with
-                 Config.ConflictResolutionStrategy.Client ->
-                   Utils.log_with_header "Retrying after conflict\n%!";
-                   retry_update resource >>= fun file ->
-                   Utils.log_with_header "END: Conflict detected: Local changes successfully submitted\n%!";
-                   SessionM.return file
-               | Config.ConflictResolutionStrategy.Server ->
-                   Utils.log_with_header
-                     "END: Conflict detected: Keeping server changes\n";
-                   Utils.log_with_header
-                     "Deleting resource (id=%Ld) from cache\n%!"
-                     resource.Cache.Resource.id;
-                   Cache.Resource.delete_resource cache resource;
-                   throw IO_error
-             end
-         | e -> throw e) >>= fun file_option ->
+    try_with_default (do_remote_update resource) >>= fun file_option ->
     begin match file_option with
         None ->
           purge_cache cache resource
