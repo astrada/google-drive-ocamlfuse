@@ -12,6 +12,7 @@ exception Directory_not_empty
 exception No_attribute
 exception Existing_attribute
 exception Invalid_operation
+exception Not_modified
 
 let folder_mime_type = "application/vnd.google-apps.folder"
 let file_fields =
@@ -513,7 +514,6 @@ let get_metadata () =
       } in
     AboutResource.get
       ~std_params >>= fun about ->
-    SessionM.get >>= fun session ->
     get_start_page_token start_page_token_db >>= fun start_page_token ->
     let metadata = {
       Cache.Metadata.display_name = about.About.user.User.displayName;
@@ -539,7 +539,7 @@ let get_metadata () =
       context.Context.metadata
     end in
 
-  let update_resource_cache start_page_token new_metadata =
+  let update_resource_cache new_metadata =
     let get_all_changes =
       let rec loop pageToken accu =
         let std_params =
@@ -558,7 +558,7 @@ let get_metadata () =
         else
           loop change_list.ChangeList.nextPageToken changes
       in
-      loop start_page_token []
+      loop new_metadata.Cache.Metadata.start_page_token []
     in
 
     let request_changes =
@@ -620,7 +620,8 @@ let get_metadata () =
           SessionM.return (List.length change_list.ChangeList.changes)
     in
 
-    request_remaining_changes start_page_token >>= fun remaining_changes ->
+    request_remaining_changes
+      new_metadata.Cache.Metadata.start_page_token >>= fun remaining_changes ->
     if remaining_changes = 0 then begin
       Utils.log_with_header
         "END: Getting metadata: No need to update resource cache\n%!";
@@ -699,23 +700,11 @@ let get_metadata () =
       Option.map_default
         Cache.Metadata.cache_size.GapiLens.get 0L metadata in
     Utils.log_with_header "BEGIN: Refreshing metadata\n%!";
-    let get_server_metadata =
-      with_try
-        (request_metadata start_page_token cache_size)
-        (function
-            GapiRequest.NotModified session ->
-              Utils.log_with_header
-                "Refreshing metadata: Not modified\n%!";
-              SessionM.put session >>= fun () ->
-              let m = Option.get metadata in
-              let m' =
-                m |> Cache.Metadata.last_update ^= Unix.gettimeofday () in
-              SessionM.return m'
-          | e -> throw e) in
-    get_server_metadata >>= fun server_metadata ->
+    with_try
+      (request_metadata start_page_token cache_size)
+      handle_default_exceptions >>= fun server_metadata ->
     Utils.log_with_header "END: Refreshing metadata\n";
-    update_resource_cache
-      start_page_token server_metadata >>= fun updated_metadata ->
+    update_resource_cache server_metadata >>= fun updated_metadata ->
     Utils.log_with_header "BEGIN: Updating metadata in db\n%!";
     Cache.Metadata.insert_metadata context.Context.cache updated_metadata;
     Utils.log_with_header "END: Updating metadata in db\n";
