@@ -259,13 +259,13 @@ let create_resource ?local_name path =
 
 let create_root_resource trashed =
   let resource = create_resource root_directory in
-    { resource with
-          Cache.Resource.remote_id = Some root_folder_id;
-          mime_type = Some folder_mime_type;
-          size = Some 0L;
-          parent_path = "";
-          trashed = Some trashed;
-    }
+  { resource with
+        Cache.Resource.remote_id = Some root_folder_id;
+        mime_type = Some folder_mime_type;
+        size = Some 0L;
+        parent_path = "";
+        trashed = Some trashed;
+  }
 
 let get_unique_filename name is_document get_document_format filename_table =
   let (complete_name, without_extension) =
@@ -305,8 +305,7 @@ let recompute_path resource name =
       resource.Cache.Resource.parent_path
       (Option.default false resource.Cache.Resource.trashed) in
   let (filename, local_name) =
-    get_unique_filename_from_resource resource name filename_table
-  in
+    get_unique_filename_from_resource resource name filename_table in
   let path = Filename.concat resource.Cache.Resource.parent_path filename in
   (path, local_name)
 
@@ -416,12 +415,15 @@ let get_root_resource trashed =
 
 let cache_size_mutex = Mutex.create ()
 
-let update_cache_size new_size metadata cache =
+let update_cache_size delta metadata cache =
+  Utils.log_with_header "BEGIN: Updating cache size (delta=%Ld) in db\n%!"
+    delta;
+  let new_size = Int64.add metadata.Cache.Metadata.cache_size delta in
   let metadata = metadata
     |> Cache.Metadata.cache_size ^= new_size in
-  Utils.log_with_header "BEGIN: Updating cache size (%Ld) in db\n%!" new_size;
-  Cache.Metadata.insert_metadata cache metadata;
-  Utils.log_with_header "END: Updating cache size (%Ld) in db\n%!" new_size;
+  Cache.Metadata.update_cache_size cache delta;
+  Utils.log_with_header "END: Updating cache size (new size=%Ld) in db\n%!"
+    new_size;
   Context.update_ctx (Context.metadata ^= Some metadata)
 
 let shrink_cache file_size max_cache_size_mb metadata cache =
@@ -433,24 +435,25 @@ let shrink_cache file_size max_cache_size_mb metadata cache =
         let target_size =
           Int64.add metadata.Cache.Metadata.cache_size file_size in
         if target_size <= max_cache_size then begin
-          update_cache_size target_size metadata cache;
+          update_cache_size file_size metadata cache;
         end else begin
           let resources =
             Cache.Resource.select_resources_order_by_last_update cache in
-          let (new_cache_size, resources_to_free) =
+          let (new_cache_size, total_delta, resources_to_free) =
             List.fold_left
-              (fun (new_cache_size, rs) resource ->
+              (fun (new_cache_size, delta, rs) resource ->
                 if new_cache_size <= max_cache_size then
-                  (new_cache_size, rs)
+                  (new_cache_size, delta, rs)
                 else begin
-                  let new_size = Int64.sub
-                    new_cache_size
-                    (Option.get resource.Cache.Resource.size) in
-                  (new_size, resource :: rs)
+                  let size_to_free =
+                    Option.default 0L resource.Cache.Resource.size in
+                  let new_size = Int64.sub new_cache_size size_to_free in
+                  let new_delta = Int64.add delta (Int64.neg size_to_free) in
+                  (new_size, new_delta, resource :: rs)
                 end)
-              (target_size, [])
+              (target_size, file_size, [])
               resources in
-          update_cache_size new_cache_size metadata cache;
+          update_cache_size total_delta metadata cache;
           List.iter
             (fun resource ->
                update_cached_resource_state cache
@@ -468,9 +471,8 @@ let delete_resources metadata cache resources =
       Cache.Resource.delete_resources cache resources;
       let total_size =
         Cache.delete_files_from_cache cache resources in
-      let new_cache_size =
-        Int64.sub metadata.Cache.Metadata.cache_size total_size in
-      update_cache_size new_cache_size metadata cache)
+      if total_size > 0L then
+        update_cache_size (Int64.neg total_size) metadata cache)
     (fun () -> Mutex.unlock cache_size_mutex)
 
 let update_cache_size_for_documents cache resource content_path op =
@@ -484,9 +486,8 @@ let update_cache_size_for_documents cache resource content_path op =
           let size = stats.Unix.LargeFile.st_size in
           let context = Context.get_ctx () in
           let metadata = context.Context.metadata |> Option.get in
-          let new_cache_size =
-            op metadata.Cache.Metadata.cache_size size in
-          update_cache_size new_cache_size metadata cache
+          let delta = op size in
+          update_cache_size delta metadata cache
         with e -> Utils.log_exception e
       end)
     (fun () -> Mutex.unlock cache_size_mutex)
@@ -608,34 +609,43 @@ let get_metadata () =
 
     let request_remaining_changes start_page_token_db =
       if start_page_token_db = "" then
-        SessionM.return change_limit
+        SessionM.return (false, true)
       else
         let std_params =
           { GapiService.StandardParameters.default with
-            GapiService.StandardParameters.fields =
-              "changes(kind),newStartPageToken"
+                GapiService.StandardParameters.fields = "newStartPageToken"
           } in
         ChangesResource.list
           ~std_params
           ~includeRemoved:true
           ~pageSize:change_limit
           ~pageToken:start_page_token_db >>= fun change_list ->
-        if change_list.ChangeList.newStartPageToken = "" then
-          SessionM.return change_limit
-        else
-          SessionM.return (List.length change_list.ChangeList.changes)
+        let (no_changes, over_limit) =
+          (change_list.ChangeList.newStartPageToken = start_page_token_db,
+           change_list.ChangeList.newStartPageToken = "") in
+        SessionM.return (no_changes, over_limit)
     in
 
     request_remaining_changes
-      new_metadata.Cache.Metadata.start_page_token >>= fun remaining_changes ->
-    if remaining_changes = 0 then begin
+      new_metadata.Cache.Metadata.start_page_token >>= fun (no_changes,
+                                                            over_limit) ->
+    if no_changes then begin
       Utils.log_with_header
         "END: Getting metadata: No need to update resource cache\n%!";
       SessionM.return new_metadata
-    end else if remaining_changes = change_limit then begin
-      Utils.log_with_header
-        "END: Getting metadata: Too many changes\n%!";
-      SessionM.return new_metadata
+    end else if over_limit then begin
+      Utils.log_with_header "END: Getting metadata: Too many changes\n";
+      Utils.log_with_header "BEGIN: Getting new start page token\n%!";
+      get_start_page_token "" >>= fun new_start_page_token ->
+      Utils.log_with_header "END: Getting new start page token (%s)\n%!"
+        new_start_page_token;
+      Utils.log_with_header "BEGIN: Invalidating resources\n%!";
+      Cache.Resource.invalidate_all cache;
+      Utils.log_with_header "END: Invalidating resources\n%!";
+      SessionM.return {
+        new_metadata with
+            Cache.Metadata.start_page_token = new_start_page_token;
+      }
     end else begin match metadata with
         None ->
           SessionM.return new_metadata
@@ -759,20 +769,6 @@ let statfs () =
 (* END Metadata *)
 
 (* Resources *)
-let refresh_remote_resource resource current_file =
-  let remote_id = resource.Cache.Resource.remote_id |> Option.get in
-  Utils.log_with_header
-    "BEGIN: Refreshing remote resource (remote id=%s)\n%!"
-    remote_id;
-  try_with_default
-    (FilesResource.get
-       ~std_params:file_std_params
-       ~fileId:remote_id) >>= fun file ->
-  Utils.log_with_header
-    "END: Refreshing remote resource (remote id=%s)\n%!"
-    remote_id;
-  SessionM.return file
-
 let get_file_from_server parent_folder_id name trashed =
   Utils.log_with_header
     "BEGIN: Getting resource %s (in folder %s) from server\n%!"
@@ -1054,7 +1050,7 @@ let download_resource resource =
       shrink_cache () >>= fun () ->
       update_cached_resource_state cache
         Cache.Resource.State.Downloading resource.Cache.Resource.id;
-      update_cache_size_for_documents cache resource content_path Int64.sub;
+      update_cache_size_for_documents cache resource content_path Int64.neg;
       with_try
         (do_api_download ())
         (fun e ->
@@ -1062,7 +1058,7 @@ let download_resource resource =
              Cache.Resource.State.ToDownload resource.Cache.Resource.id;
            handle_default_exceptions e)
     end >>= fun () ->
-    update_cache_size_for_documents cache resource content_path Int64.add;
+    update_cache_size_for_documents cache resource content_path Std.identity;
     Utils.log_with_header
       "END: Downloading resource (id=%Ld)\n%!"
       resource.Cache.Resource.id;
@@ -1455,11 +1451,7 @@ let update_remote_resource path
                     go content_path
                 end;
           end;
-          let refresh_file = refresh_remote_resource resource file in
-          let refreshed_file =
-            do_request refresh_file |> fst
-          in
-          save_to_db cache resource refreshed_file
+          save_to_db cache resource file
     end;
     SessionM.return ()
   in
@@ -1601,13 +1593,14 @@ let upload resource =
     ~std_params:file_std_params
     ?media_source
     ~fileId:remote_id
-    file_patch >>= fun updated_file ->
-  let updated_resource =
-    update_resource_from_file resource updated_file in
-  refresh_remote_resource updated_resource updated_file >>= fun file ->
+    file_patch >>= fun file ->
+  let resource = update_resource_from_file resource file in
   Utils.log_with_header
     "END: Uploading file (id=%Ld, path=%s, cache path=%s, content type=%s).\n%!"
-    resource.Cache.Resource.id resource.Cache.Resource.path content_path mime_type;
+    resource.Cache.Resource.id
+    resource.Cache.Resource.path
+    content_path
+    mime_type;
   let reloaded_resource =
     Cache.Resource.select_resource_with_remote_id cache file.File.id in
   let resource = Option.default resource reloaded_resource in
