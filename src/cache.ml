@@ -245,6 +245,16 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_invalidate_all_stmt db =
+    let sql =
+      "UPDATE resource \
+       SET \
+         state = 'ToDownload' \
+       WHERE state <> 'ToUpload' \
+         AND state <> 'Uploading';"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_invalidate_trash_bin_stmt db =
     let sql =
       "UPDATE resource \
@@ -366,7 +376,7 @@ struct
          :last_update \
        );"
     in
-      Sqlite3.prepare db sql
+    Sqlite3.prepare db sql
 
   let prepare_select_stmt db =
     let sql =
@@ -374,7 +384,15 @@ struct
        FROM metadata \
        WHERE id = 1;"
     in
-      Sqlite3.prepare db sql
+    Sqlite3.prepare db sql
+
+  let prepare_update_cache_size_stmt db =
+    let sql =
+      "UPDATE metadata
+       SET cache_size = cache_size + :delta
+       WHERE id = 1;"
+    in
+    Sqlite3.prepare db sql
 
 end
 (* END Prepare SQL *)
@@ -611,7 +629,9 @@ struct
     let buffer = Buffer.create 64 in
     List.iter
       (fun (name, value) ->
-         let s = Printf.sprintf "%S:%S;" name value in
+         let s = Printf.sprintf "%S:%S;"
+             (String.sub name 2 (String.length name - 2))
+             value in
          Buffer.add_string buffer s)
       xattrs;
     Buffer.contents buffer
@@ -667,7 +687,7 @@ struct
   let get_xattrs app_properties =
     render_xattrs
       (List.filter
-         (fun (n, _) -> ExtString.String.starts_with "x-" n)
+         (fun (n, _) -> ExtString.String.starts_with n "x-")
          app_properties)
 
   let xattr_to_app_property name value =
@@ -804,6 +824,14 @@ struct
               bind_int stmt ":id" (Some id);
               final_step stmt)
            ids;
+         finalize_stmt stmt)
+
+  let invalidate_all cache =
+    with_transaction cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_invalidate_all_stmt db in
+         reset_stmt stmt;
+         final_step stmt;
          finalize_stmt stmt)
 
   let invalidate_trash_bin cache =
@@ -1085,6 +1113,13 @@ struct
            select_first_row stmt (fun _ -> ()) row_to_metadata in
          finalize_stmt stmt;
          result)
+
+  let update_cache_size cache delta =
+    with_transaction cache
+      (fun db ->
+         let stmt = MetadataStmts.prepare_update_cache_size_stmt db in
+         bind_int stmt ":delta" (Some delta);
+         finalize_stmt stmt)
   (* END Queries *)
 
   let is_valid metadata_cache_time metadata =
