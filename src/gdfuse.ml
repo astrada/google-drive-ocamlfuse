@@ -271,6 +271,9 @@ let handle_exception e label param =
         raise (Unix.Unix_error (Unix.EEXIST, label, param))
     | Drive.Invalid_operation ->
         raise (Unix.Unix_error (Unix.EINVAL, label, param))
+    | Unix.Unix_error _ as e ->
+        Utils.log_exception e;
+        raise e
     | e ->
         Utils.log_exception e;
         raise (Unix.Unix_error (Unix.EIO, label, param))
