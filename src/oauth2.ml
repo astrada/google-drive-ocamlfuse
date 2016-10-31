@@ -37,11 +37,11 @@ let do_request go =
             refresh_token = state.State.refresh_token
           }
       in
-        GapiConversation.with_session
-          ~auth_context
-          config
-          curl_state
-          interact
+      GapiConversation.with_session
+        ~auth_context
+        config
+        curl_state
+        interact
     with
         Failure message as e ->
           let check_curl_error () =
@@ -71,16 +71,16 @@ let do_request go =
           GaeProxy.refresh_access_token ();
           (* Retry with refreshed token *)
           try_request (n + 1)
-      | GapiService.ServiceError e ->
+      | GapiService.ServiceError (_, e) ->
           Utils.log_with_header "ServiceError\n%!";
           let message =
             e |> GapiError.RequestError.to_data_model
               |> GapiJson.data_model_to_json
               |> Yojson.Safe.to_string
           in
-            failwith message
+          failwith message
   in
-    try_request 0
+  try_request 0
 
 (* Get access token using the installed apps flow or print authorization URL
  * if headleass mode is on *)

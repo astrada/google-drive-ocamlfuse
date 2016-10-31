@@ -155,7 +155,14 @@ let throw e _ =
 
 let handle_default_exceptions =
   function
-      GapiRequest.PermissionDenied session ->
+      GapiService.ServiceError (_, e) ->
+        let message =
+          e |> GapiError.RequestError.to_data_model
+            |> GapiJson.data_model_to_json
+            |> Yojson.Safe.to_string in
+        Utils.log_with_header "Service error: %s.\n%!" message;
+        throw Invalid_operation
+    | GapiRequest.PermissionDenied session ->
         Utils.log_with_header "Server error: Permission denied.\n%!";
         throw Permission_denied
     | GapiRequest.RequestTimeout _ ->
