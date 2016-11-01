@@ -126,8 +126,6 @@ struct
      version, "
   let app_properties_fields =
     "file_mode_bits, \
-     parent_path_hash, \
-     local_name, \
      uid, \
      gid, \
      link_target, \
@@ -161,8 +159,6 @@ struct
          :web_view_link, \
          :version, \
          :file_mode_bits, \
-         :parent_path_hash, \
-         :local_name, \
          :uid, \
          :gid, \
          :link_target, \
@@ -193,8 +189,6 @@ struct
          web_view_link = :web_view_link, \
          version = :version, \
          file_mode_bits = :file_mode_bits, \
-         parent_path_hash = :parent_path_hash, \
-         local_name = :local_name, \
          uid = :uid, \
          gid = :gid, \
          link_target = :link_target, \
@@ -492,8 +486,6 @@ struct
     version : int64 option;
     (* app data stored in Drive *)
     file_mode_bits : int64 option;
-    parent_path_hash : string option;
-    local_name : string option;
     uid : int64 option;
     gid : int64 option;
     link_target : string option;
@@ -564,14 +556,6 @@ struct
   let file_mode_bits = {
     GapiLens.get = (fun x -> x.file_mode_bits);
     GapiLens.set = (fun v x -> { x with file_mode_bits = v })
-  }
-  let parent_path_hash = {
-    GapiLens.get = (fun x -> x.parent_path_hash);
-    GapiLens.set = (fun v x -> { x with parent_path_hash = v })
-  }
-  let local_name = {
-    GapiLens.get = (fun x -> x.local_name);
-    GapiLens.set = (fun v x -> { x with local_name = v })
   }
   let uid = {
     GapiLens.get = (fun x -> x.uid);
@@ -696,18 +680,6 @@ struct
   let xattr_no_value_to_app_property name =
     ("x-" ^ name, "")
 
-  let get_local_name app_properties =
-    find_app_property "n" app_properties
-
-  let local_name_to_app_property local_name =
-    ("n", Option.default "" local_name)
-
-  let get_parent_path_hash app_properties =
-    find_app_property "p" app_properties
-
-  let parent_path_hash_to_app_property parent_path_hash =
-    ("p", Option.default "" parent_path_hash)
-
   (* Queries *)
   let bind_resource_parameters stmt resource =
     bind_text stmt ":remote_id" resource.remote_id;
@@ -724,8 +696,6 @@ struct
     bind_text stmt ":web_view_link" resource.web_view_link;
     bind_int stmt ":version" resource.version;
     bind_int stmt ":file_mode_bits" resource.file_mode_bits;
-    bind_text stmt ":parent_path_hash" resource.parent_path_hash;
-    bind_text stmt ":local_name" resource.local_name;
     bind_int stmt ":uid" resource.uid;
     bind_int stmt ":gid" resource.gid;
     bind_text stmt ":link_target" resource.link_target;
@@ -901,16 +871,14 @@ struct
       web_view_link = row_data.(12) |> data_to_string;
       version = row_data.(13) |> data_to_int64;
       file_mode_bits = row_data.(14) |> data_to_int64;
-      parent_path_hash = row_data.(15) |> data_to_string;
-      local_name = row_data.(16) |> data_to_string;
-      uid = row_data.(17) |> data_to_int64;
-      gid = row_data.(18) |> data_to_int64;
-      link_target = row_data.(19) |> data_to_string;
-      xattrs = row_data.(20) |> data_to_string |> Option.get;
-      parent_path = row_data.(21) |> data_to_string |> Option.get;
-      path = row_data.(22) |> data_to_string |> Option.get;
-      state = row_data.(23) |> data_to_string |> Option.get |> State.of_string;
-      last_update = row_data.(24) |> data_to_float |> Option.get;
+      uid = row_data.(15) |> data_to_int64;
+      gid = row_data.(16) |> data_to_int64;
+      link_target = row_data.(17) |> data_to_string;
+      xattrs = row_data.(18) |> data_to_string |> Option.get;
+      parent_path = row_data.(19) |> data_to_string |> Option.get;
+      path = row_data.(20) |> data_to_string |> Option.get;
+      state = row_data.(21) |> data_to_string |> Option.get |> State.of_string;
+      last_update = row_data.(22) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -1193,8 +1161,6 @@ let setup_db cache =
             web_view_link TEXT NULL, \
             version INTEGER NULL, \
             file_mode_bits INTEGER NULL, \
-            parent_path_hash TEXT NULL, \
-            local_name TEXT NULL, \
             uid INTEGER NULL, \
             gid INTEGER NULL, \
             link_target TEXT NULL, \
