@@ -167,7 +167,7 @@ let handle_default_exceptions =
             |> Yojson.Safe.to_string in
         Utils.log_with_header "Service error: %s.\n%!" message;
         throw Invalid_operation
-    | GapiRequest.PermissionDenied session ->
+    | GapiRequest.PermissionDenied _ ->
         Utils.log_with_header "Server error: Permission denied.\n%!";
         throw Permission_denied
     | GapiRequest.RequestTimeout _ ->
@@ -233,7 +233,7 @@ let build_resource_tables parent_path trashed =
     resources;
   (filename_table, remote_id_table)
 
-let create_resource ?local_name path =
+let create_resource path =
   let parent_path = Filename.dirname path in
   { Cache.Resource.id = 0L;
     remote_id = None;
@@ -250,8 +250,8 @@ let create_resource ?local_name path =
     web_view_link = None;
     version = None;
     file_mode_bits = None;
-    parent_path_hash = get_path_hash parent_path;
-    local_name;
+    parent_path_hash = None;
+    local_name = None;
     uid = None;
     gid = None;
     link_target = None;
@@ -315,15 +315,6 @@ let recompute_path resource name =
   (path, local_name)
 
 let update_resource_from_file ?state resource file =
-  let (path, local_name) =
-    match resource.Cache.Resource.name with
-        Some cached_name ->
-          if cached_name <> file.File.name then
-            recompute_path resource file.File.name
-          else (resource.Cache.Resource.path, None)
-      | None -> (resource.Cache.Resource.path, None)
-  in
-  let parent_path = Filename.dirname path in
   { resource with
         Cache.Resource.remote_id = Some file.File.id;
         name = Some file.File.name;
@@ -341,15 +332,14 @@ let update_resource_from_file ?state resource file =
         version = Some file.File.version;
         file_mode_bits = Cache.Resource.get_file_mode_bits
             file.File.appProperties;
-        parent_path_hash = get_path_hash parent_path;
-        local_name;
+        parent_path_hash = Cache.Resource.get_parent_path_hash
+            file.File.appProperties;
+        local_name = Cache.Resource.get_local_name file.File.appProperties;
         uid = Cache.Resource.get_uid file.File.appProperties;
         gid = Cache.Resource.get_gid file.File.appProperties;
         link_target = Cache.Resource.get_link_target file.File.appProperties;
         xattrs = Cache.Resource.get_xattrs file.File.appProperties;
         last_update = Unix.gettimeofday ();
-        path;
-        parent_path;
         state = Option.default resource.Cache.Resource.state state;
   }
 
@@ -875,7 +865,6 @@ and get_resource path trashed =
           Cache.Resource.delete_resource cache resource;
           get_new_resource cache
       | Some file ->
-          SessionM.get >>= fun session ->
           let updated_resource = update_resource_from_file
               resource file in
           update_cached_resource cache updated_resource;
@@ -961,7 +950,6 @@ let with_retry f resource =
                    (Cache.Resource.State.ToUpload, "uploading")
                  else
                    (Cache.Resource.State.ToDownload, "downloading") in
-               SessionM.get >>= fun session ->
                let refreshed_resource =
                  update_resource_from_file
                    ~state res file in
@@ -1152,6 +1140,66 @@ let is_filesystem_read_only () =
 let is_file_read_only resource =
   not (Option.default true resource.Cache.Resource.can_edit) ||
   Cache.Resource.is_document resource
+
+let update_resource_and_file_paths ?local_name resource file =
+  let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
+  Utils.log_with_header
+    "BEGIN: Updating paths (remote id=%s, path=%s, parent_path=%s, \
+     local_name=%s, parent_path_hash=%s)\n%!"
+    remote_id
+    resource.Cache.Resource.path
+    resource.Cache.Resource.parent_path
+    (Option.default "None" (match local_name with
+          None -> resource.Cache.Resource.local_name
+        | Some _ -> local_name))
+    (Option.default "None" resource.Cache.Resource.parent_path_hash);
+  let (path, local_name) =
+    match resource.Cache.Resource.name, local_name with
+        None, None -> (resource.Cache.Resource.path, None)
+      | Some cached_name, None ->
+          if cached_name <> file.File.name then
+            recompute_path resource file.File.name
+          else (resource.Cache.Resource.path, None)
+      | _, Some _ -> (resource.Cache.Resource.path, local_name)
+  in
+  let parent_path = Filename.dirname path in
+  begin match local_name with
+      None ->
+        begin
+          Utils.log_with_header
+            "END: Updating paths: no need to update \
+             paths (remote id=%s, path=%s, parent_path=%s)\n%!"
+            remote_id
+            path
+            parent_path;
+          SessionM.return resource
+        end
+    | Some _ ->
+        begin
+          let parent_path_hash = get_path_hash parent_path in
+          let file_patch = File.empty
+            |> File.appProperties ^= [
+                 Cache.Resource.local_name_to_app_property
+                   local_name;
+                 Cache.Resource.parent_path_hash_to_app_property
+                   parent_path_hash;
+               ] in
+          FilesResource.update
+            ~std_params:file_std_params
+            ~fileId:remote_id
+            file_patch >>= fun file ->
+          let resource = update_resource_from_file resource file in
+          Utils.log_with_header
+            "END: Updating paths (remote id=%s, path=%s, parent_path=%s, \
+             local_name=%s, parent_path_hash=%s)\n%!"
+            remote_id
+            resource.Cache.Resource.path
+            resource.Cache.Resource.parent_path
+            (Option.default "None" resource.Cache.Resource.local_name)
+            (Option.default "None" resource.Cache.Resource.parent_path_hash);
+          SessionM.return resource
+        end
+  end
 (* END Resources *)
 
 (* stat *)
@@ -1353,11 +1401,12 @@ let read_dir path =
                (None, file))
           files
       in
-      let resources =
+      let resources_m =
         List.map
           (fun (resource, file) ->
              match resource with
-                 Some r -> r
+                 Some r ->
+                   SessionM.return r
                | None ->
                    let (filename, name_counter) =
                      get_unique_filename_from_file file filename_table in
@@ -1365,10 +1414,13 @@ let read_dir path =
                      if name_counter > 0 then Some filename else None in
                    let resource_path =
                      Filename.concat path_in_cache filename in
-                   let resource = create_resource ?local_name resource_path in
-                   update_resource_from_file resource file)
+                   let resource = create_resource resource_path in
+                   update_resource_and_file_paths ?local_name resource file)
           resources_and_files
       in
+      let resources =
+        SessionM.sequence resources_m |> do_request |> fst in
+
       Utils.log_with_header
         "BEGIN: Inserting folder resources into db (trashed=%b)\n%!"
         trashed;
@@ -1697,7 +1749,6 @@ let create_remote_resource ?link_target is_folder path mode =
     FilesResource.create
       ~std_params:file_std_params
       file >>= fun created_file ->
-    SessionM.get >>= fun session ->
     Utils.log_with_header
       "END: Creating file/folder (path=%s, trashed=%b) on server\n%!"
       path_in_cache trashed;
@@ -1891,17 +1942,23 @@ let rename path new_path =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       if old_name <> new_name then begin
         delete_target_path >>= fun () ->
-        Utils.log_with_header "BEGIN: Renaming file (remote id=%s) from %s to %s\n%!"
+        Utils.log_with_header
+          "BEGIN: Renaming file (remote id=%s) from %s to %s\n%!"
           remote_id old_name new_name;
         let file_patch =
           { File.empty with
                 File.name = new_name;
+                appProperties = [
+                  Cache.Resource.local_name_to_app_property None;
+                  Cache.Resource.parent_path_hash_to_app_property None;
+                ];
           } in
         FilesResource.update
           ~std_params:file_std_params
           ~fileId:remote_id
           file_patch >>= fun patched_file ->
-        Utils.log_with_header "END: Renaming file (remote id=%s) from %s to %s\n%!"
+        Utils.log_with_header
+          "END: Renaming file (remote id=%s) from %s to %s\n%!"
           remote_id old_name new_name;
         SessionM.return (Some patched_file)
       end else begin
@@ -1912,15 +1969,21 @@ let rename path new_path =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
       begin if old_parent_path <> new_parent_path then begin
         delete_target_path >>= fun () ->
-        Utils.log_with_header "BEGIN: Moving file (remote id=%s) from %s to %s\n%!"
+        Utils.log_with_header
+          "BEGIN: Moving file (remote id=%s) from %s to %s\n%!"
           remote_id old_parent_path new_parent_path;
         get_resource
           new_parent_path target_trashed >>= fun new_parent_resource ->
         let new_parent_id =
-          new_parent_resource |. Cache.Resource.remote_id |> Option.get
-        in
-        let file_patch = File.empty
-          |> File.parents ^= [new_parent_id] in
+          new_parent_resource |. Cache.Resource.remote_id |> Option.get in
+        let file_patch =
+          { File.empty with
+                File.parents = [new_parent_id];
+                File.appProperties = [
+                  Cache.Resource.local_name_to_app_property None;
+                  Cache.Resource.parent_path_hash_to_app_property None;
+                ];
+          } in
         FilesResource.update
           ~std_params:file_std_params
           ~fileId:remote_id
@@ -1957,14 +2020,9 @@ let rename path new_path =
           let resource_to_save =
             if new_parent_path <> old_parent_path &&
                new_name = old_name then
-              let (path, local_name) =
-                recompute_path resource_with_new_path new_name in
-              let parent_path = Filename.dirname path in
-              resource_with_new_path
-                |> Cache.Resource.path ^= path
-                |> Cache.Resource.local_name ^= local_name
-                |> Cache.Resource.parent_path ^= parent_path
-                |> Cache.Resource.parent_path_hash ^= get_path_hash parent_path
+              do_request
+                (update_resource_and_file_paths resource_with_new_path file)
+              |> fst
             else resource_with_new_path
           in
           update_cached_resource cache resource_to_save;
