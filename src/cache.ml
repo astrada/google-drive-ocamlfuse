@@ -696,6 +696,18 @@ struct
   let xattr_no_value_to_app_property name =
     ("x-" ^ name, "")
 
+  let get_local_name app_properties =
+    find_app_property "n" app_properties
+
+  let local_name_to_app_property local_name =
+    ("n", Option.default "" local_name)
+
+  let get_parent_path_hash app_properties =
+    find_app_property "p" app_properties
+
+  let parent_path_hash_to_app_property parent_path_hash =
+    ("p", Option.default "" parent_path_hash)
+
   (* Queries *)
   let bind_resource_parameters stmt resource =
     bind_text stmt ":remote_id" resource.remote_id;
