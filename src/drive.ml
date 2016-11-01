@@ -56,6 +56,11 @@ let clean_filename name = Str.global_replace chars_blacklist_regexp "_" name
 let apostrophe_regexp = Str.regexp (Str.quote "'")
 let escape_apostrophe name = Str.global_replace apostrophe_regexp "\\'" name
 
+let json_length s =
+  let length_with_quotes =
+    `String s |> Yojson.Safe.to_string |> String.length in
+  length_with_quotes - 2
+
 let common_double_extension_suffixes = [".gz"; ".z"; ".bz2"]
 let split_filename filename =
   let split full =
@@ -1675,7 +1680,7 @@ let create_remote_resource ?link_target is_folder path mode =
     let appProperties = match link_target with
         None -> appProperties
       | Some link ->
-          if String.length link > max_link_target_length then
+          if json_length link > max_link_target_length then
             raise Invalid_operation
           else
             Cache.Resource.link_target_to_app_property link :: appProperties in
@@ -2095,7 +2100,7 @@ let set_xattr path name value xflags =
         | Fuse.REPLACE -> if not existing then raise No_attribute
         | Fuse.AUTO -> ()
       end;
-      let attribute_length = (String.length name) + (String.length value) in
+      let attribute_length = json_length name + json_length value in
       if attribute_length > max_attribute_length then raise Invalid_operation;
       let file_patch = File.empty
         |> File.appProperties ^= [
