@@ -16,8 +16,8 @@ exception Permission_denied
 let folder_mime_type = "application/vnd.google-apps.folder"
 let file_fields =
   "appProperties,capabilities(canEdit),createdTime,explicitlyTrashed,\
-   fileExtension,id,md5Checksum,mimeType,modifiedTime,name,parents,\
-   size,trashed,version,viewedByMeTime,webViewLink"
+   fileExtension,fullFileExtension,id,md5Checksum,mimeType,modifiedTime,\
+   name,parents,size,trashed,version,viewedByMeTime,webViewLink"
 let file_std_params =
   { GapiService.StandardParameters.default with
         GapiService.StandardParameters.fields = file_fields
@@ -61,33 +61,6 @@ let json_length s =
     `String s |> Yojson.Safe.to_string |> String.length in
   length_with_quotes - 2
 
-let common_double_extension_suffixes = [".gz"; ".z"; ".bz2"]
-let split_filename filename =
-  let split full =
-    try
-      let last_dot = String.rindex full '.' in
-      (Str.string_before full last_dot,
-       Str.string_after full last_dot)
-    with Not_found -> (full, "")
-  in
-
-  let (rest, first_extension) =
-    split filename in
-  let (base_name, second_extension) =
-    if List.mem
-         (String.lowercase first_extension)
-         common_double_extension_suffixes then
-      split rest
-    else
-      (rest, "")
-  in
-  let extension =
-    match (first_extension, second_extension) with
-        (_, "") -> first_extension
-      | (f, s) -> s ^ f
-  in
-  (base_name, extension)
-
 let get_remote_id_fingerprint word_length remote_id =
   let md5 = Cryptokit.Hash.md5 () in
   md5#add_string remote_id;
@@ -100,15 +73,22 @@ let get_remote_id_fingerprint word_length remote_id =
   let offset = 32 - length in
   String.sub h offset length
 
-let disambiguate_filename filename remote_id without_extension filename_table =
+let disambiguate_filename
+    filename
+    full_file_extension
+    remote_id
+    filename_table =
   let rec find_first_unique_filename filename counter =
     let new_candidate =
       let fingerprint = get_remote_id_fingerprint counter remote_id in
-      if without_extension then
-        Printf.sprintf "%s (%s)" filename fingerprint
-      else
-        let (base_name, extension) = split_filename filename in
-        Printf.sprintf "%s (%s)%s" base_name fingerprint extension
+      match full_file_extension with
+          "" ->
+            Printf.sprintf "%s (%s)" filename fingerprint
+        | extension ->
+            let base_name =
+              String.sub filename 0 (String.length filename -
+                                     String.length extension - 1) in
+            Printf.sprintf "%s (%s).%s" base_name fingerprint extension
     in
     if not (Hashtbl.mem filename_table new_candidate) then begin
       Utils.log_with_header "Checking: %s: OK\n%!" new_candidate;
@@ -198,9 +178,9 @@ let get_filename name is_document get_document_format =
   if is_document &&
       config.Config.docs_file_extension &&
       document_format <> "" then
-    (clean_name ^ "." ^ document_format, false)
+    clean_name ^ "." ^ document_format
   else
-    (clean_name, is_document)
+    clean_name
 
 let build_resource_tables parent_path trashed =
   let context = Context.get_ctx () in
@@ -213,7 +193,7 @@ let build_resource_tables parent_path trashed =
   List.iter
     (fun resource ->
        let name = Option.get resource.Cache.Resource.name in
-       let (clean_name, _) =
+       let clean_name =
          get_filename
            name
            (Cache.Resource.is_document resource)
@@ -244,6 +224,7 @@ let create_resource path =
     modified_time = None;
     viewed_by_me_time = None;
     file_extension = None;
+    full_file_extension = None;
     md5_checksum = None;
     size = None;
     can_edit = None;
@@ -272,16 +253,23 @@ let create_root_resource trashed =
   }
 
 let get_unique_filename
-    name remote_id is_document get_document_format filename_table =
-  let (complete_name, without_extension) =
-    get_filename name is_document get_document_format
-  in
+    name
+    full_file_extension
+    remote_id
+    is_document
+    get_document_format
+    filename_table =
+  let complete_name = get_filename name is_document get_document_format in
   disambiguate_filename
-    complete_name remote_id without_extension filename_table
+    complete_name
+    full_file_extension
+    remote_id
+    filename_table
 
 let get_unique_filename_from_resource resource name filename_table =
   get_unique_filename
     name
+    (Option.default "" resource.Cache.Resource.full_file_extension)
     (Option.default "" resource.Cache.Resource.remote_id)
     (Cache.Resource.is_document resource)
     (fun config -> Cache.Resource.get_format resource config)
@@ -290,6 +278,7 @@ let get_unique_filename_from_resource resource name filename_table =
 let get_unique_filename_from_file file filename_table =
   get_unique_filename
     file.File.name
+    file.File.fullFileExtension
     file.File.id
     (Cache.Resource.is_document_mime_type file.File.mimeType)
     (fun config ->
@@ -326,6 +315,7 @@ let update_resource_from_file ?state resource file =
         viewed_by_me_time =
           Some (Netdate.since_epoch file.File.viewedByMeTime);
         file_extension = Some file.File.fileExtension;
+        full_file_extension = Some file.File.fullFileExtension;
         md5_checksum = Some file.File.md5Checksum;
         size = Some file.File.size;
         can_edit = Some file.File.capabilities.File.Capabilities.canEdit;

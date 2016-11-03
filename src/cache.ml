@@ -118,6 +118,7 @@ struct
      modified_time, \
      viewed_by_me_time, \
      file_extension, \
+     full_file_extension, \
      md5_checksum, \
      size, \
      can_edit, \
@@ -152,6 +153,7 @@ struct
          :modified_time, \
          :viewed_by_me_time, \
          :file_extension, \
+         :full_file_extension, \
          :md5_checksum, \
          :size, \
          :can_edit, \
@@ -182,6 +184,7 @@ struct
          modified_time = :modified_time, \
          viewed_by_me_time = :viewed_by_me_time, \
          file_extension = :file_extension, \
+         full_file_extension = :full_file_extension, \
          md5_checksum = :md5_checksum, \
          size = :size, \
          can_edit = :can_edit, \
@@ -478,6 +481,7 @@ struct
     modified_time : float option;
     viewed_by_me_time : float option;
     file_extension : string option;
+    full_file_extension : string option;
     md5_checksum : string option;
     size : int64 option;
     can_edit : bool option;
@@ -528,6 +532,10 @@ struct
   let file_extension = {
     GapiLens.get = (fun x -> x.file_extension);
     GapiLens.set = (fun v x -> { x with file_extension = v })
+  }
+  let full_file_extension = {
+    GapiLens.get = (fun x -> x.full_file_extension);
+    GapiLens.set = (fun v x -> { x with full_file_extension = v })
   }
   let md5_checksum = {
     GapiLens.get = (fun x -> x.md5_checksum);
@@ -689,6 +697,7 @@ struct
     bind_float stmt ":modified_time" resource.modified_time;
     bind_float stmt ":viewed_by_me_time" resource.viewed_by_me_time;
     bind_text stmt ":file_extension" resource.file_extension;
+    bind_text stmt ":full_file_extension" resource.full_file_extension;
     bind_text stmt ":md5_checksum" resource.md5_checksum;
     bind_int stmt ":size" resource.size;
     bind_bool stmt ":can_edit" resource.can_edit;
@@ -864,21 +873,22 @@ struct
       modified_time = row_data.(5) |> data_to_float;
       viewed_by_me_time = row_data.(6) |> data_to_float;
       file_extension = row_data.(7) |> data_to_string;
-      md5_checksum = row_data.(8) |> data_to_string;
-      size = row_data.(9) |> data_to_int64;
-      can_edit = row_data.(10) |> data_to_bool;
-      trashed = row_data.(11) |> data_to_bool;
-      web_view_link = row_data.(12) |> data_to_string;
-      version = row_data.(13) |> data_to_int64;
-      file_mode_bits = row_data.(14) |> data_to_int64;
-      uid = row_data.(15) |> data_to_int64;
-      gid = row_data.(16) |> data_to_int64;
-      link_target = row_data.(17) |> data_to_string;
-      xattrs = row_data.(18) |> data_to_string |> Option.get;
-      parent_path = row_data.(19) |> data_to_string |> Option.get;
-      path = row_data.(20) |> data_to_string |> Option.get;
-      state = row_data.(21) |> data_to_string |> Option.get |> State.of_string;
-      last_update = row_data.(22) |> data_to_float |> Option.get;
+      full_file_extension = row_data.(8) |> data_to_string;
+      md5_checksum = row_data.(9) |> data_to_string;
+      size = row_data.(10) |> data_to_int64;
+      can_edit = row_data.(11) |> data_to_bool;
+      trashed = row_data.(12) |> data_to_bool;
+      web_view_link = row_data.(13) |> data_to_string;
+      version = row_data.(14) |> data_to_int64;
+      file_mode_bits = row_data.(15) |> data_to_int64;
+      uid = row_data.(16) |> data_to_int64;
+      gid = row_data.(17) |> data_to_int64;
+      link_target = row_data.(18) |> data_to_string;
+      xattrs = row_data.(19) |> data_to_string |> Option.get;
+      parent_path = row_data.(20) |> data_to_string |> Option.get;
+      path = row_data.(21) |> data_to_string |> Option.get;
+      state = row_data.(22) |> data_to_string |> Option.get |> State.of_string;
+      last_update = row_data.(23) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -1154,6 +1164,7 @@ let setup_db cache =
             modified_time REAL NULL, \
             viewed_by_me_time REAL NULL, \
             file_extension TEXT NULL, \
+            full_file_extension TEXT NULL, \
             md5_checksum TEXT NULL, \
             size INTEGER NULL, \
             can_edit INTEGER NULL, \
