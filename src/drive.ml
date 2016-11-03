@@ -401,7 +401,15 @@ let get_root_resource trashed =
           inserted
     | Some resource -> resource
 
-let cache_size_mutex = Mutex.create ()
+let metadata_mutex = Mutex.create ()
+
+let with_metadata_mutex f =
+  Utils.try_finally
+    (fun () ->
+      Mutex.lock metadata_mutex;
+      f ()
+    )
+    (fun () -> Mutex.unlock metadata_mutex)
 
 let update_cache_size delta metadata cache =
   Utils.log_with_header "BEGIN: Updating cache size (delta=%Ld) in db\n%!"
@@ -415,9 +423,8 @@ let update_cache_size delta metadata cache =
   Context.update_ctx (Context.metadata ^= Some metadata)
 
 let shrink_cache file_size max_cache_size_mb metadata cache =
-  Utils.try_finally
+  with_metadata_mutex
     (fun () ->
-      Mutex.lock cache_size_mutex;
       if file_size <> 0L then begin
         let max_cache_size = Int64.mul (Int64.of_int max_cache_size_mb) mb in
         let target_size =
@@ -450,23 +457,19 @@ let shrink_cache file_size max_cache_size_mb metadata cache =
           Cache.delete_files_from_cache cache resources_to_free |> ignore
         end
       end)
-    (fun () -> Mutex.unlock cache_size_mutex)
 
 let delete_resources metadata cache resources =
-  Utils.try_finally
+  with_metadata_mutex
     (fun () ->
-      Mutex.lock cache_size_mutex;
       Cache.Resource.delete_resources cache resources;
       let total_size =
         Cache.delete_files_from_cache cache resources in
       if total_size > 0L then
         update_cache_size (Int64.neg total_size) metadata cache)
-    (fun () -> Mutex.unlock cache_size_mutex)
 
 let update_cache_size_for_documents cache resource content_path op =
-  Utils.try_finally
+  with_metadata_mutex
     (fun () ->
-      Mutex.lock cache_size_mutex;
       if resource.Cache.Resource.size = Some 0L &&
           Sys.file_exists content_path then begin
         try
@@ -478,7 +481,6 @@ let update_cache_size_for_documents cache resource content_path op =
           update_cache_size delta metadata cache
         with e -> Utils.log_exception e
       end)
-    (fun () -> Mutex.unlock cache_size_mutex)
 (* END Resource cache *)
 
 (* Metadata *)
@@ -523,18 +525,8 @@ let get_metadata () =
 
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
-  let metadata =
-    if Option.is_none context.Context.metadata then begin
-      Utils.log_with_header "BEGIN: Loading metadata from db\n%!";
-      let db_metadata = Cache.Metadata.select_metadata context.Context.cache in
-      Context.update_ctx (Context.metadata ^= db_metadata);
-      db_metadata
-    end else begin
-      Utils.log_with_header "BEGIN: Getting metadata from context\n%!";
-      context.Context.metadata
-    end in
 
-  let update_resource_cache new_metadata =
+  let update_resource_cache new_metadata old_metadata =
     let get_all_changes =
       let rec loop pageToken accu =
         let std_params =
@@ -634,7 +626,7 @@ let get_metadata () =
         new_metadata with
             Cache.Metadata.start_page_token = new_start_page_token;
       }
-    end else begin match metadata with
+    end else begin match old_metadata with
         None ->
           SessionM.return new_metadata
       | Some _ ->
@@ -696,18 +688,19 @@ let get_metadata () =
     end
   in
 
-  let refresh_metadata =
+  let refresh_metadata old_metadata =
     let start_page_token =
       Option.map_default
-        Cache.Metadata.start_page_token.GapiLens.get "" metadata in
+        Cache.Metadata.start_page_token.GapiLens.get "" old_metadata in
     let cache_size =
       Option.map_default
-        Cache.Metadata.cache_size.GapiLens.get 0L metadata in
+        Cache.Metadata.cache_size.GapiLens.get 0L old_metadata in
     Utils.log_with_header "BEGIN: Refreshing metadata\n%!";
     try_with_default
       (request_metadata start_page_token cache_size) >>= fun server_metadata ->
     Utils.log_with_header "END: Refreshing metadata\n";
-    update_resource_cache server_metadata >>= fun updated_metadata ->
+    update_resource_cache
+      server_metadata old_metadata >>= fun updated_metadata ->
     Utils.log_with_header "BEGIN: Updating metadata in db\n%!";
     Cache.Metadata.insert_metadata context.Context.cache updated_metadata;
     Utils.log_with_header "END: Updating metadata in db\n";
@@ -717,21 +710,35 @@ let get_metadata () =
     SessionM.return updated_metadata
   in
 
-  match metadata with
-      None ->
-        Utils.log_with_header "END: Getting metadata: Not found\n%!";
-        do_request refresh_metadata |> fst
-    | Some m ->
-        let metadata_cache_time =
-          context |. Context.config_lens |. Config.metadata_cache_time
-        in
-        if Cache.Metadata.is_valid metadata_cache_time m then begin
-          Utils.log_with_header "END: Getting metadata: Valid\n%!";
-          m
-        end else begin
-          Utils.log_with_header "END: Getting metadata: Not valid\n%!";
-          do_request refresh_metadata |> fst
-        end
+  with_metadata_mutex
+    (fun () ->
+       let metadata =
+         if Option.is_none context.Context.metadata then begin
+           Utils.log_with_header "BEGIN: Loading metadata from db\n%!";
+           let db_metadata = Cache.Metadata.select_metadata context.Context.cache in
+           Context.update_ctx (Context.metadata ^= db_metadata);
+           db_metadata
+         end else begin
+           Utils.log_with_header "BEGIN: Getting metadata from context\n%!";
+           context.Context.metadata
+         end in
+
+       match metadata with
+         None ->
+           Utils.log_with_header "END: Getting metadata: Not found\n%!";
+           do_request (refresh_metadata metadata) |> fst
+       | Some m ->
+           let metadata_cache_time =
+             context |. Context.config_lens |. Config.metadata_cache_time
+           in
+           if Cache.Metadata.is_valid metadata_cache_time m then begin
+             Utils.log_with_header "END: Getting metadata: Valid\n%!";
+             m
+           end else begin
+             Utils.log_with_header "END: Getting metadata: Not valid\n%!";
+             do_request (refresh_metadata metadata) |> fst
+           end
+    )
 
 let statfs () =
   let metadata = get_metadata () in
@@ -978,8 +985,7 @@ let create_desktop_entry resource content_path config =
          URL=%s\n%s"
         (Option.default "" resource.Cache.Resource.name)
         (Option.default "" resource.Cache.Resource.web_view_link)
-        icon_entry;
-      SessionM.return ())
+        icon_entry)
 
 let download_resource resource =
   let context = Context.get_ctx () in
@@ -1030,9 +1036,12 @@ let download_resource resource =
     Utils.log_with_header
       "BEGIN: Downloading resource (id=%Ld)\n%!"
       resource.Cache.Resource.id;
-    if is_desktop_format resource config then
-      create_desktop_entry resource content_path config
-    else begin
+    begin if is_desktop_format resource config then begin
+      shrink_cache () >>= fun () ->
+      update_cache_size_for_documents cache resource content_path Int64.neg;
+      create_desktop_entry resource content_path config;
+      SessionM.return ()
+    end else begin
       shrink_cache () >>= fun () ->
       update_cached_resource_state cache
         Cache.Resource.State.Downloading resource.Cache.Resource.id;
@@ -1043,7 +1052,7 @@ let download_resource resource =
            update_cached_resource_state cache
              Cache.Resource.State.ToDownload resource.Cache.Resource.id;
            handle_default_exceptions e)
-    end >>= fun () ->
+    end end >>= fun () ->
     update_cache_size_for_documents cache resource content_path Std.identity;
     Utils.log_with_header
       "END: Downloading resource (id=%Ld)\n%!"
