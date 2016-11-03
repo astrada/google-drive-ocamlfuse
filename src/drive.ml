@@ -62,6 +62,8 @@ let json_length s =
   length_with_quotes - 2
 
 let get_remote_id_fingerprint word_length remote_id =
+  if word_length > 4 then
+    raise (Invalid_argument "Too many filename conflicts");
   let md5 = Cryptokit.Hash.md5 () in
   md5#add_string remote_id;
   let md5_result = md5#result in
