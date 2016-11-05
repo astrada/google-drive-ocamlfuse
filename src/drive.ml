@@ -459,13 +459,11 @@ let shrink_cache file_size max_cache_size_mb metadata cache =
       end)
 
 let delete_resources metadata cache resources =
-  with_metadata_mutex
-    (fun () ->
-      Cache.Resource.delete_resources cache resources;
-      let total_size =
-        Cache.delete_files_from_cache cache resources in
-      if total_size > 0L then
-        update_cache_size (Int64.neg total_size) metadata cache)
+  Cache.Resource.delete_resources cache resources;
+  let total_size =
+    Cache.delete_files_from_cache cache resources in
+  if total_size > 0L then
+    update_cache_size (Int64.neg total_size) metadata cache
 
 let update_cache_size_for_documents cache resource content_path op =
   with_metadata_mutex
