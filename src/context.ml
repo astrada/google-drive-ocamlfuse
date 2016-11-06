@@ -78,8 +78,11 @@ let refresh_token_lens =
 let saved_version_lens =
   StateFileStore.data |-- State.saved_version
 
+let metadata_lens =
+  metadata |-- GapiLens.option_get
+
 let metadata_last_update_lens =
-  metadata |-- GapiLens.option_get |-- Cache.Metadata.last_update
+  metadata_lens |-- Cache.Metadata.last_update
 
 module ConcurrentContext =
   ConcurrentGlobal.Make(struct type u = t let label = "context" end)
@@ -90,8 +93,7 @@ let set_ctx = ConcurrentContext.set
 
 let clear_ctx = ConcurrentContext.clear
 
-let update_ctx update =
-  get_ctx () |> update |> set_ctx
+let update_ctx = ConcurrentContext.update
 
 let save_state_store state_store =
   Utils.log_with_header "BEGIN: Saving application state in %s\n"
