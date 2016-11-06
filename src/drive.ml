@@ -414,29 +414,35 @@ let with_metadata_mutex f =
 let update_cache_size delta metadata cache =
   Utils.log_with_header "BEGIN: Updating cache size (delta=%Ld) in db\n%!"
     delta;
-  let new_size = Int64.add metadata.Cache.Metadata.cache_size delta in
-  let metadata = metadata
-    |> Cache.Metadata.cache_size ^= new_size in
   Cache.Metadata.update_cache_size cache delta;
-  Utils.log_with_header "END: Updating cache size (new size=%Ld) in db\n%!"
-    new_size;
-  Context.update_ctx (Context.metadata ^= Some metadata)
+  let update_metadata context =
+    let metadata = context.Context.metadata
+                   |. GapiLens.option_get
+                   |> Cache.Metadata.cache_size ^=
+                      Int64.add metadata.Cache.Metadata.cache_size delta in
+    Utils.log_with_header "END: Updating cache size (new size=%Ld) in db\n%!"
+      metadata.Cache.Metadata.cache_size;
+    context |> Context.metadata ^= Some metadata
+  in
+  Context.update_ctx update_metadata
 
-let shrink_cache file_size max_cache_size_mb metadata cache =
+let shrink_cache ?(file_size = 0L) () =
+  let context = Context.get_ctx () in
+  let metadata = context |. Context.metadata_lens in
+  let config = context |. Context.config_lens in
+  let max_cache_size_mb = config.Config.max_cache_size_mb in
+  let cache = context.Context.cache in
   with_metadata_mutex
     (fun () ->
-      if file_size <> 0L then begin
-        let max_cache_size = Int64.mul (Int64.of_int max_cache_size_mb) mb in
-        let target_size =
-          Int64.add metadata.Cache.Metadata.cache_size file_size in
-        if target_size <= max_cache_size then begin
-          update_cache_size file_size metadata cache;
-        end else begin
-          let resources =
-            Cache.Resource.select_resources_order_by_last_update cache in
-          let (new_cache_size, total_delta, resources_to_free) =
-            List.fold_left
-              (fun (new_cache_size, delta, rs) resource ->
+       let max_cache_size = Int64.mul (Int64.of_int max_cache_size_mb) mb in
+       let target_size =
+         Int64.add metadata.Cache.Metadata.cache_size file_size in
+       if target_size > max_cache_size then begin
+         let resources =
+           Cache.Resource.select_resources_order_by_last_update cache in
+         let (new_cache_size, total_delta, resources_to_free) =
+           List.fold_left
+             (fun (new_cache_size, delta, rs) resource ->
                 if new_cache_size <= max_cache_size then
                   (new_cache_size, delta, rs)
                 else begin
@@ -446,17 +452,18 @@ let shrink_cache file_size max_cache_size_mb metadata cache =
                   let new_delta = Int64.add delta (Int64.neg size_to_free) in
                   (new_size, new_delta, resource :: rs)
                 end)
-              (target_size, file_size, [])
-              resources in
-          update_cache_size total_delta metadata cache;
-          List.iter
-            (fun resource ->
-               update_cached_resource_state cache
-                 Cache.Resource.State.ToDownload resource.Cache.Resource.id)
-            resources_to_free;
-          Cache.delete_files_from_cache cache resources_to_free |> ignore
-        end
-      end)
+             (target_size, file_size, [])
+             resources in
+         update_cache_size total_delta metadata cache;
+         List.iter
+           (fun resource ->
+              update_cached_resource_state cache
+                Cache.Resource.State.ToDownload resource.Cache.Resource.id)
+           resources_to_free;
+         Cache.delete_files_from_cache cache resources_to_free |> ignore
+       end else if file_size <> 0L then begin
+          update_cache_size file_size metadata cache;
+       end)
 
 let delete_resources metadata cache resources =
   Cache.Resource.delete_resources cache resources;
@@ -474,7 +481,7 @@ let update_cache_size_for_documents cache resource content_path op =
           let stats = Unix.LargeFile.stat content_path in
           let size = stats.Unix.LargeFile.st_size in
           let context = Context.get_ctx () in
-          let metadata = context.Context.metadata |> Option.get in
+          let metadata = context |. Context.metadata_lens in
           let delta = op size in
           update_cache_size delta metadata cache
         with e -> Utils.log_exception e
@@ -530,8 +537,8 @@ let get_metadata () =
         let std_params =
           { GapiService.StandardParameters.default with
                 GapiService.StandardParameters.fields =
-                  "changes(removed,file(" ^ file_fields
-                  ^ "),fileId),nextPageToken,newStartPageToken"
+                  "changes(removed,file(parents,trashed),fileId),\
+                   nextPageToken,newStartPageToken"
           } in
         ChangesResource.list
           ~std_params
@@ -555,14 +562,14 @@ let get_metadata () =
 
     let get_ids_to_update change =
       let get_id = Option.map (fun r -> r.Cache.Resource.id) in
-      let file = change.Change.file in
       let selected_resource =
-        Cache.Resource.select_resource_with_remote_id cache file.File.id in
+        Cache.Resource.select_resource_with_remote_id
+          cache change.Change.fileId in
       let resources =
         match selected_resource with
             None ->
               let remote_ids =
-                match file.File.parents with
+                match change.Change.file.File.parents with
                     [] -> [root_folder_id]
                   | ids -> ids
               in
@@ -713,7 +720,8 @@ let get_metadata () =
        let metadata =
          if Option.is_none context.Context.metadata then begin
            Utils.log_with_header "BEGIN: Loading metadata from db\n%!";
-           let db_metadata = Cache.Metadata.select_metadata context.Context.cache in
+           let db_metadata =
+             Cache.Metadata.select_metadata context.Context.cache in
            Context.update_ctx (Context.metadata ^= db_metadata);
            db_metadata
          end else begin
@@ -990,16 +998,9 @@ let download_resource resource =
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
   let content_path = Cache.get_content_path cache resource in
-  let shrink_cache () =
-    Option.may
-      (fun file_size ->
-         let metadata = context.Context.metadata |> Option.get in
-         shrink_cache
-           file_size
-           config.Config.max_cache_size_mb
-           metadata
-           cache)
-      resource.Cache.Resource.size;
+  let shrink_cache_before_downloading () =
+    let file_size = Option.default 0L resource.Cache.Resource.size in
+    shrink_cache ~file_size ();
     SessionM.return () in
   let do_api_download () =
     let destination = GapiMediaResource.TargetFile content_path in
@@ -1032,15 +1033,15 @@ let download_resource resource =
   in
   let do_download () =
     Utils.log_with_header
-      "BEGIN: Downloading resource (id=%Ld)\n%!"
-      resource.Cache.Resource.id;
+      "BEGIN: Downloading resource (id=%Ld) to %s\n%!"
+      resource.Cache.Resource.id content_path;
     begin if is_desktop_format resource config then begin
-      shrink_cache () >>= fun () ->
+      shrink_cache_before_downloading () >>= fun () ->
       update_cache_size_for_documents cache resource content_path Int64.neg;
       create_desktop_entry resource content_path config;
       SessionM.return ()
     end else begin
-      shrink_cache () >>= fun () ->
+      shrink_cache_before_downloading () >>= fun () ->
       update_cached_resource_state cache
         Cache.Resource.State.Downloading resource.Cache.Resource.id;
       update_cache_size_for_documents cache resource content_path Int64.neg;
@@ -1053,8 +1054,8 @@ let download_resource resource =
     end end >>= fun () ->
     update_cache_size_for_documents cache resource content_path Std.identity;
     Utils.log_with_header
-      "END: Downloading resource (id=%Ld)\n%!"
-      resource.Cache.Resource.id;
+      "END: Downloading resource (id=%Ld) to %s\n%!"
+      resource.Cache.Resource.id content_path;
     update_cached_resource_state cache
       Cache.Resource.State.Synchronized resource.Cache.Resource.id;
     SessionM.return ()
@@ -1517,8 +1518,6 @@ let read path buf offset file_descr =
 let write path buf offset file_descr =
   let (path_in_cache, trashed) = get_path_in_cache path in
 
-  let context = Context.get_ctx () in
-  let cache = context.Context.cache in
   let write_to_resource =
     get_resource path_in_cache trashed >>= fun resource ->
     with_retry download_resource resource >>= fun content_path ->
@@ -1534,8 +1533,21 @@ let write path buf offset file_descr =
     Utils.log_with_header
       "END: Writing local file (path=%s, trashed=%b)\n%!"
       path_in_cache trashed;
-    update_cached_resource_state cache
-      Cache.Resource.State.ToUpload resource.Cache.Resource.id;
+    let top_offset = Int64.add offset (Int64.of_int bytes) in
+    let file_size = Option.default 0L resource.Cache.Resource.size in
+    let context = Context.get_ctx () in
+    let cache = context.Context.cache in
+    if top_offset > file_size then begin
+      let updated_resource = resource
+        |> Cache.Resource.size ^= Some top_offset
+        |> Cache.Resource.state ^= Cache.Resource.State.ToUpload in
+      update_cached_resource cache updated_resource;
+      let file_size = Int64.sub top_offset file_size in
+      shrink_cache ~file_size ()
+    end else begin
+      update_cached_resource_state cache
+        Cache.Resource.State.ToUpload resource.Cache.Resource.id;
+    end;
     SessionM.return bytes
   in
   do_request write_to_resource |> fst
@@ -1603,16 +1615,7 @@ let upload resource =
   let updated_resource =
     update_resource_from_file ?state resource file in
   update_cached_resource cache updated_resource;
-  let metadata = context.Context.metadata |> Option.get in
-  let config = context |. Context.config_lens in
-  Option.may
-    (fun file_size ->
-       shrink_cache
-         file_size
-         config.Config.max_cache_size_mb
-         metadata
-         cache)
-    updated_resource.Cache.Resource.size;
+  shrink_cache ();
   SessionM.return ()
 
 let upload_with_retry path =
@@ -1987,16 +1990,13 @@ let truncate path size =
     Utils.log_with_header "BEGIN: Truncating file (remote id=%s)\n%!" remote_id;
     let context = Context.get_ctx () in
     let cache = context.Context.cache in
-    let metadata = context.Context.metadata |> Option.get in
-    let config = context |. Context.config_lens in
     let updated_resource = resource
       |> Cache.Resource.size ^= Some size
       |> Cache.Resource.state ^= Cache.Resource.State.ToUpload in
     update_cached_resource cache updated_resource;
-    shrink_cache
-      (Int64.sub size (Option.default 0L resource.Cache.Resource.size))
-      config.Config.max_cache_size_mb
-      metadata cache;
+    let file_size =
+      Int64.sub size (Option.default 0L resource.Cache.Resource.size) in
+    shrink_cache ~file_size ();
     Unix.LargeFile.truncate content_path size;
     Utils.log_with_header "END: Truncating file (remote id=%s)\n%!" remote_id;
     SessionM.return ()
