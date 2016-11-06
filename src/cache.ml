@@ -5,8 +5,8 @@ open GapiLens.Infix
 let fail rc =
   failwith ("Sqlite3 error: " ^ (Sqlite3.Rc.to_string rc))
 
-let expect exptected rc =
-  if rc <> exptected then fail rc
+let expect expected rc =
+  if rc <> expected then fail rc
 
 let fail_if_not_ok = expect Sqlite3.Rc.OK
 
@@ -385,8 +385,9 @@ struct
 
   let prepare_update_cache_size_stmt db =
     let sql =
-      "UPDATE metadata
-       SET cache_size = cache_size + :delta
+      "UPDATE metadata \
+       SET \
+         cache_size = cache_size + :delta \
        WHERE id = 1;"
     in
     Sqlite3.prepare db sql
@@ -962,6 +963,8 @@ struct
     Option.is_some resource.link_target
 
   let is_valid resource metadata_last_update =
+    resource.state = State.ToUpload ||
+    resource.state = State.Uploading ||
     resource.last_update >= metadata_last_update
 
   let get_format_from_mime_type mime_type config =
@@ -1109,6 +1112,7 @@ struct
       (fun db ->
          let stmt = MetadataStmts.prepare_update_cache_size_stmt db in
          bind_int stmt ":delta" (Some delta);
+         final_step stmt;
          finalize_stmt stmt)
   (* END Queries *)
 
