@@ -414,17 +414,21 @@ let with_metadata_mutex f =
 let update_cache_size delta metadata cache =
   Utils.log_with_header "BEGIN: Updating cache size (delta=%Ld) in db\n%!"
     delta;
-  Cache.Metadata.update_cache_size cache delta;
-  let update_metadata context =
-    let metadata = context.Context.metadata
-                   |. GapiLens.option_get
-                   |> Cache.Metadata.cache_size ^=
-                      Int64.add metadata.Cache.Metadata.cache_size delta in
-    Utils.log_with_header "END: Updating cache size (new size=%Ld) in db\n%!"
-      metadata.Cache.Metadata.cache_size;
-    context |> Context.metadata ^= Some metadata
-  in
-  Context.update_ctx update_metadata
+  if delta = 0L then begin
+    Utils.log_with_header "END: No need to update cache size\n%!";
+  end else begin
+    Cache.Metadata.update_cache_size cache delta;
+    let update_metadata context =
+      let metadata = context.Context.metadata
+                     |. GapiLens.option_get
+                     |> Cache.Metadata.cache_size ^=
+                        Int64.add metadata.Cache.Metadata.cache_size delta in
+      Utils.log_with_header "END: Updating cache size (new size=%Ld) in db\n%!"
+        metadata.Cache.Metadata.cache_size;
+      context |> Context.metadata ^= Some metadata
+    in
+    Context.update_ctx update_metadata
+  end
 
 let shrink_cache ?(file_size = 0L) () =
   let context = Context.get_ctx () in
@@ -461,7 +465,7 @@ let shrink_cache ?(file_size = 0L) () =
                 Cache.Resource.State.ToDownload resource.Cache.Resource.id)
            resources_to_free;
          Cache.delete_files_from_cache cache resources_to_free |> ignore
-       end else if file_size <> 0L then begin
+       end else begin
           update_cache_size file_size metadata cache;
        end)
 
@@ -469,8 +473,7 @@ let delete_resources metadata cache resources =
   Cache.Resource.delete_resources cache resources;
   let total_size =
     Cache.delete_files_from_cache cache resources in
-  if total_size > 0L then
-    update_cache_size (Int64.neg total_size) metadata cache
+  update_cache_size (Int64.neg total_size) metadata cache
 
 let update_cache_size_for_documents cache resource content_path op =
   with_metadata_mutex
