@@ -3,7 +3,7 @@
 <src/*.ml>: warn(-d-58)
 
 # OASIS_START
-# DO NOT EDIT (digest: 8cf6f6468d835b0760cc89553a2992fa)
+# DO NOT EDIT (digest: 7f2c2b8dc3a5ec1cac3e73414959cf72)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -26,15 +26,12 @@ true: annot, bin_annot
 <src/gdfuse.{native,byte}>: pkg_threads
 <src/*.ml{,i,y}>: pkg_Fuse
 <src/*.ml{,i,y}>: pkg_camlidl
-<src/*.ml{,i,y}>: pkg_gapi-ocaml
 <src/*.ml{,i,y}>: pkg_sqlite3
 # Executable test_suite
-"src/testSuite.byte": pkg_bigarray
-"src/testSuite.byte": pkg_extlib
+"src/testSuite.byte": pkg_gapi-ocaml
 "src/testSuite.byte": pkg_oUnit
 "src/testSuite.byte": pkg_threads
-<src/*.ml{,i,y}>: pkg_bigarray
-<src/*.ml{,i,y}>: pkg_extlib
+<src/*.ml{,i,y}>: pkg_gapi-ocaml
 <src/*.ml{,i,y}>: pkg_oUnit
 <src/*.ml{,i,y}>: pkg_threads
 # OASIS_STOP

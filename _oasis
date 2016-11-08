@@ -30,7 +30,7 @@ Executable "test_suite"
   Path: src
   MainIs: testSuite.ml
   Install: false
-  BuildDepends: oUnit, extlib, threads, bigarray
+  BuildDepends: oUnit, gapi-ocaml (>= 0.2.14), threads
 
 Test core
   Run$: flag(tests)
