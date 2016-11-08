@@ -31,6 +31,15 @@ let try_finally f finally =
     end;
     raise e
 
+(* Locks *)
+let with_lock m f =
+  try_finally
+    (fun () ->
+      Mutex.lock m;
+      f ()
+    )
+    (fun () -> Mutex.unlock m)
+
 (* Channels *)
 let with_in_channel path f =
   let ch = open_in path in
@@ -135,11 +144,12 @@ let start_browser url =
   if not status then
     failwith ("Error opening URL:" ^ url)
 
-let with_retry f label =
+(* Retry *)
+let with_retry ?(filter_exception = fun _ -> true) f label =
   let rec loop n =
     try
       f ()
-    with e ->
+    with e when filter_exception e ->
       if n >= !max_retries then begin
         log_with_header "Error during %s after %d attempts: %s\n%!"
           label !max_retries (Printexc.to_string e);
