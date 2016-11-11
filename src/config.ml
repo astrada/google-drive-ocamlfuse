@@ -104,6 +104,8 @@ type t = {
   max_upload_chunk_size : int;
   (* Specifies the maximum size (in bytes) of file chunks during upload
    * operations. *)
+  memory_buffer_size : int;
+  (* Specifies the size (in bytes) of memory buffer blocks. *)
 }
 
 let debug = {
@@ -258,6 +260,10 @@ let max_upload_chunk_size = {
   GapiLens.get = (fun x -> x.max_upload_chunk_size);
   GapiLens.set = (fun v x -> { x with max_upload_chunk_size = v })
 }
+let memory_buffer_size = {
+  GapiLens.get = (fun x -> x.memory_buffer_size);
+  GapiLens.set = (fun v x -> { x with memory_buffer_size = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -308,6 +314,7 @@ let default = {
   low_speed_time = 0;
   max_retries = 10;
   max_upload_chunk_size = default_max_upload_chunk_size;
+  memory_buffer_size = 1048576;
 }
 
 let default_debug = {
@@ -339,8 +346,8 @@ let default_debug = {
   max_cache_size_mb = 512;
   curl_debug_off = false;
   delete_forever_in_trash_folder = false;
-  stream_large_files = false;
-  large_file_threshold_mb = 16;
+  stream_large_files = true;
+  large_file_threshold_mb = 1;
   async_upload = false;
   connect_timeout_ms = 5000;
   max_download_speed = 0L;
@@ -349,6 +356,7 @@ let default_debug = {
   low_speed_time = 0;
   max_retries = 10;
   max_upload_chunk_size = default_max_upload_chunk_size;
+  memory_buffer_size = 1048576;
 }
 
 let of_table table =
@@ -425,6 +433,9 @@ let of_table table =
       max_upload_chunk_size =
         get "max_upload_chunk_size" int_of_string
           default.max_upload_chunk_size;
+      memory_buffer_size =
+        get "memory_buffer_size" int_of_string
+          default.memory_buffer_size;
     }
 
 let to_table data =
@@ -470,6 +481,7 @@ let to_table data =
     add "low_speed_time" (data.low_speed_time |> string_of_int);
     add "max_retries" (data.max_retries |> string_of_int);
     add "max_upload_chunk_size" (data.max_upload_chunk_size |> string_of_int);
+    add "memory_buffer_size" (data.memory_buffer_size |> string_of_int);
     table
 
 let debug_print out_ch start_time curl info_type info =

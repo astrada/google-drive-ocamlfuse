@@ -77,9 +77,9 @@ let test_buffering () =
   let stream_buffer_size = 5 in
   let n = block_size / stream_buffer_size in
   let path = "test" in
-  let buffers = Buffering.Buffers.create () in
+  let buffers = Buffering.MemoryBuffers.create () in
   let download () =
-    Buffering.Buffers.add path block_size buffers |> ignore;
+    Buffering.MemoryBuffers.add path block_size buffers |> ignore;
     let arr =
       Bigarray.Array1.create Bigarray.char Bigarray.c_layout block_size in
     for i = 0 to (n - 1) do
@@ -88,7 +88,7 @@ let test_buffering () =
       Bigarray.Array1.fill sub_arr (Char.chr (Char.code '0' + i));
     done;
     Thread.delay 0.5;
-    Buffering.Buffers.fill_block path arr 0L buffers |> ignore;
+    Buffering.MemoryBuffers.fill_block path arr 0L buffers |> ignore;
   in
   let create_arr _ =
     Bigarray.Array1.create
@@ -102,7 +102,7 @@ let test_buffering () =
           | Not_found -> download (); true
           | _ -> false)
       (fun () ->
-         Buffering.Buffers.blit_buffer_to_arr
+         Buffering.MemoryBuffers.blit_buffer_to_arr
            path dest_arrs.(i) offset buffers |> ignore)
       "stream"
   in

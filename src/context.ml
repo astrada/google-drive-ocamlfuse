@@ -24,6 +24,8 @@ type t = {
   metadata : Cache.Metadata.t option;
   (* Whether permanently delete files *)
   skip_trash : bool;
+  (* Memory buffers *)
+  memory_buffers : Buffering.MemoryBuffers.t;
 }
 
 let app_dir = {
@@ -61,6 +63,10 @@ let metadata = {
 let skip_trash = {
   GapiLens.get = (fun x -> x.skip_trash);
   GapiLens.set = (fun v x -> { x with skip_trash = v })
+}
+let memory_buffers = {
+  GapiLens.get = (fun x -> x.memory_buffers);
+  GapiLens.set = (fun v x -> { x with memory_buffers = v })
 }
 
 let config_lens =

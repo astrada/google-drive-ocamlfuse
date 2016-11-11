@@ -25,6 +25,7 @@ struct
 
   type state =
       Empty
+    | Writing
     | Clean
     | Dirty
 
@@ -132,7 +133,7 @@ struct
     Int64.div start_pos
       (Int64.of_int file_blocks.block_size) |> Int64.to_int
 
-  let get_block block_index file_blocks =
+  let get_block_by_index block_index file_blocks =
     Utils.with_lock file_blocks.mutex
       (fun () ->
          match Utils.safe_find file_blocks.blocks block_index with
@@ -149,28 +150,59 @@ struct
          Hashtbl.replace file_blocks.blocks block_index block
       )
 
+  let get_block start_pos length file_blocks =
+    let block_index = get_block_index start_pos file_blocks in
+    let block = get_block_by_index block_index file_blocks in
+    let block_start_pos =
+      Int64.mul
+        (Int64.of_int block_index)
+        (Int64.of_int file_blocks.block_size) in
+    let start_writing b =
+      let b = {
+        block with
+        Block.state = Block.Writing;
+      } in
+      replace_block block_index b file_blocks;
+      block_start_pos
+    in
+    let end_writing b =
+      let range = {
+        Block.start_pos = block_start_pos;
+        end_pos = Int64.add start_pos (Int64.of_int length);
+        buf_offset = 0;
+      } in
+      let b = {
+        block with
+        Block.state = Block.Clean;
+        ranges = [range];
+      } in
+      replace_block block_index b file_blocks;
+      b
+    in
+    (block, start_writing, end_writing)
+
   let write src_array start_pos file_blocks =
     let block_index = get_block_index start_pos file_blocks in
-    let block = get_block block_index file_blocks in
+    let block = get_block_by_index block_index file_blocks in
     let block = Block.write src_array start_pos block in
     replace_block block_index block file_blocks;
     file_blocks
 
   let fill_block src_array start_pos file_blocks =
     let block_index = get_block_index start_pos file_blocks in
-    let block = get_block block_index file_blocks in
+    let block = get_block_by_index block_index file_blocks in
     let block = Block.fill src_array start_pos block in
     replace_block block_index block file_blocks;
     file_blocks
 
   let blit_to_arr dest_arr start_pos file_blocks =
     let block_index = get_block_index start_pos file_blocks in
-    let block = get_block block_index file_blocks in
+    let block = get_block_by_index block_index file_blocks in
     Block.blit_to_arr dest_arr start_pos block
 
 end
 
-module Buffers =
+module MemoryBuffers =
 struct
   type t = {
     table : (string, FileBlocks.t) Hashtbl.t;
@@ -182,13 +214,24 @@ struct
     mutex = Mutex.create ();
   }
 
+  let add_no_lock path block_size buffers =
+    let file_blocks = FileBlocks.create block_size in
+    Hashtbl.add buffers.table path file_blocks;
+    file_blocks
+
   let add path block_size buffers =
     Utils.with_lock buffers.mutex
-      (fun () ->
-         let file_blocks = FileBlocks.create block_size in
-         Hashtbl.add buffers.table path file_blocks;
-         buffers
-      )
+      (fun () -> add_no_lock path block_size buffers)
+
+  let get_block path offset block_size buffers =
+    let file_blocks =
+      Utils.with_lock buffers.mutex
+        (fun () ->
+           match Utils.safe_find buffers.table path with
+           | None -> add_no_lock path block_size buffers
+           | Some fb -> fb
+        ) in
+    FileBlocks.get_block offset block_size file_blocks
 
   let write_to_buffer path src_arr offset buffers =
     let file_blocks =

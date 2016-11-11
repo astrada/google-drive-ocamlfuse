@@ -141,6 +141,18 @@ let with_try f handle_exception s =
 let throw e _ =
   raise e
 
+(* Monadic try/finally *)
+let with_try_finally f finally =
+  with_try
+    (f >>= fun result ->
+     finally >>= fun _ ->
+     SessionM.return result
+    )
+    (fun e ->
+      finally >>= fun _ ->
+      throw e
+    )
+
 let handle_default_exceptions =
   function
       GapiService.ServiceError (_, e) ->
@@ -168,6 +180,22 @@ let handle_default_exceptions =
 (* with_try with a default exception handler *)
 let try_with_default f s =
   with_try f handle_default_exceptions s
+
+(* Monadic mutex management *)
+let lock m =
+  (fun s ->
+     Mutex.lock m;
+     ((), s))
+
+let unlock m =
+  (fun s ->
+     Mutex.unlock m;
+     ((), s))
+
+let with_lock m f =
+  with_try_finally
+    (lock m >>= fun () -> f)
+    (unlock m)
 
 (* Resource cache *)
 let get_filename name is_document get_document_format =
@@ -402,14 +430,7 @@ let get_root_resource trashed =
     | Some resource -> resource
 
 let metadata_mutex = Mutex.create ()
-
-let with_metadata_mutex f =
-  Utils.try_finally
-    (fun () ->
-      Mutex.lock metadata_mutex;
-      f ()
-    )
-    (fun () -> Mutex.unlock metadata_mutex)
+let with_metadata_lock f = Utils.with_lock metadata_mutex f
 
 let update_cache_size delta metadata cache =
   Utils.log_with_header "BEGIN: Updating cache size (delta=%Ld) in db\n%!"
@@ -436,7 +457,7 @@ let shrink_cache ?(file_size = 0L) () =
   let config = context |. Context.config_lens in
   let max_cache_size_mb = config.Config.max_cache_size_mb in
   let cache = context.Context.cache in
-  with_metadata_mutex
+  with_metadata_lock
     (fun () ->
        let max_cache_size = Int64.mul (Int64.of_int max_cache_size_mb) mb in
        let target_size =
@@ -476,7 +497,7 @@ let delete_resources metadata cache resources =
   update_cache_size (Int64.neg total_size) metadata cache
 
 let update_cache_size_for_documents cache resource content_path op =
-  with_metadata_mutex
+  with_metadata_lock
     (fun () ->
       if resource.Cache.Resource.size = Some 0L &&
           Sys.file_exists content_path then begin
@@ -718,7 +739,7 @@ let get_metadata () =
     SessionM.return updated_metadata
   in
 
-  with_metadata_mutex
+  with_metadata_lock
     (fun () ->
        let metadata =
          if Option.is_none context.Context.metadata then begin
@@ -1138,6 +1159,38 @@ let stream_resource offset buffer resource =
     resource.Cache.Resource.id offset finish length;
   SessionM.return ()
 
+let stream_resource_to_memory_buffer offset buffer resource =
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  let block_size = config.Config.memory_buffer_size in
+  let memory_buffers = context.Context.memory_buffers in
+  let path = resource.Cache.Resource.path in
+  let (block, start_writing, end_writing) =
+    Buffering.MemoryBuffers.get_block path offset block_size memory_buffers in
+  match block.Buffering.Block.state with
+  | Buffering.Block.Empty ->
+    begin
+      let block_buffer = block.Buffering.Block.buffer in
+      with_lock block.Buffering.Block.mutex
+        (let start_pos = start_writing block in
+         stream_resource start_pos block_buffer resource) >>= fun () ->
+      let block = end_writing block in
+      Buffering.Block.blit_to_arr buffer offset block;
+      SessionM.return ()
+    end
+  | Buffering.Block.Writing -> throw IO_error
+  | Buffering.Block.Clean
+  | Buffering.Block.Dirty ->
+    begin
+      Utils.log_with_header
+        "Resource already downloaded to memory buffer (id=%Ld, \
+         offset=%Ld, block_size=%d)\n%!"
+        resource.Cache.Resource.id offset block_size;
+      Buffering.Block.blit_to_arr buffer offset block;
+      SessionM.return ()
+    end
+
+
 let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only
 
@@ -1494,12 +1547,19 @@ let read path buf offset file_descr =
 
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
-    let to_stream = config |. Config.stream_large_files &&
+    let to_stream =
+      config |. Config.stream_large_files &&
       not (Cache.Resource.is_document resource) &&
       resource.Cache.Resource.state = Cache.Resource.State.ToDownload &&
       (Option.default 0L resource.Cache.Resource.size) >
         large_file_threshold in
-    if to_stream then
+    let to_stream_to_memory_buffer =
+      to_stream && config.Config.memory_buffer_size > 0 in
+    if to_stream_to_memory_buffer then
+      with_retry
+        (stream_resource_to_memory_buffer offset buf) resource >>= fun () ->
+      SessionM.return ""
+    else if to_stream then
       with_retry (stream_resource offset buf) resource >>= fun () ->
       SessionM.return ""
     else
