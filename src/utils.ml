@@ -1,5 +1,7 @@
 open GapiUtils.Infix
 open GapiLens.Infix
+open GapiMonad
+open GapiMonad.SessionM.Infix
 
 (* Globals *)
 let start_time = Unix.gettimeofday ()
@@ -30,15 +32,6 @@ let try_finally f finally =
         elapsed thread_id message backtrace
     end;
     raise e
-
-(* Locks *)
-let with_lock m f =
-  try_finally
-    (fun () ->
-      Mutex.lock m;
-      f ()
-    )
-    (fun () -> Mutex.unlock m)
 
 (* Channels *)
 let with_in_channel path f =
@@ -74,6 +67,60 @@ let log_exception e =
   let backtrace = Printexc.get_backtrace () in
   log_with_header "Exception:%s\n" message;
   log_message "Backtrace:%s\n%!" backtrace
+
+(* Locks *)
+let with_lock m f =
+  try_finally
+    (fun () ->
+      Mutex.lock m;
+      f ()
+    )
+    (fun () -> Mutex.unlock m)
+
+(* Monadic combinators *)
+
+(* Used to do a try/with on a monadic f: state parameter s is eta-expanded,
+ * otherwise the try/with will be ignored because f is only partially applied
+ *)
+let try_with_m f handle_exception s =
+  try
+    f s
+  with e ->
+    handle_exception e s
+
+let raise_m e _ =
+  raise e
+
+let try_finally_m f finally =
+  try_with_m
+    (f >>= fun result ->
+     finally >>= fun _ ->
+     SessionM.return result
+    )
+    (fun e ->
+      finally >>= fun _ ->
+      raise_m e
+    )
+
+let lock m =
+  (fun s ->
+     Mutex.lock m;
+     ((), s)
+  )
+
+let unlock m =
+  (fun s ->
+     Mutex.unlock m;
+     ((), s)
+  )
+
+let with_lock_m m f =
+  try_finally_m
+    (lock m >>= fun () ->
+     f >>= fun result ->
+     SessionM.return result
+    )
+    (unlock m)
 
 (* Hashtbl *)
 let safe_find table key =

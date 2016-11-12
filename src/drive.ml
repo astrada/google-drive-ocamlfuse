@@ -128,30 +128,11 @@ let get_path_in_cache path =
   else
     (path, false)
 
-(* Used to do a try/with on a monadic f: state parameter s is eta-expanded,
- * otherwise the try/with will be ignored because f is only partially applied
- *)
-let with_try f handle_exception s =
-  try
-    f s
-  with e ->
-    handle_exception e s
+let with_try = Utils.try_with_m
 
-(* Raise with an extra parameter used in monadic functions *)
-let throw e _ =
-  raise e
+let throw = Utils.raise_m
 
-(* Monadic try/finally *)
-let with_try_finally f finally =
-  with_try
-    (f >>= fun result ->
-     finally >>= fun _ ->
-     SessionM.return result
-    )
-    (fun e ->
-      finally >>= fun _ ->
-      throw e
-    )
+let with_try_finally = Utils.try_finally_m
 
 let handle_default_exceptions =
   function
@@ -181,21 +162,7 @@ let handle_default_exceptions =
 let try_with_default f s =
   with_try f handle_default_exceptions s
 
-(* Monadic mutex management *)
-let lock m =
-  (fun s ->
-     Mutex.lock m;
-     ((), s))
-
-let unlock m =
-  (fun s ->
-     Mutex.unlock m;
-     ((), s))
-
-let with_lock m f =
-  with_try_finally
-    (lock m >>= fun () -> f)
-    (unlock m)
+let with_lock = Utils.with_lock_m
 
 (* Resource cache *)
 let get_filename name is_document get_document_format =
@@ -1165,31 +1132,14 @@ let stream_resource_to_memory_buffer offset buffer resource =
   let block_size = config.Config.memory_buffer_size in
   let memory_buffers = context.Context.memory_buffers in
   let path = resource.Cache.Resource.path in
-  let (block, start_writing, end_writing) =
-    Buffering.MemoryBuffers.get_block path offset block_size memory_buffers in
-  match block.Buffering.Block.state with
-  | Buffering.Block.Empty ->
-    begin
-      let block_buffer = block.Buffering.Block.buffer in
-      with_lock block.Buffering.Block.mutex
-        (let start_pos = start_writing block in
-         stream_resource start_pos block_buffer resource) >>= fun () ->
-      let block = end_writing block in
-      Buffering.Block.blit_to_arr buffer offset block;
-      SessionM.return ()
-    end
-  | Buffering.Block.Writing -> throw IO_error
-  | Buffering.Block.Clean
-  | Buffering.Block.Dirty ->
-    begin
-      Utils.log_with_header
-        "Resource already downloaded to memory buffer (id=%Ld, \
-         offset=%Ld, block_size=%d)\n%!"
-        resource.Cache.Resource.id offset block_size;
-      Buffering.Block.blit_to_arr buffer offset block;
-      SessionM.return ()
-    end
-
+  Buffering.MemoryBuffers.get_and_fill_block
+    path offset block_size
+    (fun start_pos block_buffer ->
+       stream_resource start_pos block_buffer resource)
+    memory_buffers >>= fun block ->
+  assert (block.Buffering.Block.state = Buffering.Block.Full);
+  Buffering.Block.blit_to_arr buffer offset block;
+  SessionM.return ()
 
 let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only
