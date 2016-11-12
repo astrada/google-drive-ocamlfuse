@@ -128,12 +128,6 @@ let get_path_in_cache path =
   else
     (path, false)
 
-let with_try = Utils.try_with_m
-
-let throw = Utils.raise_m
-
-let with_try_finally = Utils.try_finally_m
-
 let handle_default_exceptions =
   function
       GapiService.ServiceError (_, e) ->
@@ -142,27 +136,25 @@ let handle_default_exceptions =
             |> GapiJson.data_model_to_json
             |> Yojson.Safe.to_string in
         Utils.log_with_header "Service error: %s.\n%!" message;
-        throw Invalid_operation
+        Utils.raise_m Invalid_operation
     | GapiRequest.PermissionDenied _ ->
         Utils.log_with_header "Server error: Permission denied.\n%!";
-        throw Permission_denied
+        Utils.raise_m Permission_denied
     | GapiRequest.RequestTimeout _ ->
         Utils.log_with_header "Server error: Request Timeout.\n%!";
-        throw IO_error
+        Utils.raise_m IO_error
     | GapiRequest.PreconditionFailed _
     | GapiRequest.Conflict _ ->
         Utils.log_with_header "Server error: Conflict.\n%!";
-        throw IO_error
+        Utils.raise_m IO_error
     | GapiRequest.Forbidden _ ->
         Utils.log_with_header "Server error: Forbidden.\n%!";
-        throw Invalid_operation
-    | e -> throw e
+        Utils.raise_m Invalid_operation
+    | e -> Utils.raise_m e
 
 (* with_try with a default exception handler *)
 let try_with_default f s =
-  with_try f handle_default_exceptions s
-
-let with_lock = Utils.with_lock_m
+  Utils.try_with_m f handle_default_exceptions s
 
 (* Resource cache *)
 let get_filename name is_document get_document_format =
@@ -828,7 +820,7 @@ and get_resource path trashed =
   let get_new_resource cache =
     let parent_path = Filename.dirname path in
       if check_resource_in_cache cache parent_path trashed then begin
-        throw File_not_found
+        Utils.raise_m File_not_found
       end else begin
         let new_resource = create_resource path in
         let name = Filename.basename path in
@@ -887,7 +879,7 @@ and get_resource path trashed =
     end >>= fun resource ->
     begin match resource.Cache.Resource.state with
         Cache.Resource.State.NotFound ->
-          throw File_not_found
+          Utils.raise_m File_not_found
       | _ ->
           SessionM.return resource
     end
@@ -929,12 +921,12 @@ let check_md5_checksum resource cache =
 
 let with_retry f resource =
   let rec loop res n =
-    with_try
+    Utils.try_with_m
       (f res)
       (function
            IO_error as e ->
              if n >= !Utils.max_retries then begin
-               throw e
+               Utils.raise_m e
              end else begin
                GapiUtils.wait_exponential_backoff n;
                let fileId = res.Cache.Resource.remote_id |> Option.get in
@@ -959,7 +951,7 @@ let with_retry f resource =
                  n' !Utils.max_retries verb resource.Cache.Resource.id;
                loop refreshed_resource n'
              end
-         | e -> throw e)
+         | e -> Utils.raise_m e)
   in
     loop resource 0
 
@@ -1036,7 +1028,7 @@ let download_resource resource =
       update_cached_resource_state cache
         Cache.Resource.State.Downloading resource.Cache.Resource.id;
       update_cache_size_for_documents cache resource content_path Int64.neg;
-      with_try
+      Utils.try_with_m
         (do_api_download ())
         (fun e ->
            update_cached_resource_state cache
@@ -1095,7 +1087,7 @@ let download_resource resource =
             check_state (n + 1)
           end
       | Cache.Resource.State.NotFound ->
-          throw File_not_found
+          Utils.raise_m File_not_found
     end
   in
   check_state 0 >>= fun () ->
@@ -1158,11 +1150,11 @@ let get_attr path =
     get_resource path_in_cache trashed >>= fun resource ->
     begin if Cache.Resource.is_document resource &&
              config.Config.download_docs then
-      with_try
+      Utils.try_with_m
         (with_retry download_resource resource)
         (function
              File_not_found -> SessionM.return ""
-           | e -> throw e)
+           | e -> Utils.raise_m e)
     else
       SessionM.return ""
     end >>= fun content_path ->
@@ -1397,7 +1389,7 @@ let fopen path flags =
   let check_editable =
     get_resource path_in_cache trashed >>= fun resource ->
     if not is_read_only_request && is_file_read_only resource then
-      throw Permission_denied
+      Utils.raise_m Permission_denied
     else
       SessionM.return ()
   in
@@ -1878,11 +1870,11 @@ let rename path new_path =
        not (Context.get_ctx ()
         |. Context.config_lens
         |. Config.keep_duplicates) then
-      with_try
+      Utils.try_with_m
         (trash_target_path ())
         (function
              File_not_found -> SessionM.return ()
-           | e -> throw e)
+           | e -> Utils.raise_m e)
     else
       SessionM.return ()
     end
