@@ -31,9 +31,17 @@ struct
 
   let blit_to_arr dest_arr offset block =
     if block.state = Empty then raise Buffer_underrun;
+    let src_len = Int64.to_int (Int64.sub block.end_pos block.start_pos) in
     let dest_len = Bigarray.Array1.dim dest_arr in
     let src_off = Int64.to_int (Int64.sub offset block.start_pos) in
-    let src_arr = Bigarray.Array1.sub block.buffer src_off dest_len in
+    let src_arr =
+      if src_len >= dest_len then
+        Bigarray.Array1.sub block.buffer src_off dest_len
+      else block.buffer in
+    let dest_arr =
+      if src_len < dest_len then
+        Bigarray.Array1.sub dest_arr 0 src_len
+      else dest_arr in
     Utils.with_lock block.mutex
       (fun () -> Bigarray.Array1.blit src_arr dest_arr)
 
@@ -44,12 +52,14 @@ struct
   type t = {
     blocks : (int, Block.t) Hashtbl.t;
     block_size : int;
+    resource_size : int64;
     mutex : Mutex.t;
   }
 
-  let create ?(n = 16) block_size = {
+  let create ?(n = 16) block_size resource_size = {
     blocks = Hashtbl.create n;
     block_size;
+    resource_size;
     mutex = Mutex.create ();
   }
 
@@ -66,7 +76,13 @@ struct
              Int64.mul
                (Int64.of_int block_index)
                (Int64.of_int file_blocks.block_size) in
-           let b = Block.create start_pos file_blocks.block_size in
+           let b =
+             let size =
+               (Int64.to_int
+                  (min
+                     (Int64.of_int file_blocks.block_size)
+                     (Int64.sub file_blocks.resource_size start_pos))) in
+             Block.create start_pos size in
            Hashtbl.add file_blocks.blocks block_index b;
            b
          | Some b -> b
@@ -113,9 +129,9 @@ struct
     mutex = Mutex.create ();
   }
 
-  let get_file_blocks path block_size buffers =
+  let get_file_blocks path block_size resource_size buffers =
     let add path block_size buffers =
-      let file_blocks = FileBlocks.create block_size in
+      let file_blocks = FileBlocks.create block_size resource_size in
       Hashtbl.add buffers.table path file_blocks;
       file_blocks
     in
@@ -126,8 +142,9 @@ struct
          | Some fb -> fb
       )
 
-  let get_and_fill_block path offset block_size fill_array buffers =
-    let file_blocks = get_file_blocks path block_size buffers in
+  let get_and_fill_block
+      path offset block_size resource_size fill_array buffers =
+    let file_blocks = get_file_blocks path block_size resource_size buffers in
     FileBlocks.fill_if_empty offset fill_array file_blocks
 
   let remove_buffer path buffers =

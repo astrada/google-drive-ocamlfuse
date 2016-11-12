@@ -1133,7 +1133,7 @@ let stream_resource_to_memory_buffer offset buffer resource =
   let memory_buffers = context.Context.memory_buffers in
   let path = resource.Cache.Resource.path in
   Buffering.MemoryBuffers.get_and_fill_block
-    path offset block_size
+    path offset block_size (resource.Cache.Resource.size |> Option.get)
     (fun start_pos block_buffer ->
        stream_resource start_pos block_buffer resource)
     memory_buffers >>= fun block ->
