@@ -54,7 +54,7 @@ let test_with_lock_m () =
     9
     !counter2
 
-let test_get_full_block_and_blit () =
+let test_read_block () =
   let remote_id = "test" in
   let resource_size = 24L in
   let block_size = 16 in
@@ -79,7 +79,7 @@ let test_get_full_block_and_blit () =
       destination (i * stream_block_size) stream_block_size in
   let dest_arrs = Array.init 3 init_subs in
   let stream buffer offset =
-    Buffering.MemoryBuffers.get_full_block_and_blit
+    Buffering.MemoryBuffers.read_block
       remote_id offset resource_size
       (fun start_pos block_buffer -> fill_array start_pos block_buffer)
       buffer memory_buffers
@@ -109,6 +109,6 @@ let test_get_full_block_and_blit () =
 
 let suite = "Buffering test" >:::
             ["test_with_lock_m" >:: test_with_lock_m;
-             "test_get_full_block_and_blit" >:: test_get_full_block_and_blit;
+             "test_read_block" >:: test_read_block;
             ]
 

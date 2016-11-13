@@ -69,7 +69,7 @@ struct
       (Int64.of_int block_index)
       (Int64.of_int buffers.block_size)
 
-  let get_full_block_and_blit
+  let read_block
       remote_id offset resource_size fill_array dest_arr buffers =
     let get_block block_index = 
       Utils.with_lock buffers.mutex

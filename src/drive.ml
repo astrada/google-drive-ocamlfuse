@@ -1122,7 +1122,7 @@ let stream_resource_to_memory_buffer offset buffer resource =
   let context = Context.get_ctx () in
   let memory_buffers = context |. Context.memory_buffers in
   let remote_id = resource.Cache.Resource.remote_id |> Option.get in
-  Buffering.MemoryBuffers.get_full_block_and_blit
+  Buffering.MemoryBuffers.read_block
     remote_id offset (resource.Cache.Resource.size |> Option.get)
     (fun start_pos block_buffer ->
        stream_resource start_pos block_buffer resource)
