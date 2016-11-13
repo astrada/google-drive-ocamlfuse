@@ -120,6 +120,8 @@ type t = {
   acknowledge_abuse: bool;
   (* Executable used to open desktop entries *)
   desktop_entry_exec : string;
+  (* Use memory buffers to cache writes. *)
+  write_buffers : bool;
 }
 
 let metadata_cache_time = {
@@ -334,6 +336,10 @@ let desktop_entry_exec = {
   GapiLens.get = (fun x -> x.desktop_entry_exec);
   GapiLens.set = (fun v x -> { x with desktop_entry_exec = v })
 }
+let write_buffers = {
+  GapiLens.get = (fun x -> x.write_buffers);
+  GapiLens.set = (fun v x -> { x with write_buffers = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -404,6 +410,7 @@ let default = {
   metadata_memory_cache_saving_interval = 30;
   acknowledge_abuse = false;
   desktop_entry_exec = "";
+  write_buffers = false;
 }
 
 let default_debug = {
@@ -460,6 +467,7 @@ let default_debug = {
   metadata_memory_cache_saving_interval = 30;
   acknowledge_abuse = false;
   desktop_entry_exec = "";
+  write_buffers = false;
 }
 
 let of_table table =
@@ -582,6 +590,9 @@ let of_table table =
       desktop_entry_exec =
         get "desktop_entry_exec" Std.identity
           default.desktop_entry_exec;
+      write_buffers =
+        get "write_buffers" bool_of_string
+          default.write_buffers;
     }
 
 let to_table data =
@@ -644,6 +655,7 @@ let to_table data =
       (data.metadata_memory_cache_saving_interval |> string_of_int);
     add "acknowledge_abuse" (data.acknowledge_abuse |> string_of_bool);
     add "desktop_entry_exec" data.desktop_entry_exec;
+    add "write_buffers" (data.write_buffers |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =
