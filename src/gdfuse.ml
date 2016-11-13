@@ -234,7 +234,8 @@ let setup_application params =
     mountpoint_stats = Unix.LargeFile.stat mountpoint;
     metadata = None;
     skip_trash = params.skip_trash;
-    memory_buffers = Buffering.MemoryBuffers.create ();
+    memory_buffers =
+      Buffering.MemoryBuffers.create config.Config.memory_buffer_size;
   } in
   Context.set_ctx context;
   let refresh_token = context |. Context.refresh_token_lens in

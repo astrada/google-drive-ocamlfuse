@@ -1,8 +1,6 @@
 open GapiMonad
 open GapiMonad.SessionM.Infix
 
-exception Buffer_underrun
-
 module Block =
 struct
   type state =
@@ -14,30 +12,31 @@ struct
               Bigarray.int8_unsigned_elt,
               Bigarray.c_layout) Bigarray.Array1.t;
     start_pos : int64;
-    end_pos : int64;
+    size : int;
     state : state;
-    last_update : float;
+    last_access : float;
     mutex : Mutex.t;
   }
 
   let create offset size = {
     buffer = Bigarray.Array1.create Bigarray.char Bigarray.c_layout size;
     start_pos = offset;
-    end_pos = Int64.add offset (Int64.of_int size);
+    size;
     state = Empty;
-    last_update = Unix.gettimeofday ();
+    last_access = Unix.gettimeofday ();
     mutex = Mutex.create ();
   }
 
   let blit_to_arr dest_arr offset block =
-    if block.state = Empty then raise Buffer_underrun;
-    let src_len = Int64.to_int (Int64.sub block.end_pos block.start_pos) in
+    if block.state = Empty then invalid_arg "blit_to_arr";
     let dest_len = Bigarray.Array1.dim dest_arr in
     let src_off = Int64.to_int (Int64.sub offset block.start_pos) in
+    let src_len = block.size - src_off in
     let src_arr =
       if src_len >= dest_len then
         Bigarray.Array1.sub block.buffer src_off dest_len
-      else block.buffer in
+      else
+        Bigarray.Array1.sub block.buffer src_off src_len in
     let dest_arr =
       if src_len < dest_len then
         Bigarray.Array1.sub dest_arr 0 src_len
@@ -47,110 +46,136 @@ struct
 
 end
 
-module FileBlocks =
-struct
-  type t = {
-    blocks : (int, Block.t) Hashtbl.t;
-    block_size : int;
-    resource_size : int64;
-    mutex : Mutex.t;
-  }
-
-  let create ?(n = 16) block_size resource_size = {
-    blocks = Hashtbl.create n;
-    block_size;
-    resource_size;
-    mutex = Mutex.create ();
-  }
-
-  let get_block_index start_pos file_blocks =
-    Int64.div start_pos
-      (Int64.of_int file_blocks.block_size) |> Int64.to_int
-
-  let get_block_by_index block_index file_blocks =
-    Utils.with_lock file_blocks.mutex
-      (fun () ->
-         match Utils.safe_find file_blocks.blocks block_index with
-         | None ->
-           let start_pos =
-             Int64.mul
-               (Int64.of_int block_index)
-               (Int64.of_int file_blocks.block_size) in
-           let b =
-             let size =
-               (Int64.to_int
-                  (min
-                     (Int64.of_int file_blocks.block_size)
-                     (Int64.sub file_blocks.resource_size start_pos))) in
-             Block.create start_pos size in
-           Hashtbl.add file_blocks.blocks block_index b;
-           b
-         | Some b -> b
-      )
-
-  let replace_block block_index block file_blocks =
-    Utils.with_lock file_blocks.mutex
-      (fun () ->
-         Hashtbl.replace file_blocks.blocks block_index block
-      )
-
-  let fill_if_empty start_pos fill_array file_blocks =
-    let block_index = get_block_index start_pos file_blocks in
-    let block = get_block_by_index block_index file_blocks in
-    let get_block_m s =
-      let block = get_block_by_index block_index file_blocks in
-      (block, s) in
-    Utils.with_lock_m block.Block.mutex
-      (get_block_m >>= fun block ->
-       if block.Block.state = Block.Empty then begin
-         fill_array block.Block.start_pos block.Block.buffer >>= fun () ->
-         let block = {
-           block with
-           Block.state = Block.Full;
-         } in
-         replace_block block_index block file_blocks;
-         SessionM.return block
-       end else begin
-         SessionM.return block
-       end
-      )
-
-end
-
 module MemoryBuffers =
 struct
   type t = {
-    table : (string, FileBlocks.t) Hashtbl.t;
+    blocks : (string * int, Block.t) Hashtbl.t;
+    block_size : int;
     mutex : Mutex.t;
   }
 
-  let create ?(n = 16) () = {
-    table = Hashtbl.create n;
+  let create ?(n = 64) block_size = {
+    blocks = Hashtbl.create n;
+    block_size;
     mutex = Mutex.create ();
   }
 
-  let get_file_blocks path block_size resource_size buffers =
-    let add path block_size buffers =
-      let file_blocks = FileBlocks.create block_size resource_size in
-      Hashtbl.add buffers.table path file_blocks;
-      file_blocks
+  let get_block_index start_pos buffers =
+    Int64.div start_pos
+      (Int64.of_int buffers.block_size) |> Int64.to_int
+
+  let get_block_start_pos block_index buffers =
+    Int64.mul
+      (Int64.of_int block_index)
+      (Int64.of_int buffers.block_size)
+
+  let get_full_block_and_blit
+      remote_id offset resource_size fill_array dest_arr buffers =
+    let get_block block_index = 
+      Utils.with_lock buffers.mutex
+        (fun () ->
+           match Utils.safe_find buffers.blocks (remote_id, block_index) with
+           | None ->
+             let start_pos = get_block_start_pos block_index buffers in
+             let b =
+               let size =
+                 (Int64.to_int
+                    (min
+                       (Int64.of_int buffers.block_size)
+                       (Int64.sub resource_size start_pos))) in
+               Block.create start_pos size in
+             Hashtbl.add buffers.blocks (remote_id, block_index) b;
+             Utils.log_with_header
+               "Allocating memory buffer (id=%s, index=%d, size=%d)\n%!"
+               remote_id block_index b.Block.size;
+             b
+           | Some b -> b
+        )
     in
-    Utils.with_lock buffers.mutex
-      (fun () ->
-         match Utils.safe_find buffers.table path with
-         | None -> add path block_size buffers
-         | Some fb -> fb
-      )
+    let get_block_m block_index s =
+      let block = get_block block_index in
+      (block, s)
+    in
+    let replace_block block_index block =
+      Utils.with_lock buffers.mutex
+        (fun () ->
+           Hashtbl.replace buffers.blocks (remote_id, block_index) block
+        )
+    in
+    let fill_and_blit block_index src_offset dest_arr =
+      let block = get_block block_index in
+      Utils.with_lock_m block.Block.mutex
+        (get_block_m block_index >>= fun block ->
+         if block.Block.state = Block.Empty then begin
+           fill_array block.Block.start_pos block.Block.buffer >>= fun () ->
+           let block = {
+             block with
+             Block.state = Block.Full;
+           } in
+           SessionM.return block
+         end else begin
+           SessionM.return block
+         end
+        ) >>= fun block ->
+      let block = {
+        block with
+        Block.last_access = Unix.gettimeofday ();
+      } in
+      replace_block block_index block;
+      Block.blit_to_arr dest_arr src_offset block;
+      SessionM.return ()
+    in
+    let start_block_index = get_block_index offset buffers in
+    let dest_arr_size = Bigarray.Array1.dim dest_arr in
+    let end_pos = Int64.add offset (Int64.of_int dest_arr_size) in
+    let end_block_index = get_block_index end_pos buffers in
+    fill_and_blit start_block_index offset dest_arr >>= fun () ->
+    if end_block_index <> start_block_index then
+      let src_offset = get_block_start_pos end_block_index buffers in
+      let dest_len = Int64.to_int (Int64.sub end_pos src_offset) in
+      let dest_offset = dest_arr_size - dest_len in
+      let dest_arr =
+        Bigarray.Array1.sub dest_arr dest_offset dest_len in
+      fill_and_blit end_block_index src_offset dest_arr
+    else
+      SessionM.return ()
 
-  let get_and_fill_block
-      path offset block_size resource_size fill_array buffers =
-    let file_blocks = get_file_blocks path block_size resource_size buffers in
-    FileBlocks.fill_if_empty offset fill_array file_blocks
-
-  let remove_buffer path buffers =
-    Utils.with_lock buffers.mutex
-      (fun () -> Hashtbl.remove buffers.table path);
-    buffers
+  let shrink_cache target_size buffers =
+    let remove_block ((remote_id, block_index) as key) =
+      Utils.log_with_header
+        "Deallocating memory buffer (id=%s, index=%d)\n%!"
+        remote_id block_index;
+      Hashtbl.remove buffers.blocks key
+    in
+    let get_total_size_and_lru_key () =
+      Hashtbl.fold
+        (fun k v (total, lru) ->
+           let total = total + v.Block.size in
+           let lru =
+             if lru = ("", 0) then k
+             else
+               let b = Hashtbl.find buffers.blocks lru in
+               if (v.Block.last_access < b.Block.last_access) then k
+               else lru in
+           (total, lru)
+        )
+        buffers.blocks
+        (0, ("", 0))
+    in
+    let rec loop () =
+      if Hashtbl.length buffers.blocks > 0 then begin
+        let (total_size, lru_key) = get_total_size_and_lru_key () in
+        if total_size > target_size then begin
+          remove_block lru_key;
+          loop ()
+        end else begin
+          Utils.log_with_header
+            "Memory cache size: %d (target=%d)\n%!"
+            total_size target_size;
+        end
+      end
+    in
+    Utils.with_lock buffers.mutex loop
 
 end
 

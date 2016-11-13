@@ -63,7 +63,7 @@ let json_length s =
 
 let get_remote_id_fingerprint word_length remote_id =
   if word_length > 4 then
-    raise (Invalid_argument "Too many filename conflicts");
+    invalid_arg "Too many filename conflicts";
   let md5 = Cryptokit.Hash.md5 () in
   md5#add_string remote_id;
   let md5_result = md5#result in
@@ -1120,17 +1120,16 @@ let stream_resource offset buffer resource =
 
 let stream_resource_to_memory_buffer offset buffer resource =
   let context = Context.get_ctx () in
-  let config = context |. Context.config_lens in
-  let block_size = config.Config.memory_buffer_size in
-  let memory_buffers = context.Context.memory_buffers in
-  let path = resource.Cache.Resource.path in
-  Buffering.MemoryBuffers.get_and_fill_block
-    path offset block_size (resource.Cache.Resource.size |> Option.get)
+  let memory_buffers = context |. Context.memory_buffers in
+  let remote_id = resource.Cache.Resource.remote_id |> Option.get in
+  Buffering.MemoryBuffers.get_full_block_and_blit
+    remote_id offset (resource.Cache.Resource.size |> Option.get)
     (fun start_pos block_buffer ->
        stream_resource start_pos block_buffer resource)
-    memory_buffers >>= fun block ->
-  assert (block.Buffering.Block.state = Buffering.Block.Full);
-  Buffering.Block.blit_to_arr buffer offset block;
+    buffer memory_buffers >>= fun () ->
+  let config = context |. Context.config_lens in
+  Buffering.MemoryBuffers.shrink_cache
+    config.Config.max_memory_cache_size memory_buffers;
   SessionM.return ()
 
 let is_filesystem_read_only () =

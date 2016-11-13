@@ -90,22 +90,24 @@ type t = {
   async_upload : bool;
   (* Specifies connection timeout in milliseconds *)
   connect_timeout_ms : int;
-  max_download_speed : int64;
   (* Max download speed (on a single transfer) in bytes/second. *)
-  max_upload_speed : int64;
+  max_download_speed : int64;
   (* Max upload speed (on a single transfer) in bytes/second. *)
-  low_speed_limit : int;
-  low_speed_time : int;
+  max_upload_speed : int64;
   (* If speed (in bytes/second) is under low_speed_limit for low_speed_time
    * (in seconds), the file transfer is considered too slow and therefore
    * terminated. *)
-  max_retries : int;
+  low_speed_limit : int;
+  low_speed_time : int;
   (* Specifies the maximum number of attempts if an operation fails. *)
-  max_upload_chunk_size : int;
+  max_retries : int;
   (* Specifies the maximum size (in bytes) of file chunks during upload
    * operations. *)
-  memory_buffer_size : int;
+  max_upload_chunk_size : int;
   (* Specifies the size (in bytes) of memory buffer blocks. *)
+  memory_buffer_size : int;
+  (* Maximum memory cache size in bytes. *)
+  max_memory_cache_size : int;
 }
 
 let debug = {
@@ -264,6 +266,10 @@ let memory_buffer_size = {
   GapiLens.get = (fun x -> x.memory_buffer_size);
   GapiLens.set = (fun v x -> { x with memory_buffer_size = v })
 }
+let max_memory_cache_size = {
+  GapiLens.get = (fun x -> x.max_memory_cache_size);
+  GapiLens.set = (fun v x -> { x with max_memory_cache_size = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -315,6 +321,7 @@ let default = {
   max_retries = 10;
   max_upload_chunk_size = default_max_upload_chunk_size;
   memory_buffer_size = 1048576;
+  max_memory_cache_size = 2097152;
 }
 
 let default_debug = {
@@ -357,6 +364,7 @@ let default_debug = {
   max_retries = 10;
   max_upload_chunk_size = default_max_upload_chunk_size;
   memory_buffer_size = 1048576;
+  max_memory_cache_size = 10485760;
 }
 
 let of_table table =
@@ -436,6 +444,9 @@ let of_table table =
       memory_buffer_size =
         get "memory_buffer_size" int_of_string
           default.memory_buffer_size;
+      max_memory_cache_size =
+        get "max_memory_cache_size" int_of_string
+          default.max_memory_cache_size;
     }
 
 let to_table data =
@@ -482,6 +493,7 @@ let to_table data =
     add "max_retries" (data.max_retries |> string_of_int);
     add "max_upload_chunk_size" (data.max_upload_chunk_size |> string_of_int);
     add "memory_buffer_size" (data.memory_buffer_size |> string_of_int);
+    add "max_memory_cache_size" (data.max_memory_cache_size |> string_of_int);
     table
 
 let debug_print out_ch start_time curl info_type info =
