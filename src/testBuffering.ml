@@ -82,7 +82,7 @@ let test_read_block () =
     Buffering.MemoryBuffers.read_block
       remote_id offset resource_size
       (fun start_pos block_buffer -> fill_array start_pos block_buffer)
-      buffer memory_buffers
+      ~dest_arr:buffer memory_buffers
   in
   for i = 0 to ((Int64.to_int resource_size) / stream_block_size - 1) do
     let offset = Int64.of_int (i * stream_block_size) in
@@ -107,8 +107,27 @@ let test_read_block () =
       dest_arrs.(i);
   done
 
+let test_thread_m () =
+  let start_thread_m f =
+    (fun s ->
+       let t = Thread.create f s in
+       (t, s)
+    ) in
+  let b = ref false in
+  let action_m =
+    (fun s ->
+       b := true;
+       ((), s)) in
+  let t = start_thread_m action_m session |> fst in
+  Thread.join t;
+  assert_equal
+    ~printer:string_of_bool
+    true
+    !b
+
 let suite = "Buffering test" >:::
             ["test_with_lock_m" >:: test_with_lock_m;
              "test_read_block" >:: test_read_block;
+             "test_thread_m" >:: test_thread_m;
             ]
 

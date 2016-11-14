@@ -64,7 +64,7 @@ struct
       (Int64.of_int buffers.block_size)
 
   let read_block
-      remote_id offset resource_size fill_array dest_arr buffers =
+      remote_id offset resource_size fill_array ?dest_arr buffers =
     let get_block block_index = 
       Utils.with_lock buffers.mutex
         (fun () ->
@@ -116,11 +116,13 @@ struct
         Block.last_access = Unix.gettimeofday ();
       } in
       replace_block block_index block;
-      Block.blit_to_arr dest_arr src_offset block;
+      Option.may
+        (fun arr -> Block.blit_to_arr arr src_offset block)
+        dest_arr;
       SessionM.return ()
     in
     let start_block_index = get_block_index offset buffers in
-    let dest_arr_size = Bigarray.Array1.dim dest_arr in
+    let dest_arr_size = Option.map_default Bigarray.Array1.dim 0 dest_arr in
     let end_pos = Int64.add offset (Int64.of_int dest_arr_size) in
     let end_block_index = get_block_index end_pos buffers in
     fill_and_blit start_block_index offset dest_arr >>= fun () ->
@@ -129,10 +131,55 @@ struct
       let dest_len = Int64.to_int (Int64.sub end_pos src_offset) in
       let dest_offset = dest_arr_size - dest_len in
       let dest_arr =
-        Bigarray.Array1.sub dest_arr dest_offset dest_len in
+        Option.map
+          (fun arr -> Bigarray.Array1.sub arr dest_offset dest_len)
+          dest_arr in
       fill_and_blit end_block_index src_offset dest_arr
     else
       SessionM.return ()
+
+  let read_ahead read_ahead_buffers
+      remote_id offset resource_size fill_array buffers =
+    let block_index = get_block_index offset buffers in
+    let rec loop accu requested_buffer_counter =
+      let requested_block_index = block_index + requested_buffer_counter in
+      let requested_block_start_pos =
+        get_block_start_pos requested_block_index buffers in
+      if requested_buffer_counter = 0 then SessionM.return accu
+      else if requested_block_start_pos >= resource_size then
+        loop accu (requested_buffer_counter - 1)
+      else begin
+        let read_m =
+          SessionM.return () >>= fun () ->
+          Utils.log_with_header
+            "BEGIN: Read ahead resource (remote id=%s, offset=%Ld, \
+             requested_block_index=%d, \
+             requested_buffer_counter=%d)\n%!"
+            remote_id requested_block_start_pos
+            requested_block_index requested_buffer_counter;
+          read_block
+            remote_id requested_block_start_pos
+            resource_size fill_array buffers >>= fun () ->
+          Utils.log_with_header
+            "END: Read ahead resource (remote id=%s, offset=%Ld, \
+             requested_block_index=%d, \
+             requested_buffer_counter=%d)\n%!"
+            remote_id requested_block_start_pos
+            requested_block_index requested_buffer_counter;
+          SessionM.return ()
+        in
+        let accu =
+          Utils.with_lock buffers.mutex
+            (fun () ->
+               match Utils.safe_find
+                       buffers.blocks (remote_id, requested_block_index) with
+               | None -> read_m :: accu
+               | Some _ -> accu
+            ) in
+        loop accu (requested_buffer_counter - 1)
+      end
+    in
+    loop [] read_ahead_buffers
 
   let shrink_cache target_size buffers =
     let remove_block ((remote_id, block_index) as key) =

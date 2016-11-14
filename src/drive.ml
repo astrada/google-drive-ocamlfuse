@@ -1126,11 +1126,25 @@ let stream_resource_to_memory_buffer offset buffer resource =
     remote_id offset (resource.Cache.Resource.size |> Option.get)
     (fun start_pos block_buffer ->
        stream_resource start_pos block_buffer resource)
-    buffer memory_buffers >>= fun () ->
+    ~dest_arr:buffer memory_buffers >>= fun () ->
   let config = context |. Context.config_lens in
   Buffering.MemoryBuffers.shrink_cache
     config.Config.max_memory_cache_size memory_buffers;
   SessionM.return ()
+
+let stream_resource_to_read_ahead_buffers offset resource =
+  let context = Context.get_ctx () in
+  let memory_buffers = context |. Context.memory_buffers in
+  let remote_id = resource.Cache.Resource.remote_id |> Option.get in
+  let config = context |. Context.config_lens in
+  Buffering.MemoryBuffers.read_ahead config.Config.read_ahead_buffers
+    remote_id offset (resource.Cache.Resource.size |> Option.get)
+    (fun start_pos block_buffer ->
+       stream_resource start_pos block_buffer resource)
+    memory_buffers >>= fun ms ->
+  List.map
+    (fun m -> with_retry (fun _ -> m) resource)
+    ms |> SessionM.return
 
 let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only
@@ -1489,7 +1503,7 @@ let read path buf offset file_descr =
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
     let to_stream =
-      config |. Config.stream_large_files &&
+      config.Config.stream_large_files &&
       not (Cache.Resource.is_document resource) &&
       resource.Cache.Resource.state = Cache.Resource.State.ToDownload &&
       (Option.default 0L resource.Cache.Resource.size) >
@@ -1507,7 +1521,19 @@ let read path buf offset file_descr =
       with_retry download_resource resource
   in
 
+  let build_read_ahead_requests =
+    if config.Config.read_ahead_buffers > 0 then
+      get_resource path_in_cache trashed >>= fun resource ->
+      stream_resource_to_read_ahead_buffers offset resource
+    else
+      SessionM.return []
+  in
+
   let content_path = do_request request_resource |> fst in
+  let read_ahead_requests = do_request build_read_ahead_requests |> fst in
+  List.iter
+    (fun m -> async_do_request m)
+    read_ahead_requests;
   if content_path <> "" then
     Utils.with_in_channel content_path
       (fun ch ->
