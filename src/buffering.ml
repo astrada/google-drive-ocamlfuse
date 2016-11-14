@@ -32,15 +32,9 @@ struct
     let dest_len = Bigarray.Array1.dim dest_arr in
     let src_off = Int64.to_int (Int64.sub offset block.start_pos) in
     let src_len = block.size - src_off in
-    let src_arr =
-      if src_len >= dest_len then
-        Bigarray.Array1.sub block.buffer src_off dest_len
-      else
-        Bigarray.Array1.sub block.buffer src_off src_len in
-    let dest_arr =
-      if src_len < dest_len then
-        Bigarray.Array1.sub dest_arr 0 src_len
-      else dest_arr in
+    let len = min src_len dest_len in
+    let src_arr = Bigarray.Array1.sub block.buffer src_off len in
+    let dest_arr = Bigarray.Array1.sub dest_arr 0 len in
     Utils.with_lock block.mutex
       (fun () -> Bigarray.Array1.blit src_arr dest_arr)
 
