@@ -106,8 +106,12 @@ type t = {
   max_upload_chunk_size : int;
   (* Specifies the size (in bytes) of memory buffer blocks. *)
   memory_buffer_size : int;
-  (* Maximum memory cache size in bytes. *)
+  (* Maximum memory cache size in bytes (used if [stream_large_files] is
+   * [true]. *)
   max_memory_cache_size : int;
+  (* Specifies how many blocks (of [memory_buffer_size] bytes) can be
+   * pre-fetched when streaming. *)
+  read_ahead_buffers : int;
 }
 
 let debug = {
@@ -270,6 +274,10 @@ let max_memory_cache_size = {
   GapiLens.get = (fun x -> x.max_memory_cache_size);
   GapiLens.set = (fun v x -> { x with max_memory_cache_size = v })
 }
+let read_ahead_buffers = {
+  GapiLens.get = (fun x -> x.read_ahead_buffers);
+  GapiLens.set = (fun v x -> { x with read_ahead_buffers = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -321,7 +329,8 @@ let default = {
   max_retries = 10;
   max_upload_chunk_size = default_max_upload_chunk_size;
   memory_buffer_size = 1048576;
-  max_memory_cache_size = 2097152;
+  max_memory_cache_size = 10485760;
+  read_ahead_buffers = 3;
 }
 
 let default_debug = {
@@ -365,6 +374,7 @@ let default_debug = {
   max_upload_chunk_size = default_max_upload_chunk_size;
   memory_buffer_size = 1048576;
   max_memory_cache_size = 10485760;
+  read_ahead_buffers = 3;
 }
 
 let of_table table =
@@ -447,6 +457,9 @@ let of_table table =
       max_memory_cache_size =
         get "max_memory_cache_size" int_of_string
           default.max_memory_cache_size;
+      read_ahead_buffers =
+        get "read_ahead_buffers" int_of_string
+          default.read_ahead_buffers;
     }
 
 let to_table data =
@@ -494,6 +507,7 @@ let to_table data =
     add "max_upload_chunk_size" (data.max_upload_chunk_size |> string_of_int);
     add "memory_buffer_size" (data.memory_buffer_size |> string_of_int);
     add "max_memory_cache_size" (data.max_memory_cache_size |> string_of_int);
+    add "read_ahead_buffers" (data.read_ahead_buffers |> string_of_int);
     table
 
 let debug_print out_ch start_time curl info_type info =
