@@ -154,8 +154,8 @@ let setup_application params =
   let async_upload =
     current_config.Config.async_upload && not params.multi_threading in
   let sqlite3_busy_timeout =
-    (* Previously default timeout was 500ms thats too low for multi-threading,
-     * update default value to 5000ms *)
+    (* Previously default timeout was 500ms that's too low for multi-threading.
+     * Update default value to 5000ms *)
     if params.multi_threading &&
        current_config.Config.sqlite3_busy_timeout = 500 then 5000
     else current_config.Config.sqlite3_busy_timeout in
@@ -492,7 +492,7 @@ let start_filesystem mountpoint fuse_args =
 let () =
   let fs_label = ref "default" in
   let mountpoint = ref "" in
-  let fuse_args = ref ["-s"; "-obig_writes"] in
+  let fuse_args = ref ["-obig_writes"] in
   let show_version = ref false in
   let debug = ref false in
   let client_id = ref "" in
@@ -561,13 +561,13 @@ let () =
        " enable FUSE debug output (implies -f).";
        "-s",
        Arg.Unit (fun _ ->
-         multi_threading := false),
-       " run in single-threaded mode (default).";
-       "-m",
-       Arg.Unit (fun _ ->
-         fuse_args := List.filter (fun a -> a <> "-s") !fuse_args;
          multi_threading := true),
-       " run in multi-threaded mode.";
+       " run in multi-threaded mode (default).";
+       "-s",
+       Arg.Unit (fun _ ->
+         fuse_args := "-s" :: !fuse_args;
+         multi_threading := false),
+       " run in single-threaded mode.";
        "-o",
        Arg.String parse_mount_options,
        " specify FUSE mount options.";
