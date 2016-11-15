@@ -1150,8 +1150,11 @@ let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only
 
 let is_file_read_only resource =
+  let config = Context.get_ctx () |. Context.config_lens in
   not (Option.default true resource.Cache.Resource.can_edit) ||
-  Cache.Resource.is_document resource
+  Cache.Resource.is_document resource ||
+  config.Config.large_file_read_only &&
+    Cache.Resource.is_large_file config resource
 
 (* stat *)
 let get_attr path =
@@ -1208,11 +1211,7 @@ let get_attr path =
         if Cache.Resource.is_symlink resource then 0o777
         else
           lnot config.Config.umask land (
-            if config.Config.read_only ||
-               not (Option.default true resource.Cache.Resource.can_edit) ||
-               Cache.Resource.is_document resource ||
-               config.Config.large_file_read_only &&
-                 Cache.Resource.is_large_file config resource
+            if is_file_read_only resource
             then 0o555
             else 0o777)
       in

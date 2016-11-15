@@ -496,6 +496,8 @@ let to_table data =
     add "delete_forever_in_trash_folder"
       (data.delete_forever_in_trash_folder |> string_of_bool);
     add "stream_large_files" (data.stream_large_files |> string_of_bool);
+    add "large_file_threshold_mb"
+      (data.large_file_threshold_mb |> string_of_int);
     add "large_file_read_only"
       (data.large_file_read_only |> string_of_bool);
     add "connect_timeout_ms" (data.connect_timeout_ms |> string_of_int);
