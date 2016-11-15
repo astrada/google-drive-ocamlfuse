@@ -1657,13 +1657,9 @@ let upload_with_retry path =
   with_retry try_upload resource
 
 let upload_if_dirty path =
-  if start_uploading_if_dirty path then
-    let config = Context.get_ctx () |. Context.config_lens in
-    if config.Config.async_upload then begin
-      async_do_request (upload_with_retry path)
-    end else begin
-      do_request (upload_with_retry path) |> ignore
-    end
+  if start_uploading_if_dirty path then begin
+    do_request (upload_with_retry path) |> ignore
+  end
 
 (* flush *)
 let flush path file_descr =

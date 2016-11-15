@@ -150,9 +150,6 @@ let setup_application params =
     then current_config |. Config.client_secret
     else params.client_secret in
   let headless = params.headless in
-  (* Turn off async_upload if multi_threading is true. *)
-  let async_upload =
-    current_config.Config.async_upload && not params.multi_threading in
   let sqlite3_busy_timeout =
     (* Previously default timeout was 500ms that's too low for multi-threading.
      * Update default value to 5000ms *)
@@ -168,7 +165,6 @@ let setup_application params =
           Config.debug = params.debug;
           client_id;
           client_secret;
-          async_upload;
           sqlite3_busy_timeout;
     } in
   let config_store = config_store
