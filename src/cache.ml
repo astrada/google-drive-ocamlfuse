@@ -967,6 +967,14 @@ struct
     resource.state = State.Uploading ||
     resource.last_update >= metadata_last_update
 
+  let is_large_file config resource =
+    let large_file_threshold =
+      Int64.mul
+        (Int64.of_int config.Config.large_file_threshold_mb)
+        Utils.mb in
+    config.Config.stream_large_files &&
+    (Option.default 0L resource.size) > large_file_threshold
+
   let get_format_from_mime_type mime_type config =
     match mime_type with
         "application/vnd.google-apps.document" ->

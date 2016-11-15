@@ -45,7 +45,6 @@ let trash_directory_name_length = String.length trash_directory
 let trash_directory_base_path = "/.Trash/"
 let f_bsize = 4096L
 let change_limit = 50
-let mb = 1048576L
 let max_link_target_length = 127
 let max_attribute_length = 126
 
@@ -418,7 +417,8 @@ let shrink_cache ?(file_size = 0L) () =
   let cache = context.Context.cache in
   with_metadata_lock
     (fun () ->
-       let max_cache_size = Int64.mul (Int64.of_int max_cache_size_mb) mb in
+       let max_cache_size =
+         Int64.mul (Int64.of_int max_cache_size_mb) Utils.mb in
        let target_size =
          Int64.add metadata.Cache.Metadata.cache_size file_size in
        if target_size > max_cache_size then begin
@@ -1210,7 +1210,9 @@ let get_attr path =
           lnot config.Config.umask land (
             if config.Config.read_only ||
                not (Option.default true resource.Cache.Resource.can_edit) ||
-               Cache.Resource.is_document resource
+               Cache.Resource.is_document resource ||
+               config.Config.large_file_read_only &&
+                 Cache.Resource.is_large_file config resource
             then 0o555
             else 0o777)
       in
@@ -1496,18 +1498,13 @@ let utime path atime mtime =
 let read path buf offset file_descr =
   let (path_in_cache, trashed) = get_path_in_cache path in
   let config = Context.get_ctx () |. Context.config_lens in
-  let large_file_threshold_mb = config |. Config.large_file_threshold_mb in
-  let large_file_threshold =
-    Int64.mul (Int64.of_int large_file_threshold_mb) mb in
 
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
     let to_stream =
-      config.Config.stream_large_files &&
       not (Cache.Resource.is_document resource) &&
       resource.Cache.Resource.state = Cache.Resource.State.ToDownload &&
-      (Option.default 0L resource.Cache.Resource.size) >
-        large_file_threshold in
+      Cache.Resource.is_large_file config resource in
     let to_stream_to_memory_buffer =
       to_stream && config.Config.memory_buffer_size > 0 in
     if to_stream_to_memory_buffer then

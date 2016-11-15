@@ -85,6 +85,9 @@ type t = {
   stream_large_files : bool;
   (* Specifies the minimum size (in megabytes) of large files *)
   large_file_threshold_mb : int;
+  (* Specifies whether large files are read-only. Checked only if
+   * [stream_large_files] is [true]. *)
+  large_file_read_only : bool;
   (* Specifies connection timeout in milliseconds *)
   connect_timeout_ms : int;
   (* Max download speed (on a single transfer) in bytes/second. *)
@@ -231,6 +234,10 @@ let large_file_threshold_mb = {
   GapiLens.get = (fun x -> x.large_file_threshold_mb);
   GapiLens.set = (fun v x -> { x with large_file_threshold_mb = v })
 }
+let large_file_read_only = {
+  GapiLens.get = (fun x -> x.large_file_read_only);
+  GapiLens.set = (fun v x -> { x with large_file_read_only = v })
+}
 let connect_timeout_ms = {
   GapiLens.get = (fun x -> x.connect_timeout_ms);
   GapiLens.set = (fun v x -> { x with connect_timeout_ms = v })
@@ -313,6 +320,7 @@ let default = {
   delete_forever_in_trash_folder = false;
   stream_large_files = false;
   large_file_threshold_mb = 16;
+  large_file_read_only = true;
   connect_timeout_ms = 5000;
   max_download_speed = 0L;
   max_upload_speed = 0L;
@@ -356,6 +364,7 @@ let default_debug = {
   delete_forever_in_trash_folder = false;
   stream_large_files = true;
   large_file_threshold_mb = 1;
+  large_file_read_only = true;
   connect_timeout_ms = 5000;
   max_download_speed = 0L;
   max_upload_speed = 0L;
@@ -426,6 +435,9 @@ let of_table table =
       large_file_threshold_mb =
         get "large_file_threshold_mb" int_of_string
           default.large_file_threshold_mb;
+      large_file_read_only =
+        get "large_file_read_only" bool_of_string
+          default.large_file_read_only;
       connect_timeout_ms =
         get "connect_timeout_ms" int_of_string default.connect_timeout_ms;
       max_download_speed =
@@ -484,8 +496,8 @@ let to_table data =
     add "delete_forever_in_trash_folder"
       (data.delete_forever_in_trash_folder |> string_of_bool);
     add "stream_large_files" (data.stream_large_files |> string_of_bool);
-    add "large_file_threshold_mb"
-      (data.large_file_threshold_mb |> string_of_int);
+    add "large_file_read_only"
+      (data.large_file_read_only |> string_of_bool);
     add "connect_timeout_ms" (data.connect_timeout_ms |> string_of_int);
     add "max_download_speed" (data.max_download_speed |> Int64.to_string);
     add "max_upload_speed" (data.max_upload_speed |> Int64.to_string);

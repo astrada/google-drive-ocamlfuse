@@ -8,6 +8,7 @@ let start_time = Unix.gettimeofday ()
 let verbose = ref false
 let log_channel = ref stdout
 let max_retries = ref 10
+let mb = 1048576L
 
 (* Threads *)
 let get_thread_id () =
