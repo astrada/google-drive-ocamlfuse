@@ -854,8 +854,12 @@ and get_resource path trashed =
           Cache.Resource.delete_resource cache resource;
           get_new_resource cache
       | Some file ->
+          let reloaded_resource = Option.map_default
+              (Cache.Resource.select_resource_with_remote_id cache)
+              (Some resource)
+              resource.Cache.Resource.remote_id |> Option.default resource in
           let updated_resource = update_resource_from_file
-              resource file in
+              reloaded_resource file in
           update_cached_resource cache updated_resource;
           Utils.log_with_header
             "END: Refreshing resource (id=%Ld)\n%!"

@@ -1206,6 +1206,12 @@ let setup_db cache =
             cache_size INTEGER NOT NULL, \
             last_update REAL NOT NULL \
          ); \
+         UPDATE resource \
+         SET state = 'ToDownload' \
+         WHERE state = 'Downloading'; \
+         UPDATE resource \
+         SET state = 'ToUpload' \
+         WHERE state = 'Uploading'; \
          COMMIT TRANSACTION;" |> ignore)
 (* END Setup *)
 
