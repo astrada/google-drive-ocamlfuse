@@ -449,11 +449,34 @@ let shrink_cache ?(file_size = 0L) () =
           update_cache_size file_size metadata cache;
        end)
 
-let delete_resources metadata cache resources =
+let delete_memory_buffers memory_buffers resource =
+  Option.may
+    (fun remote_id ->
+       Buffering.MemoryBuffers.remove_buffers remote_id memory_buffers
+    )
+    resource.Cache.Resource.remote_id
+
+let delete_cached_resource resource =
+  let context = Context.get_ctx () in
+  let cache = context.Context.cache in
+  let memory_buffers = context.Context.memory_buffers in
+  Cache.Resource.delete_resource cache resource;
+  let total_size =
+    Cache.delete_files_from_cache cache [resource] in
+  let metadata = context |. Context.metadata_lens in
+  update_cache_size (Int64.neg total_size) metadata cache;
+  delete_memory_buffers memory_buffers resource
+
+let delete_cached_resources metadata cache resources =
   Cache.Resource.delete_resources cache resources;
   let total_size =
     Cache.delete_files_from_cache cache resources in
-  update_cache_size (Int64.neg total_size) metadata cache
+  update_cache_size (Int64.neg total_size) metadata cache;
+  let context = Context.get_ctx () in
+  let memory_buffers = context.Context.memory_buffers in
+  List.iter
+    (delete_memory_buffers memory_buffers)
+    resources
 
 let update_cache_size_for_documents cache resource content_path op =
   with_metadata_lock
@@ -662,7 +685,7 @@ let get_metadata () =
           update_resource_cache_from_changes
             (fun change -> change.Change.removed)
             get_file_id_from_change
-            (delete_resources new_metadata);
+            (delete_cached_resources new_metadata);
           Utils.log_with_header "END: Removing deleted resources\n%!";
           if List.length changes > 0 then begin
             Utils.log_with_header "BEGIN: Invalidating trash bin resource\n%!";
@@ -851,7 +874,7 @@ and get_resource path trashed =
     end >>= fun refreshed_file ->
     match refreshed_file with
         None ->
-          Cache.Resource.delete_resource cache resource;
+          delete_cached_resource resource;
           get_new_resource cache
       | Some file ->
           let reloaded_resource = Option.map_default
@@ -1124,7 +1147,7 @@ let stream_resource offset buffer resource =
 
 let stream_resource_to_memory_buffer offset buffer resource =
   let context = Context.get_ctx () in
-  let memory_buffers = context |. Context.memory_buffers in
+  let memory_buffers = context.Context.memory_buffers in
   let remote_id = resource.Cache.Resource.remote_id |> Option.get in
   Buffering.MemoryBuffers.read_block
     remote_id offset (resource.Cache.Resource.size |> Option.get)
@@ -1138,7 +1161,7 @@ let stream_resource_to_memory_buffer offset buffer resource =
 
 let stream_resource_to_read_ahead_buffers offset resource =
   let context = Context.get_ctx () in
-  let memory_buffers = context |. Context.memory_buffers in
+  let memory_buffers = context.Context.memory_buffers in
   let remote_id = resource.Cache.Resource.remote_id |> Option.get in
   let config = context |. Context.config_lens in
   Buffering.MemoryBuffers.read_ahead config.Config.read_ahead_buffers
@@ -1504,19 +1527,16 @@ let read path buf offset file_descr =
 
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
-    let to_stream =
-      not (Cache.Resource.is_document resource) &&
-      resource.Cache.Resource.state = Cache.Resource.State.ToDownload &&
-      Cache.Resource.is_large_file config resource in
-    let to_stream_to_memory_buffer =
-      to_stream && config.Config.memory_buffer_size > 0 in
-    if to_stream_to_memory_buffer then
-      with_retry
-        (stream_resource_to_memory_buffer offset buf) resource >>= fun () ->
-      SessionM.return ""
-    else if to_stream then
-      with_retry (stream_resource offset buf) resource >>= fun () ->
-      SessionM.return ""
+    let (to_stream, to_memory_buffer) =
+      Cache.Resource.to_stream config resource in
+    if to_stream then
+      if to_memory_buffer then
+        with_retry
+          (stream_resource_to_memory_buffer offset buf) resource >>= fun () ->
+        SessionM.return ""
+      else
+        with_retry (stream_resource offset buf) resource >>= fun () ->
+        SessionM.return ""
     else
       with_retry download_resource resource
   in
@@ -1524,7 +1544,12 @@ let read path buf offset file_descr =
   let build_read_ahead_requests =
     if config.Config.read_ahead_buffers > 0 then
       get_resource path_in_cache trashed >>= fun resource ->
-      stream_resource_to_read_ahead_buffers offset resource
+      let (to_stream, to_memory_buffer) =
+        Cache.Resource.to_stream config resource in
+      if to_stream && to_memory_buffer then
+        stream_resource_to_read_ahead_buffers offset resource
+      else
+        SessionM.return []
     else
       SessionM.return []
   in
@@ -1831,7 +1856,7 @@ let delete_resource is_folder path =
   update_remote_resource
     ~purge_cache:(
       fun cache resource ->
-        Cache.Resource.delete_resource cache resource;
+        delete_cached_resource resource;
         if is_folder then begin
           Utils.log_with_header
             "BEGiN: Deleting folder old content (path=%s, trashed=%b) from cache\n%!"

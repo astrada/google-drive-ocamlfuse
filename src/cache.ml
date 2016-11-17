@@ -975,6 +975,14 @@ struct
     config.Config.stream_large_files &&
     (Option.default 0L resource.size) > large_file_threshold
 
+  let to_stream config resource =
+    let to_stream =
+      not (is_document resource) &&
+      resource.state = State.ToDownload &&
+      is_large_file config resource in
+    let to_memory_buffer = config.Config.memory_buffer_size > 0 in
+    (to_stream, to_memory_buffer)
+
   let get_format_from_mime_type mime_type config =
     match mime_type with
         "application/vnd.google-apps.document" ->

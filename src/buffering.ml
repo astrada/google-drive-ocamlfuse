@@ -44,12 +44,14 @@ module MemoryBuffers =
 struct
   type t = {
     blocks : (string * int, Block.t) Hashtbl.t;
+    files : (string, int list) Hashtbl.t;
     block_size : int;
     mutex : Mutex.t;
   }
 
   let create ?(n = 64) block_size = {
     blocks = Hashtbl.create n;
+    files = Hashtbl.create n;
     block_size;
     mutex = Mutex.create ();
   }
@@ -79,8 +81,14 @@ struct
                        (Int64.sub resource_size start_pos))) in
                Block.create start_pos size in
              Hashtbl.add buffers.blocks (remote_id, block_index) b;
+             begin match Utils.safe_find buffers.files remote_id with
+               | None ->
+                 Hashtbl.add buffers.files remote_id [block_index]
+               | Some bs ->
+                 Hashtbl.replace buffers.files remote_id (block_index :: bs)
+             end;
              Utils.log_with_header
-               "Allocating memory buffer (id=%s, index=%d, size=%d)\n%!"
+               "Allocating memory buffer (remote id=%s, index=%d, size=%d)\n%!"
                remote_id block_index b.Block.size;
              b
            | Some b -> b
@@ -181,10 +189,30 @@ struct
     in
     loop [] read_ahead_buffers
 
+  let remove_buffers remote_id buffers =
+    Utils.log_with_header
+      "BEGIN: Deallocating memory buffers (remote id=%s)\n%!"
+      remote_id;
+    begin match Utils.safe_find buffers.files remote_id with
+      | None ->
+        Utils.log_with_header
+          "END: Deallocating no memory buffers (remote id=%s)\n%!"
+          remote_id
+      | Some bs ->
+        List.iter
+          (fun b -> Hashtbl.remove buffers.blocks (remote_id, b))
+          bs;
+        Hashtbl.remove buffers.files remote_id;
+        Utils.log_with_header
+          "END: Deallocating %d memory buffers (remote id=%s)\n%!"
+          (List.length bs) remote_id
+    end
+
+
   let shrink_cache target_size buffers =
     let remove_block ((remote_id, block_index) as key) =
       Utils.log_with_header
-        "Deallocating memory buffer (id=%s, index=%d)\n%!"
+        "Deallocating memory buffer (remote id=%s, index=%d)\n%!"
         remote_id block_index;
       Hashtbl.remove buffers.blocks key
     in
