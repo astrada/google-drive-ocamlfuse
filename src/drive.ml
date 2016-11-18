@@ -1081,7 +1081,8 @@ let download_resource resource =
       | Some r -> r.Cache.Resource.state
     in
     let download_if_not_updated () =
-      if check_md5_checksum resource cache then begin
+      let r = reloaded_resource |> Option.get in
+      if check_md5_checksum r cache then begin
         update_cached_resource_state cache
           Cache.Resource.State.Synchronized resource.Cache.Resource.id;
         SessionM.return ()
