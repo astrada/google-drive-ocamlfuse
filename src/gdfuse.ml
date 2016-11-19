@@ -229,6 +229,7 @@ let setup_application params =
     curl_state;
     mountpoint_stats = Unix.LargeFile.stat mountpoint;
     metadata = None;
+    metadata_lock = Mutex.create ();
     skip_trash = params.skip_trash;
     memory_buffers =
       Buffering.MemoryBuffers.create config.Config.memory_buffer_size;

@@ -387,9 +387,6 @@ let get_root_resource trashed =
           inserted
     | Some resource -> resource
 
-let metadata_mutex = Mutex.create ()
-let with_metadata_lock f = Utils.with_lock metadata_mutex f
-
 let update_cache_size delta metadata cache =
   Utils.log_with_header "BEGIN: Updating cache size (delta=%Ld) in db\n%!"
     delta;
@@ -415,7 +412,7 @@ let shrink_cache ?(file_size = 0L) () =
   let config = context |. Context.config_lens in
   let max_cache_size_mb = config.Config.max_cache_size_mb in
   let cache = context.Context.cache in
-  with_metadata_lock
+  Utils.with_lock context.Context.metadata_lock
     (fun () ->
        let max_cache_size =
          Int64.mul (Int64.of_int max_cache_size_mb) Utils.mb in
@@ -486,14 +483,14 @@ let delete_cached_resources metadata cache resources =
     resources
 
 let update_cache_size_for_documents cache resource content_path op =
-  with_metadata_lock
+  let context = Context.get_ctx () in
+  Utils.with_lock context.Context.metadata_lock
     (fun () ->
       if resource.Cache.Resource.size = Some 0L &&
           Sys.file_exists content_path then begin
         try
           let stats = Unix.LargeFile.stat content_path in
           let size = stats.Unix.LargeFile.st_size in
-          let context = Context.get_ctx () in
           let metadata = context |. Context.metadata_lens in
           let delta = op size in
           update_cache_size delta metadata cache
@@ -740,7 +737,7 @@ let get_metadata () =
     db_metadata |> Cache.Metadata.cache_size ^= cache_size
   in
 
-  with_metadata_lock
+  Utils.with_lock context.Context.metadata_lock
     (fun () ->
        let metadata =
          let context = Context.get_ctx () in

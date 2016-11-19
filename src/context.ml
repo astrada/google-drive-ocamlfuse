@@ -22,6 +22,8 @@ type t = {
   mountpoint_stats : Unix.LargeFile.stats;
   (* Current metadata *)
   metadata : Cache.Metadata.t option;
+  (* Metadata lock *)
+  metadata_lock : Mutex.t;
   (* Whether permanently delete files *)
   skip_trash : bool;
   (* Memory buffers *)
@@ -61,6 +63,10 @@ let mountpoint_stats = {
 let metadata = {
   GapiLens.get = (fun x -> x.metadata);
   GapiLens.set = (fun v x -> { x with metadata = v })
+}
+let metadata_lock = {
+  GapiLens.get = (fun x -> x.metadata_lock);
+  GapiLens.set = (fun v x -> { x with metadata_lock = v })
 }
 let skip_trash = {
   GapiLens.get = (fun x -> x.skip_trash);
