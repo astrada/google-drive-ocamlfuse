@@ -176,7 +176,7 @@ let build_resource_tables parent_path trashed =
   let resources =
     Cache.Resource.select_resources_with_parent_path
       cache parent_path trashed in
-  let filename_table = Hashtbl.create 64 in
+  let filename_table = Hashtbl.create Utils.hashtable_initial_size in
   let remote_id_table = Hashtbl.create (List.length resources) in
   List.iter
     (fun resource ->
@@ -456,16 +456,24 @@ let delete_memory_buffers memory_buffers resource =
     )
     resource.Cache.Resource.remote_id
 
+let delete_from_context context resource =
+  let memory_buffers = context.Context.memory_buffers in
+  delete_memory_buffers memory_buffers resource;
+  Context.with_ctx_lock
+    (fun () ->
+       let remote_id = resource.Cache.Resource.remote_id |> Option.get in
+       Hashtbl.remove context.Context.file_locks remote_id
+    )
+
 let delete_cached_resource resource =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
-  let memory_buffers = context.Context.memory_buffers in
   Cache.Resource.delete_resource cache resource;
   let total_size =
     Cache.delete_files_from_cache cache [resource] in
   let metadata = context |. Context.metadata_lens in
   update_cache_size (Int64.neg total_size) metadata cache;
-  delete_memory_buffers memory_buffers resource
+  delete_from_context context resource
 
 let delete_cached_resources metadata cache resources =
   Cache.Resource.delete_resources cache resources;
@@ -473,9 +481,8 @@ let delete_cached_resources metadata cache resources =
     Cache.delete_files_from_cache cache resources in
   update_cache_size (Int64.neg total_size) metadata cache;
   let context = Context.get_ctx () in
-  let memory_buffers = context.Context.memory_buffers in
   List.iter
-    (delete_memory_buffers memory_buffers)
+    (delete_from_context context)
     resources
 
 let update_cache_size_for_documents cache resource content_path op =
@@ -1018,7 +1025,7 @@ let download_resource resource =
       GapiMediaResource.destination;
       range_spec = "";
     } in
-    let fileId = resource |. Cache.Resource.remote_id |> Option.get in
+    let fileId = resource.Cache.Resource.remote_id |> Option.get in
     if Cache.Resource.is_document resource then begin
       let fmt = Cache.Resource.get_format resource config in
       let mimeType = Cache.Resource.mime_type_of_format fmt in
@@ -1041,7 +1048,8 @@ let download_resource resource =
       SessionM.return ()
     end
   in
-  let do_download () =
+  let do_download =
+    SessionM.return () >>= fun () ->
     Utils.log_with_header
       "BEGIN: Downloading resource (id=%Ld) to %s\n%!"
       resource.Cache.Resource.id content_path;
@@ -1070,6 +1078,23 @@ let download_resource resource =
       Cache.Resource.State.Synchronized resource.Cache.Resource.id;
     SessionM.return ()
   in
+  let get_lock () =
+    let context = Context.get_ctx () in
+    Context.with_ctx_lock
+      (fun () ->
+         let remote_id = resource.Cache.Resource.remote_id |> Option.get in
+         match Utils.safe_find context.Context.file_locks remote_id with
+         | None ->
+           let mutex = Mutex.create () in
+           Hashtbl.add context.Context.file_locks remote_id mutex;
+           mutex
+         | Some mutex -> mutex
+      )
+  in
+  let do_download_with_lock () =
+    let mutex = get_lock () in
+    Utils.with_lock_m mutex do_download
+  in
   let rec check_state n =
     let reloaded_resource = Option.map_default
       (Cache.Resource.select_resource_with_remote_id cache)
@@ -1087,7 +1112,7 @@ let download_resource resource =
           Cache.Resource.State.Synchronized resource.Cache.Resource.id;
         SessionM.return ()
       end else
-        do_download ()
+        do_download_with_lock ()
     in
     begin match reloaded_state with
         Cache.Resource.State.Synchronized
@@ -1096,7 +1121,7 @@ let download_resource resource =
           if Sys.file_exists content_path then
             SessionM.return ()
           else
-            do_download ()
+            do_download_with_lock ()
       | Cache.Resource.State.ToDownload ->
           download_if_not_updated ()
       | Cache.Resource.State.Downloading ->

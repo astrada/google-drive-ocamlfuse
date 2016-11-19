@@ -9,6 +9,7 @@ let verbose = ref false
 let log_channel = ref stdout
 let max_retries = ref 10
 let mb = 1048576L
+let hashtable_initial_size = 64
 
 (* Threads *)
 let get_thread_id () =

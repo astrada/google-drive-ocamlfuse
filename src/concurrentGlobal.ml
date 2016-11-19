@@ -7,14 +7,7 @@ struct
   let mutex = Mutex.create ()
 
   let with_lock f =
-    try
-      let () = Mutex.lock mutex in
-      let result = f () in
-        Mutex.unlock mutex;
-        result
-    with e ->
-      Mutex.unlock mutex;
-      raise e
+    Utils.with_lock mutex f
       
   let get_no_lock () =
     Global.get global

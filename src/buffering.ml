@@ -49,7 +49,7 @@ struct
     mutex : Mutex.t;
   }
 
-  let create ?(n = 64) block_size = {
+  let create ?(n = Utils.hashtable_initial_size) block_size = {
     blocks = Hashtbl.create n;
     files = Hashtbl.create n;
     block_size;

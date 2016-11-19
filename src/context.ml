@@ -26,6 +26,8 @@ type t = {
   skip_trash : bool;
   (* Memory buffers *)
   memory_buffers : Buffering.MemoryBuffers.t;
+  (* File locks *)
+  file_locks : (string, Mutex.t) Hashtbl.t;
 }
 
 let app_dir = {
@@ -68,6 +70,10 @@ let memory_buffers = {
   GapiLens.get = (fun x -> x.memory_buffers);
   GapiLens.set = (fun v x -> { x with memory_buffers = v })
 }
+let file_locks = {
+  GapiLens.get = (fun x -> x.file_locks);
+  GapiLens.set = (fun v x -> { x with file_locks = v })
+}
 
 let config_lens =
   config_store |-- ConfigFileStore.data
@@ -100,6 +106,8 @@ let set_ctx = ConcurrentContext.set
 let clear_ctx = ConcurrentContext.clear
 
 let update_ctx = ConcurrentContext.update
+
+let with_ctx_lock = ConcurrentContext.with_lock
 
 let save_state_store state_store =
   Utils.log_with_header "BEGIN: Saving application state in %s\n"
