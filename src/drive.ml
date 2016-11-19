@@ -1147,7 +1147,7 @@ let download_resource resource =
               "Already downloading resource (id=%Ld): check number %d\n%!"
               resource.Cache.Resource.id
               n;
-            let n' = if n > 6 then 6 else n in
+            let n' = min n 6 in
             GapiUtils.wait_exponential_backoff n';
             check_state (n + 1)
           end
