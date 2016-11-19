@@ -1236,3 +1236,21 @@ let clean_up_cache cache =
       (Sys.readdir cache.cache_dir)
   end
 
+let compute_cache_size cache =
+  if Sys.file_exists cache.cache_dir &&
+     Sys.is_directory cache.cache_dir then begin
+    Array.fold_left
+      (fun size file ->
+         try
+           let path = Filename.concat cache.cache_dir file in
+           if Sys.file_exists path && path <> cache.db_path then begin
+             let stats = Unix.LargeFile.stat path in
+             let file_size = stats.Unix.LargeFile.st_size in
+             Int64.add size file_size
+           end else size
+         with e -> Utils.log_exception e; size
+      )
+      0L
+      (Sys.readdir cache.cache_dir)
+  end else 0L
+

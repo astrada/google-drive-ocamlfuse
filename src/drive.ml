@@ -728,13 +728,28 @@ let get_metadata () =
     SessionM.return updated_metadata
   in
 
+  let resync_cache_size db_metadata =
+    let old_cache_size = db_metadata.Cache.Metadata.cache_size in
+    Utils.log_with_header
+      "BEGIN: Recalculating cache size (old value=%Ld)\n%!"
+      old_cache_size;
+    let cache_size = Cache.compute_cache_size context.Context.cache in
+    Utils.log_with_header
+      "END: Recalculating cache size (new value=%Ld)\n%!"
+      cache_size;
+    db_metadata |> Cache.Metadata.cache_size ^= cache_size
+  in
+
   with_metadata_lock
     (fun () ->
        let metadata =
+         let context = Context.get_ctx () in
          if Option.is_none context.Context.metadata then begin
            Utils.log_with_header "BEGIN: Loading metadata from db\n%!";
            let db_metadata =
              Cache.Metadata.select_metadata context.Context.cache in
+           let db_metadata =
+             Option.map resync_cache_size db_metadata in
            Context.update_ctx (Context.metadata ^= db_metadata);
            db_metadata
          end else begin
