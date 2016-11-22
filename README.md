@@ -35,11 +35,19 @@ Getting started
 
 ### Installation
 
-I've uploaded .deb packages to my
+I've uploaded .deb packages for Ubuntu to my
 [PPA](https://launchpad.net/~alessandro-strada/+archive/ppa). In order to to
 install it, use the commands below:
 
     sudo add-apt-repository ppa:alessandro-strada/ppa
+    sudo apt-get update
+    sudo apt-get install google-drive-ocamlfuse
+    
+New beta versions are available on this
+[PPA](https://launchpad.net/~alessandro-strada/+archive/ubuntu/google-drive-ocamlfuse-beta).
+If you want to test them, use the commands below:
+
+    sudo add-apt-repository ppa:alessandro-strada/google-drive-ocamlfuse-beta
     sudo apt-get update
     sudo apt-get install google-drive-ocamlfuse
 
