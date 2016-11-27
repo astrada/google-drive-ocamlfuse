@@ -1156,16 +1156,20 @@ let delete_files_from_cache cache resources =
   in
   List.fold_left
     (fun total_size resource ->
-       let content_path = get_content_path cache resource in
-       Utils.log_with_header
-         "BEGIN: Removing file (%s: resource %Ld) from cache\n%!"
-         content_path resource.Resource.id;
-       let size = remove_file content_path in
-       let new_size = Int64.add total_size size in
-       Utils.log_with_header
-         "END: Removing file (%s: resource %Ld) from cache\n%!"
-         content_path resource.Resource.id;
-       new_size)
+       if resource.Resource.state = Resource.State.NotFound then 0L
+       else begin
+         let content_path = get_content_path cache resource in
+         Utils.log_with_header
+           "BEGIN: Removing file (%s: resource %Ld) from cache\n%!"
+           content_path resource.Resource.id;
+         let size = remove_file content_path in
+         let new_size = Int64.add total_size size in
+         Utils.log_with_header
+           "END: Removing file (%s: resource %Ld) from cache\n%!"
+           content_path resource.Resource.id;
+         new_size
+       end
+    )
     0L
     resources
 
