@@ -30,6 +30,8 @@ type t = {
   memory_buffers : Buffering.MemoryBuffers.t;
   (* File locks *)
   file_locks : (string, Mutex.t) Hashtbl.t;
+  (* Thread queue *)
+  thread_queue : Thread.t Queue.t;
 }
 
 let app_dir = {
@@ -79,6 +81,10 @@ let memory_buffers = {
 let file_locks = {
   GapiLens.get = (fun x -> x.file_locks);
   GapiLens.set = (fun v x -> { x with file_locks = v })
+}
+let thread_queue = {
+  GapiLens.get = (fun x -> x.thread_queue);
+  GapiLens.set = (fun v x -> { x with thread_queue = v })
 }
 
 let config_lens =

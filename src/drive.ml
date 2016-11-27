@@ -36,7 +36,8 @@ let do_request = Oauth2.do_request
 let async_do_request f =
   let thread = Thread.create (fun go -> do_request go) f in
   let thread_id = Thread.id thread in
-  Utils.log_with_header "Spawning new thread id=%d\n%!" thread_id
+  Utils.log_with_header "Spawning new thread id=%d\n%!" thread_id;
+  thread
 
 let root_directory = "/"
 let root_folder_id = "root"
@@ -847,7 +848,8 @@ let check_resource_in_cache cache path trashed =
     | Some resource ->
         if Cache.Resource.is_valid resource metadata_last_update then
           if Cache.Resource.is_folder resource then
-            resource.Cache.Resource.state = Cache.Resource.State.Synchronized
+            resource.Cache.Resource.state = Cache.Resource.State.Synchronized ||
+            resource.Cache.Resource.state = Cache.Resource.State.NotFound
           else true
         else false
 
@@ -1599,7 +1601,7 @@ let read path buf offset file_descr =
   let content_path = do_request request_resource |> fst in
   let read_ahead_requests = do_request build_read_ahead_requests |> fst in
   List.iter
-    (fun m -> async_do_request m)
+    (fun m -> async_do_request m |> ignore)
     read_ahead_requests;
   if content_path <> "" then
     Utils.with_in_channel content_path
@@ -1724,8 +1726,19 @@ let upload_with_retry path =
   with_retry try_upload resource
 
 let upload_if_dirty path =
+  let context = Context.get_ctx () in
+  let start_async_upload () =
+    let thread = async_do_request (upload_with_retry path) in
+    Context.with_ctx_lock
+      (fun () -> Queue.add thread context.Context.thread_queue)
+  in
   if start_uploading_if_dirty path then begin
-    do_request (upload_with_retry path) |> ignore
+    let config = context |. Context.config_lens in
+    if config.Config.async_upload then begin
+      start_async_upload ()
+    end else begin
+      do_request (upload_with_retry path) |> ignore
+    end
   end
 
 (* flush *)
