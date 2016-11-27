@@ -456,11 +456,12 @@ let delete_memory_buffers memory_buffers resource =
 let delete_from_context context resource =
   let memory_buffers = context.Context.memory_buffers in
   delete_memory_buffers memory_buffers resource;
-  Context.with_ctx_lock
-    (fun () ->
-       let remote_id = resource.Cache.Resource.remote_id |> Option.get in
-       Hashtbl.remove context.Context.file_locks remote_id
+  Option.may
+    (fun remote_id ->
+       Context.with_ctx_lock
+         (fun () -> Hashtbl.remove context.Context.file_locks remote_id)
     )
+    resource.Cache.Resource.remote_id
 
 let delete_cached_resource resource =
   let context = Context.get_ctx () in
@@ -468,8 +469,11 @@ let delete_cached_resource resource =
   Cache.Resource.delete_resource cache resource;
   let total_size =
     Cache.delete_files_from_cache cache [resource] in
-  let metadata = context |. Context.metadata_lens in
-  update_cache_size (Int64.neg total_size) metadata cache;
+  Option.may
+    (fun metadata ->
+       update_cache_size (Int64.neg total_size) metadata cache
+    )
+    context.Context.metadata;
   delete_from_context context resource
 
 let delete_cached_resources metadata cache resources =
