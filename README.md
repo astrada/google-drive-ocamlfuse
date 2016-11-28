@@ -12,6 +12,9 @@ written in OCaml. It lets you mount your Google Drive on Linux.
 * Multiple account support
 * Duplicate file handling
 * Access to trash (`.Trash` directory)
+* Unix permissions and ownership
+* Symbolic links
+* Read-ahead buffers when streaming
 
 ### Resources
 
@@ -32,11 +35,19 @@ Getting started
 
 ### Installation
 
-I've uploaded .deb packages to my
+I've uploaded .deb packages for Ubuntu to my
 [PPA](https://launchpad.net/~alessandro-strada/+archive/ppa). In order to to
 install it, use the commands below:
 
     sudo add-apt-repository ppa:alessandro-strada/ppa
+    sudo apt-get update
+    sudo apt-get install google-drive-ocamlfuse
+    
+New beta versions are available on this
+[PPA](https://launchpad.net/~alessandro-strada/+archive/ubuntu/google-drive-ocamlfuse-beta).
+If you want to test them, use the commands below:
+
+    sudo add-apt-repository ppa:alessandro-strada/google-drive-ocamlfuse-beta
     sudo apt-get update
     sudo apt-get install google-drive-ocamlfuse
 
@@ -50,7 +61,7 @@ How to build
 * [OCaml][] >= 3.12.0
 * [Findlib][] >= 1.2.7
 * [ocamlfuse][] >= 2.7.1
-* [gapi-ocaml][] >= 0.2.10
+* [gapi-ocaml][] >= 0.2.14
 * [sqlite3-ocaml][] >= 1.6.1
 
 [OCaml]: http://caml.inria.fr/ocaml/release.en.html
