@@ -1728,9 +1728,9 @@ let upload_with_retry path =
 let upload_if_dirty path =
   let context = Context.get_ctx () in
   let start_async_upload () =
-    let thread = async_do_request (upload_with_retry path) in
-    Context.with_ctx_lock
-      (fun () -> Queue.add thread context.Context.thread_queue)
+    ThreadPool.add_work
+      do_request (upload_with_retry path)
+      context.Context.thread_pool
   in
   if start_uploading_if_dirty path then begin
     let config = context |. Context.config_lens in

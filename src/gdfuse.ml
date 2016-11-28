@@ -234,7 +234,7 @@ let setup_application params =
     memory_buffers =
       Buffering.MemoryBuffers.create config.Config.memory_buffer_size;
     file_locks = Hashtbl.create Utils.hashtable_initial_size;
-    thread_queue = Queue.create ();
+    thread_pool = ThreadPool.create ();
   } in
   Context.set_ctx context;
   let refresh_token = context |. Context.refresh_token_lens in
@@ -618,10 +618,10 @@ let () =
           (fun () ->
              Utils.log_with_header "Exiting.\n%!";
              let context = Context.get_ctx () in
-             Utils.log_message "Waiting for pending upload threads...%!";
-             Queue.iter
-               (fun t -> Thread.join t)
-               context.Context.thread_queue;
+             Utils.log_message
+               "Waiting for pending upload threads (%d)...%!"
+               (ThreadPool.pending_threads context.Context.thread_pool);
+             ThreadPool.shutdown context.Context.thread_pool;
              Utils.log_message "done\nCURL cleanup...%!";
              ignore (GapiCurl.global_cleanup context.Context.curl_state);
              Utils.log_message "done\nClearing context...%!";

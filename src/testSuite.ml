@@ -1,5 +1,10 @@
+open OUnit
+
 let _ =
   let suite =
-    TestBuffering.suite in
+    "google-drive-ocamlfuse test suite" >:::
+    [TestBuffering.suite;
+     TestThreadPool.suite
+    ] in
   OUnit.run_test_tt_main suite
 
