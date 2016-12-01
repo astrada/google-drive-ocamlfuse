@@ -4,23 +4,6 @@ open GapiLens.Infix
 let application_name = "google-drive-ocamlfuse"
 let version = "0.6.2"
 
-module ConflictResolutionStrategy =
-struct
-  type t =
-      Client
-    | Server
-
-  let to_string = function
-      Client -> "client"
-    | Server -> "server"
-
-  let of_string = function
-      "client" -> Client
-    | "server" -> Server
-    | s -> failwith ("Unsupported conflict resolution strategy: " ^ s)
-
-end
-
 type t = {
   (* Debug mode *)
   debug : bool;
@@ -288,7 +271,7 @@ let read_ahead_buffers = {
 let umask =
   let prev_umask = Unix.umask 0 in
   let _ = Unix.umask prev_umask in
-    prev_umask
+  prev_umask
 
 let default_max_upload_chunk_size =
   if Sys.word_size == 64 then
@@ -326,7 +309,7 @@ let default = {
   delete_forever_in_trash_folder = false;
   stream_large_files = false;
   large_file_threshold_mb = 16;
-  large_file_read_only = true;
+  large_file_read_only = false;
   async_upload = true;
   connect_timeout_ms = 5000;
   max_download_speed = 0L;
@@ -371,7 +354,7 @@ let default_debug = {
   delete_forever_in_trash_folder = false;
   stream_large_files = false;
   large_file_threshold_mb = 1;
-  large_file_read_only = true;
+  large_file_read_only = false;
   async_upload = true;
   connect_timeout_ms = 5000;
   max_download_speed = 0L;
