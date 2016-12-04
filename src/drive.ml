@@ -12,6 +12,7 @@ exception IO_error
 exception Invalid_operation
 exception No_attribute
 exception Permission_denied
+exception Temporary_error
 
 let folder_mime_type = "application/vnd.google-apps.folder"
 let file_fields =
@@ -130,26 +131,38 @@ let get_path_in_cache path =
 
 let handle_default_exceptions =
   function
-      GapiService.ServiceError (_, e) ->
-        let message =
-          e |> GapiError.RequestError.to_data_model
-            |> GapiJson.data_model_to_json
-            |> Yojson.Safe.to_string in
-        Utils.log_with_header "Service error: %s.\n%!" message;
-        Utils.raise_m Invalid_operation
+  | GapiService.ServiceError (_, e) ->
+    let message =
+      e
+      |> GapiError.RequestError.to_data_model
+      |> GapiJson.data_model_to_json
+      |> Yojson.Safe.to_string in
+    Utils.log_with_header "Service error: %s.\n%!" message;
+    begin match e.GapiError.RequestError.errors with
+      | [] -> Utils.raise_m IO_error
+      | e :: _ ->
+        begin match e.GapiError.SingleError.reason with
+          | "userRateLimitExceeded"
+          | "rateLimitExceeded"
+          | "backendError"
+          | "downloadQuotaExceeded" -> Utils.raise_m Temporary_error
+          | "insufficientFilePermissions" -> Utils.raise_m Permission_denied
+          | _ -> Utils.raise_m IO_error
+        end
+    end
     | GapiRequest.PermissionDenied _ ->
-        Utils.log_with_header "Server error: Permission denied.\n%!";
-        Utils.raise_m Permission_denied
+      Utils.log_with_header "Server error: Permission denied.\n%!";
+      Utils.raise_m Permission_denied
     | GapiRequest.RequestTimeout _ ->
-        Utils.log_with_header "Server error: Request Timeout.\n%!";
-        Utils.raise_m IO_error
+      Utils.log_with_header "Server error: Request Timeout.\n%!";
+      Utils.raise_m Temporary_error
     | GapiRequest.PreconditionFailed _
     | GapiRequest.Conflict _ ->
-        Utils.log_with_header "Server error: Conflict.\n%!";
-        Utils.raise_m IO_error
+      Utils.log_with_header "Server error: Conflict.\n%!";
+      Utils.raise_m Temporary_error
     | GapiRequest.Forbidden _ ->
-        Utils.log_with_header "Server error: Forbidden.\n%!";
-        Utils.raise_m Invalid_operation
+      Utils.log_with_header "Server error: Forbidden.\n%!";
+      Utils.raise_m IO_error
     | e -> Utils.raise_m e
 
 (* with_try with a default exception handler *)
@@ -976,9 +989,9 @@ let with_retry f resource =
     Utils.try_with_m
       (f res)
       (function
-           IO_error as e ->
+           Temporary_error ->
              if n >= !Utils.max_retries then begin
-               Utils.raise_m e
+               Utils.raise_m IO_error
              end else begin
                GapiUtils.wait_exponential_backoff n;
                let fileId = res.Cache.Resource.remote_id |> Option.get in
