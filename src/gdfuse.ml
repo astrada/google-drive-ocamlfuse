@@ -558,7 +558,7 @@ let () =
        "-d",
        Arg.Unit (fun _ -> fuse_args := "-d" :: !fuse_args),
        " enable FUSE debug output (implies -f).";
-       "-s",
+       "-m",
        Arg.Unit (fun _ ->
          multi_threading := true),
        " run in multi-threaded mode (default).";
