@@ -1,3 +1,4 @@
+open GapiUtils.Infix
 open GapiMonad
 open GapiMonad.SessionM.Infix
 

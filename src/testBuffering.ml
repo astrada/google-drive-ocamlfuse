@@ -1,5 +1,6 @@
 open OUnit
 
+open GapiUtils.Infix
 open GapiMonad
 open GapiMonad.SessionM.Infix
 
