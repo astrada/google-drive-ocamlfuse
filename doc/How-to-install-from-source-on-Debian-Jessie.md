@@ -29,3 +29,5 @@ Get the packages installed. I used the default on all installer prompts:
     . /home/*user*/.opam/opam-init/init.sh > /dev/null 2> /dev/null || true
 
 *Note*: if you are using `root` to install opam, init script will be located in `/root/.opam/opam-init/init.sh`, and you will need to `chmod +x` it, because otherwise you will get a permission denied error.
+
+*Note (from BS):* google-drive-ocamlfuse wasn't present for me. I found I needed to create a link to the binary. e.g. ln -s ~/.opam/<version>/bin/google-drive-ocamlfuse /usr/local/bin/google-drive-ocamlfuse. In my case, at the time, it was: ln -s ~/.opam/4.02.1/bin/google-drive-ocamlfuse google-drive-ocamlfuse

@@ -13,24 +13,23 @@ exit 0
 
     $ sudo chmod +x /usr/bin/gdfuse
 
-3) Create a mountpoint (e.g. `/mnt/gdrive`) and give ownership to `$USERNAME`:
+3) Create a mountpoint (e.g. `~/gdrive`):
 
-    $ sudo mkdir /mnt/gdrive
-    $ sudo chown $USERNAME.$USERNAME /mnt/gdrive
+    $ mkdir ~/gdrive
 
-4) Edit `/etc/fstab` adding a line like this:
+4) Edit `/etc/fstab` adding a line like this. Be sure to replace `$USERNAME` with your actual username.
 
-    gdfuse#default  /mnt/gdrive     fuse    uid=1000,gid=1000     0       0
+    gdfuse#default  /home/$USERNAME/gdrive     fuse    uid=1000,gid=1000,user     0       0
 
 If `uid` and `gid` of your user are different from 1000, modify the above line accordingly.
 
-And then you can use `mount` to mount your Google Drive:
+And then you can use `mount` to mount your Google Drive. Maybe you will be asked for your password.
 
-    $ sudo mount /mnt/gdrive
+    $ mount ~/gdrive
 
 If you have another account you can mount it specifying the label after the `#` character. E.g.:
 
-    gdfuse#account2  /mnt/gdrive2     fuse    uid=1000,gid=1000     0       0
+    gdfuse#account2  /home/$USERNAME/gdrive2     fuse    uid=1000,gid=1000     0       0
 
 ## Mount using pam_mount
 
@@ -57,3 +56,11 @@ Create a directory `GoogleDrive` in the root of your home directory:
     $ mkdir ~/GoogleDrive
 
 Now log out and back in again and your Google Drive should be mounted on `~/GoogleDrive`.
+
+## Mount from login scripts
+
+By inserting the following line into ~/.profile the shell will test wether something has already been mounted on your target mountpoint, and if not, will execute the mount.
+
+    $ mount | grep '/home/meersjo/GoogleDrive' >/dev/null || /usr/bin/google-drive-ocamlfuse '/home/meersjo/GoogleDrive'
+
+Full path specification is required in the grep part. The mount part would probably work with the ~/ shorthand.

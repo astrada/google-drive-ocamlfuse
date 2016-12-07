@@ -74,6 +74,14 @@ If `map_format=desktop`, specifies the icon of the desktop link (default is no i
 
     map_icon=
 
+Fusion table export format (the only valid format is `desktop`):
+
+    fusion_table_format=desktop
+
+If `fusion_table_format=desktop`, specifies the icon of the desktop link (default is no icon):
+
+    fusion_table_format=
+
 OAuth2 client ID (optional):
 
     client_id=
@@ -85,13 +93,6 @@ OAuth2 client secret (optional):
 OAuth2 verification code (optional). Useful when authorizing on a different machine.
 
     verification_code=
-
-Conflict resolution strategy. In case of conflict (update on both sides), if
-we set the `client` value, the application will always update the server
-resource (client side wins). Otherwise, setting `server`, the application will
-always maintain the server version of the resource (server side wins):
-
-    conflict_resolution=server
 
 Google Drive supports multiple files with the same name. This flag specifies
 the behavior of `mv`: When set to `false`, `mv` behaves in the standard way,
@@ -107,10 +108,6 @@ Specifies whether to display file extensions for Google Docs:
 Specifies the maximum cache size in MB:
 
     max_cache_size_mb=512
-
-Specifies whether overwriting a file generates a new revision:
-
-    new_revision=true
 
 Specifies whether to permanently turn off CURL logging (even in debug mode). Set it to `true` to avoid a segmentation fault on some architectures:
 
@@ -128,13 +125,13 @@ Specifies the threshold (in megabytes) to detect large files:
 
     large_file_threshold_mb=16
 
-Force export of Google Docs in the format specified above. Introduced as a workaround for [this bug](https://code.google.com/a/google.com/p/apps-api-issues/issues/detail?id=3713):
+Specifies if large files should be read-only, to avoid accidental uploads of very big files (checked only if `stream_large_files=true`):
 
-    force_docs_export=true
+    large_file_read_only=false
 
-Specifies whether to upload files in new threads (**WARNING**: this flag is EXPERIMENTAL. Use at your own risk. Automatically turned off if `-m` is specified on the command line):
+Specifies whether to upload files in a concurrent thread:
 
-    async_upload=false
+    async_upload=true
 
 Specifies connection timeout in milliseconds:
 
@@ -142,16 +139,37 @@ Specifies connection timeout in milliseconds:
 
 Specifies maximum download speed per connection in bytes/second (`0` = unlimited):
 
-    max_download_speed = 0
+    max_download_speed=0
 
 Specifies maximum upload speed per connection in bytes/second (`0` = unlimited):
 
-    max_upload_speed = 0
+    max_upload_speed=0
 
 Specifies when a transfer is too slow. If speed (in bytes/second) is under `low_speed_limit` for `low_speed_time` (in seconds), the file transfer will be terminated (`0` = don't check):
 
-    low_speed_limit = 0
-    low_speed_time = 0
+    low_speed_limit=0
+    low_speed_time=0
+
+Specifies maximum number of retries after an error occurred (during a Drive API request):
+
+    max_retries=8
+
+Specifies the maximum size in bytes of an upload chunk:
+
+    max_upload_chunk_size=1073741824 (* 1TB for 64-bit machines *)
+    max_upload_chunk_size=805306368 (* 768MB for 32-bit machines *)
+
+Specifies the minimum size of download buffers (used only if `stream_large_files=true`):
+
+    memory_buffer_size=1048576 (* 1MB *)
+
+Specifies the maximum memory occupation of read-ahead buffers, before it starts to de-allocate the oldest ones (used only if `stream_large_files=true`):
+
+    max_memory_cache_size=10485760 (* 10MB *)
+
+Specifies how many blocks (of `memory_buffer_size` bytes) to download in parallel (used only if `stream_large_files=true`):
+
+    read_ahead_buffers=3
 
 ### Document export formats
 
