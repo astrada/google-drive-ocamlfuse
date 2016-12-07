@@ -12,7 +12,7 @@ The workaround is to use rsync option `--inplace` that avoids creating temporary
 
 * you can set a very high timeout in `metadata_cache_time=` so your cache doesn't risk to be invalidated
 * using `rsync` with `-W` (no delta operations - copy Whole file) speeds it up and handles corrupted files better than cp (see issue [#48](https://github.com/astrada/google-drive-ocamlfuse/issues/48))
-* you can try multi-threading with -m (this option it's not yet super-stable) even if `rsync` is single-theaded (but you can test [parallel](http://www.gnu.org/software/parallel/))
+* `rsync` is single-theaded, but you can test [parallel](http://www.gnu.org/software/parallel/)
 * increasing sqlite3_busy_timeout and max_cache_size_mb seems to mitigate "Device or resource busy" issues (see issue [#48](https://github.com/astrada/google-drive-ocamlfuse/issues/48))
 
 ### Examples
