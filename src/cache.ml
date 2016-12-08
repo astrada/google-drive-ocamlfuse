@@ -271,6 +271,14 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_update_all_timestamps_stmt db =
+    let sql =
+      "UPDATE resource \
+       SET \
+         last_update = :last_update;"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_delete_stmt db =
     let sql =
       "DELETE \
@@ -862,6 +870,14 @@ struct
          let stmt = ResourceStmts.prepare_trash_all_with_parent_path db in
          reset_stmt stmt;
          bind_text stmt ":parent_path" (Some (parent_path ^ "%"));
+         final_step stmt;
+         finalize_stmt stmt)
+
+  let update_all_timestamps cache last_update =
+    with_transaction cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_update_all_timestamps_stmt db in
+         bind_float stmt ":last_update" (Some last_update);
          final_step stmt;
          finalize_stmt stmt)
 

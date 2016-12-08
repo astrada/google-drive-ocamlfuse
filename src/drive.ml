@@ -645,6 +645,10 @@ let get_metadata () =
     if no_changes then begin
       Utils.log_with_header
         "END: Getting metadata: No need to update resource cache\n%!";
+      Utils.log_with_header "BEGIN: Updating timestamps\n%!";
+      Cache.Resource.update_all_timestamps cache
+        new_metadata.Cache.Metadata.last_update;
+      Utils.log_with_header "END: Updating timestamps\n%!";
       SessionM.return new_metadata
     end else if over_limit then begin
       Utils.log_with_header "END: Getting metadata: Too many changes\n";
@@ -659,7 +663,12 @@ let get_metadata () =
         new_metadata with
             Cache.Metadata.start_page_token = new_start_page_token;
       }
-    end else begin match old_metadata with
+    end else begin
+      Utils.log_with_header "BEGIN: Updating timestamps\n%!";
+      Cache.Resource.update_all_timestamps cache
+        new_metadata.Cache.Metadata.last_update;
+      Utils.log_with_header "END: Updating timestamps\n%!";
+      match old_metadata with
         None ->
           SessionM.return new_metadata
       | Some _ ->
@@ -881,6 +890,8 @@ and get_resource path trashed =
   let get_new_resource cache =
     let parent_path = Filename.dirname path in
       if check_resource_in_cache cache parent_path trashed then begin
+        (* If parent_path is up to date, all resources are already cached,
+         * so a new resource must be a "not found" one. *)
         Utils.raise_m File_not_found
       end else begin
         let new_resource = create_resource path in
