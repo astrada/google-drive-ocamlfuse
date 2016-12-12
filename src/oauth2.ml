@@ -43,42 +43,47 @@ let do_request go =
         curl_state
         interact
     with
-        Failure message as e ->
-          let check_curl_error () =
-            ExtString.String.exists message "CURLE_OPERATION_TIMEOUTED" ||
-            ExtString.String.exists message "CURLE_COULDNT_RESOLVE_HOST" ||
-            ExtString.String.exists message "CURLE_COULDNT_RESOLVE_PROXY" ||
-            ExtString.String.exists message "CURLE_COULDNT_CONNECT" ||
-            ExtString.String.exists message "CURLE_SSL_CONNECT_ERROR" ||
-            ExtString.String.exists message "CURLE_SEND_ERROR" ||
-            ExtString.String.exists message "CURLE_RECV_ERROR"
-          in
-          Utils.log_with_header "Error during request: %s\n%!" message;
-          if check_curl_error () && n < !Utils.max_retries then begin
-            let n' = n + 1 in
-            Utils.log_with_header "Retrying (%d/%d)\n%!" n' !Utils.max_retries;
-            GapiUtils.wait_exponential_backoff n;
-            (* Retry on timeout *)
-            try_request n'
-          end else begin
-            Utils.log_with_header "Giving up\n%!";
-            raise e
-          end
-      | GapiRequest.Unauthorized _
-      | GapiRequest.RefreshTokenFailed _ ->
-          if n > 0 then failwith "Cannot access resource: \
-                                  Refreshing token was not enough";
-          GaeProxy.refresh_access_token ();
-          (* Retry with refreshed token *)
-          try_request (n + 1)
-      | GapiService.ServiceError (_, e) ->
-          Utils.log_with_header "ServiceError\n%!";
-          let message =
-            e |> GapiError.RequestError.to_data_model
-              |> GapiJson.data_model_to_json
-              |> Yojson.Safe.to_string
-          in
-          failwith message
+    | Failure message as e ->
+      let check_offline () =
+        ExtString.String.exists message "CURLE_COULDNT_RESOLVE_HOST" ||
+        ExtString.String.exists message "CURLE_COULDNT_RESOLVE_PROXY" in
+      let is_temporary_curl_error () =
+        ExtString.String.exists message "CURLE_OPERATION_TIMEOUTED" ||
+        ExtString.String.exists message "CURLE_COULDNT_CONNECT" ||
+        ExtString.String.exists message "CURLE_SSL_CONNECT_ERROR" ||
+        ExtString.String.exists message "CURLE_SEND_ERROR" ||
+        ExtString.String.exists message "CURLE_RECV_ERROR"
+      in
+      Utils.log_with_header "Error during request: %s\n%!" message;
+      if is_temporary_curl_error () && n < !Utils.max_retries then begin
+        let n' = n + 1 in
+        Utils.log_with_header "Retrying (%d/%d)\n%!" n' !Utils.max_retries;
+        GapiUtils.wait_exponential_backoff n;
+        (* Retry on timeout *)
+        try_request n'
+      end else if check_offline () then begin
+        Utils.log_with_header "Offline\n%!";
+        raise e
+      end else begin
+        Utils.log_with_header "Giving up\n%!";
+        raise e
+      end
+    | GapiRequest.Unauthorized _
+    | GapiRequest.RefreshTokenFailed _ ->
+      if n > 0 then failwith "Cannot access resource: \
+                              Refreshing token was not enough";
+      GaeProxy.refresh_access_token ();
+      (* Retry with refreshed token *)
+      try_request (n + 1)
+    | GapiService.ServiceError (_, e) ->
+      Utils.log_with_header "ServiceError\n%!";
+      let message =
+        e
+        |> GapiError.RequestError.to_data_model
+        |> GapiJson.data_model_to_json
+        |> Yojson.Safe.to_string
+      in
+      failwith message
   in
   try_request 0
 
