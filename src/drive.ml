@@ -2038,14 +2038,25 @@ let rename path new_path =
         get_resource
           new_parent_path target_trashed >>= fun new_parent_resource ->
         let new_parent_id =
-          new_parent_resource |. Cache.Resource.remote_id |> Option.get in
+          new_parent_resource.Cache.Resource.remote_id |> Option.get in
+        get_resource
+          old_parent_path trashed >>= fun old_parent_resource ->
+        let old_parent_id =
+          old_parent_resource.Cache.Resource.remote_id |> Option.get in
         let file_patch =
           { File.empty with
-                File.parents = [new_parent_id];
+                (* This is to avoid sending an empty file patch, that
+                 * raises an error in gapi-ocaml. *)
+                File.mimeType =
+                  Option.default
+                    "application/octet-stream"
+                    resource.Cache.Resource.mime_type;
           } in
         FilesResource.update
           ~std_params:file_std_params
+          ~addParents:new_parent_id
           ~fileId:remote_id
+          ~removeParents:old_parent_id
           file_patch >>= fun patched_file ->
         Utils.log_with_header "END: Moving file (remote id=%s) from %s to %s\n%!"
           remote_id old_parent_path new_parent_path;
