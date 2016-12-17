@@ -45,6 +45,10 @@ type t = {
   fusion_table_format : string;
   (* Fusion tables icon *)
   fusion_table_icon : string;
+  (* Google apps script export format *)
+  apps_script_format : string;
+  (* Google apps script icon *)
+  apps_script_icon : string;
   (* OAuth2 Client ID *)
   client_id : string;
   (* OAuth2 Client secret *)
@@ -179,6 +183,14 @@ let fusion_table_icon = {
   GapiLens.get = (fun x -> x.fusion_table_icon);
   GapiLens.set = (fun v x -> { x with fusion_table_icon = v })
 }
+let apps_script_format = {
+  GapiLens.get = (fun x -> x.apps_script_format);
+  GapiLens.set = (fun v x -> { x with apps_script_format = v })
+}
+let apps_script_icon = {
+  GapiLens.get = (fun x -> x.apps_script_icon);
+  GapiLens.set = (fun v x -> { x with apps_script_icon = v })
+}
 let client_id = {
   GapiLens.get = (fun x -> x.client_id);
   GapiLens.set = (fun v x -> { x with client_id = v })
@@ -289,7 +301,7 @@ let default = {
   document_icon = "";
   drawing_format = "png";
   drawing_icon = "";
-  form_format = "ods";
+  form_format = "zip";
   form_icon = "";
   presentation_format = "pdf";
   presentation_icon = "";
@@ -299,6 +311,8 @@ let default = {
   map_icon = "";
   fusion_table_format = "desktop";
   fusion_table_icon = "";
+  apps_script_format = "json";
+  apps_script_icon = "";
   client_id = "";
   client_secret = "";
   verification_code = "";
@@ -334,7 +348,7 @@ let default_debug = {
   document_icon = "";
   drawing_format = "png";
   drawing_icon = "";
-  form_format = "ods";
+  form_format = "zip";
   form_icon = "";
   presentation_format = "pdf";
   presentation_icon = "";
@@ -344,6 +358,8 @@ let default_debug = {
   map_icon = "";
   fusion_table_format = "desktop";
   fusion_table_icon = "";
+  apps_script_format = "json";
+  apps_script_icon = "";
   client_id = "";
   client_secret = "";
   verification_code = "";
@@ -405,6 +421,10 @@ let of_table table =
         get "fusion_table_format" Std.identity default.fusion_table_format;
       fusion_table_icon =
         get "fusion_table_icon" Std.identity default.fusion_table_icon;
+      apps_script_format =
+        get "apps_script_format" Std.identity default.apps_script_format;
+      apps_script_icon =
+        get "apps_script_icon" Std.identity default.apps_script_icon;
       client_id = get "client_id" Std.identity default.client_id;
       client_secret = get "client_secret" Std.identity default.client_secret;
       verification_code =
@@ -479,6 +499,8 @@ let to_table data =
     add "map_icon" data.map_icon;
     add "fusion_table_format" data.fusion_table_format;
     add "fusion_table_icon" data.fusion_table_icon;
+    add "apps_script_format" data.apps_script_format;
+    add "apps_script_icon" data.apps_script_icon;
     add "client_id" data.client_id;
     add "client_secret" data.client_secret;
     add "verification_code" data.verification_code;

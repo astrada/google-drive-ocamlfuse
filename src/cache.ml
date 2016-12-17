@@ -1001,70 +1001,82 @@ struct
 
   let get_format_from_mime_type mime_type config =
     match mime_type with
-        "application/vnd.google-apps.document" ->
-          config.Config.document_format
-      | "application/vnd.google-apps.drawing" ->
-          config.Config.drawing_format
-      | "application/vnd.google-apps.form" ->
-          config.Config.form_format
-      | "application/vnd.google-apps.presentation" ->
-          config.Config.presentation_format
-      | "application/vnd.google-apps.spreadsheet" ->
-          config.Config.spreadsheet_format
-      | "application/vnd.google-apps.map" ->
-          config.Config.map_format
-      | "application/vnd.google-apps.fusiontable" ->
-          config.Config.fusion_table_format
-      | _ -> "html"
+    | "application/vnd.google-apps.document" ->
+      config.Config.document_format
+    | "application/vnd.google-apps.drawing" ->
+      config.Config.drawing_format
+    | "application/vnd.google-apps.form" ->
+      config.Config.form_format
+    | "application/vnd.google-apps.presentation" ->
+      config.Config.presentation_format
+    | "application/vnd.google-apps.spreadsheet" ->
+      config.Config.spreadsheet_format
+    | "application/vnd.google-apps.script" ->
+      config.Config.apps_script_format
+    | "application/vnd.google-apps.map" ->
+      config.Config.map_format
+    | "application/vnd.google-apps.fusiontable" ->
+      config.Config.fusion_table_format
+    | _ -> "html"
 
   let get_format resource config =
     match resource.mime_type with
-        Some mime_type -> get_format_from_mime_type mime_type config
-      | _ -> "html"
+    | Some mime_type -> get_format_from_mime_type mime_type config
+    | _ -> "html"
 
   let get_icon_from_mime_type mime_type config =
     match mime_type with
-        "application/vnd.google-apps.document" ->
-          config.Config.document_icon
-      | "application/vnd.google-apps.drawing" ->
-          config.Config.drawing_icon
-      | "application/vnd.google-apps.form" ->
-          config.Config.form_icon
-      | "application/vnd.google-apps.presentation" ->
-          config.Config.presentation_icon
-      | "application/vnd.google-apps.spreadsheet" ->
-          config.Config.spreadsheet_icon
-      | "application/vnd.google-apps.map" ->
-          config.Config.map_icon
-      | "application/vnd.google-apps.fusiontable" ->
-          config.Config.fusion_table_icon
-      | _ -> ""
+    | "application/vnd.google-apps.document" ->
+      config.Config.document_icon
+    | "application/vnd.google-apps.drawing" ->
+      config.Config.drawing_icon
+    | "application/vnd.google-apps.form" ->
+      config.Config.form_icon
+    | "application/vnd.google-apps.presentation" ->
+      config.Config.presentation_icon
+    | "application/vnd.google-apps.spreadsheet" ->
+      config.Config.spreadsheet_icon
+    | "application/vnd.google-apps.script" ->
+      config.Config.apps_script_icon
+    | "application/vnd.google-apps.map" ->
+      config.Config.map_icon
+    | "application/vnd.google-apps.fusiontable" ->
+      config.Config.fusion_table_icon
+    | _ -> ""
 
   let get_icon resource config =
     match resource.mime_type with
-        Some mime_type -> get_icon_from_mime_type mime_type config
-      | _ -> "html"
+    | Some mime_type -> get_icon_from_mime_type mime_type config
+    | _ -> "html"
 
   let mime_type_of_format fmt =
     match fmt with
-        "doc"
-      | "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-      | "htm"
-      | "html" -> "text/html"
-      | "jpg"
-      | "jpeg" -> "image/jpeg"
-      | "ods" -> "application/x-vnd.oasis.opendocument.spreadsheet"
-      | "odt" -> "application/vnd.oasis.opendocument.text"
-      | "pdf" -> "application/pdf"
-      | "png" -> "image/png"
-      | "ppt"
-      | "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-      | "rtf" -> "application/rtf"
-      | "svg" -> "image/svg+xml"
-      | "txt" -> "text/plain"
-      | "xls"
-      | "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      | _ -> failwith ("Unsupported format: " ^ fmt)
+    | "csv" -> "text/csv"
+    | "doc"
+    | "docx" -> "application/vnd.openxmlformats-officedocument.\
+                 wordprocessingml.document"
+    | "epub" -> "application/epub+zip"
+    | "htm"
+    | "html" -> "text/html"
+    | "jpg"
+    | "jpeg" -> "image/jpeg"
+    | "json" -> "application/vnd.google-apps.script+json"
+    | "ods" -> "application/x-vnd.oasis.opendocument.spreadsheet"
+    | "odt" -> "application/vnd.oasis.opendocument.text"
+    | "pdf" -> "application/pdf"
+    | "png" -> "image/png"
+    | "ppt"
+    | "pptx" -> "application/vnd.openxmlformats-officedocument.\
+                 presentationml.presentation"
+    | "rtf" -> "application/rtf"
+    | "svg" -> "image/svg+xml"
+    | "tsv" -> "text/tab-separated-values"
+    | "txt" -> "text/plain"
+    | "xls"
+    | "xlsx" -> "application/vnd.openxmlformats-officedocument.\
+                 spreadsheetml.sheet"
+    | "zip" -> "application/zip"
+    | _ -> failwith ("Unsupported format: " ^ fmt)
 
 end
 
