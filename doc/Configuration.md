@@ -82,6 +82,14 @@ If `fusion_table_format=desktop`, specifies the icon of the desktop link (defaul
 
     fusion_table_format=
 
+Google Apps Script [[export format|Exportable-formats#valid-formats-for-google-apps-scripts]]:
+
+    apps_script_format=json
+
+If `apps_script_format=desktop`, specifies the icon of the desktop link (default is no icon):
+
+    apps_script_icon=
+
 OAuth2 client ID (optional):
 
     client_id=
