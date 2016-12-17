@@ -14,12 +14,19 @@ remove: [
   ["ocaml" "%{etc}%/google-drive-ocamlfuse/_oasis_remove_.ml"
     "%{etc}%/google-drive-ocamlfuse"]
 ]
+build-test: [
+  ["ocaml" "setup.ml" "-configure" "--enable-tests"]
+  ["ocaml" "setup.ml" "-build"]
+  ["ocaml" "setup.ml" "-test"]
+]
 depends: [
-  "base-threads"
-  "camlidl"
+  "base-threads" {build}
+  "camlidl" {build}
   "gapi-ocaml" {>= "0.2.14"}
-  "ocamlfind"
+  "ocamlbuild" {build}
+  "ocamlfind" {build}
   "ocamlfuse"
+  "ounit" {test}
   "sqlite3"
 ]
 available: [ ocaml-version >= "3.12.0" ]
