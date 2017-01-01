@@ -2,7 +2,7 @@ The configuration file is saved in `~/.gdfuse/default/config` (or `~/.gdfuse/lab
 
 ### Content
 
-Specifies if debug mode is turned on: if `true`, logs verbose output to `~/.gdfuse/default/gdfuse.log`, and logs every curl request to `~/.gdfuse/default/curl.log`:
+Specifies if debug mode is turned on: if `true`, logs every curl request to `~/.gdfuse/default/curl.log`:
 
     debug=false
 
