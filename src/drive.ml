@@ -870,8 +870,7 @@ let check_resource_in_cache cache path trashed =
     | Some resource ->
         if Cache.Resource.is_valid resource metadata_last_update then
           if Cache.Resource.is_folder resource then
-            resource.Cache.Resource.state = Cache.Resource.State.Synchronized ||
-            resource.Cache.Resource.state = Cache.Resource.State.NotFound
+            resource.Cache.Resource.state = Cache.Resource.State.Synchronized
           else true
         else false
 

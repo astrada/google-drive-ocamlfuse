@@ -238,7 +238,8 @@ struct
          state = 'ToDownload' \
        WHERE id = :id \
          AND state <> 'ToUpload' \
-         AND state <> 'Uploading';"
+         AND state <> 'Uploading' \
+         AND state <> 'NotFound';"
     in
       Sqlite3.prepare db sql
 
@@ -248,7 +249,8 @@ struct
        SET \
          state = 'ToDownload' \
        WHERE state <> 'ToUpload' \
-         AND state <> 'Uploading';"
+         AND state <> 'Uploading' \
+         AND state <> 'NotFound';"
     in
       Sqlite3.prepare db sql
 
@@ -258,7 +260,8 @@ struct
        SET \
          state = 'ToDownload' \
        WHERE path LIKE '/' \
-         AND trashed = 1;"
+         AND trashed = 1 \
+         AND state <> 'NotFound';"
     in
       Sqlite3.prepare db sql
 
