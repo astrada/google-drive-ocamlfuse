@@ -162,8 +162,7 @@ let setup_application params =
     failwith "max_upload_chunk_size should be > 0";
   let config =
     { current_config with
-          Config.debug = params.debug;
-          client_id;
+          Config.client_id;
           client_secret;
           sqlite3_busy_timeout;
     } in
@@ -172,7 +171,7 @@ let setup_application params =
   Context.save_config_store config_store;
   Utils.max_retries := config.Config.max_retries;
   let gapi_config =
-    let gapi_config = Config.create_gapi_config config app_dir in
+    let gapi_config = Config.create_gapi_config config params.debug app_dir in
     if client_id = "" || client_secret = "" then
       let oauth2_config =
         match gapi_config |. GapiConfig.auth with

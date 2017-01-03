@@ -5,8 +5,6 @@ let application_name = "google-drive-ocamlfuse"
 let version = "0.6.9"
 
 type t = {
-  (* Debug mode *)
-  debug : bool;
   (* Number of seconds metadata should be cached. *)
   metadata_cache_time : int;
   (* Specifies whether local filesystem is mounted read-only. *)
@@ -103,10 +101,6 @@ type t = {
   read_ahead_buffers : int;
 }
 
-let debug = {
-  GapiLens.get = (fun x -> x.debug);
-  GapiLens.set = (fun v x -> { x with debug = v })
-}
 let metadata_cache_time = {
   GapiLens.get = (fun x -> x.metadata_cache_time);
   GapiLens.set = (fun v x -> { x with metadata_cache_time = v })
@@ -291,7 +285,6 @@ let default_max_upload_chunk_size =
   else 768 * 1024 * 1024 (* 768MB *)
 
 let default = {
-  debug = false;
   metadata_cache_time = 60;
   read_only = false;
   umask;
@@ -338,7 +331,6 @@ let default = {
 }
 
 let default_debug = {
-  debug = true;
   metadata_cache_time = 60;
   read_only = false;
   umask;
@@ -386,8 +378,7 @@ let default_debug = {
 
 let of_table table =
   let get k = Utils.get_from_string_table table k in
-    { debug = get "debug" bool_of_string default.debug;
-      metadata_cache_time =
+    { metadata_cache_time =
         get "metadata_cache_time" int_of_string default.metadata_cache_time;
       read_only = get "read_only" bool_of_string default.read_only;
       umask = get "umask" int_of_string default.umask;
@@ -479,7 +470,6 @@ let of_table table =
 let to_table data =
   let table = Hashtbl.create 16 in
   let add = Hashtbl.add table in
-    add "debug" (data.debug |> string_of_bool);
     add "metadata_cache_time" (data.metadata_cache_time |> string_of_int);
     add "read_only" (data.read_only |> string_of_bool);
     add "umask" (data.umask |> Printf.sprintf "0o%03o");
@@ -542,9 +532,9 @@ let debug_print out_ch start_time curl info_type info =
       info
       nl
 
-let create_gapi_config config app_dir =
+let create_gapi_config config debug app_dir =
   let gapi_config =
-    if config.debug && (not config.curl_debug_off) then
+    if debug && (not config.curl_debug_off) then
       let out_ch = open_out (app_dir |. AppDir.curl_log_path) in
       let debug_function = debug_print out_ch (Unix.gettimeofday ()) in
         GapiConfig.default_debug
