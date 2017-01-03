@@ -281,7 +281,12 @@ let umask =
 
 let default_max_upload_chunk_size =
   if Sys.word_size == 64 then
-    Int64.to_int (Int64.mul (Int64.mul 1024L 1024L) 1024L) (* 1TB *)
+    Int64.to_int
+      (Int64.mul
+        (Int64.mul
+           (Int64.mul 1024L 1024L)
+           1024L)
+        1024L) (* 1TB *)
   else 768 * 1024 * 1024 (* 768MB *)
 
 let default = {
