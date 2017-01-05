@@ -132,20 +132,34 @@ struct
     in
     let start_block_index = get_block_index offset buffers in
     let dest_arr_size = Option.map_default Bigarray.Array1.dim 0 dest_arr in
-    let end_pos = Int64.add offset (Int64.of_int dest_arr_size) in
+    let end_pos =
+      min resource_size (Int64.add offset (Int64.of_int dest_arr_size)) in
     let end_block_index = get_block_index end_pos buffers in
+    Utils.log_with_header
+      "Fill starting block (remote id=%s, start_block_index=%d, offset=%Ld, \
+       dest_arr_size=%s)\n%!"
+      remote_id start_block_index offset
+      (Option.map_default
+         (fun _ -> string_of_int dest_arr_size)
+         "N/A"
+         dest_arr);
     fill_and_blit start_block_index offset dest_arr >>= fun () ->
-    if end_block_index <> start_block_index then
+    if end_block_index <> start_block_index then begin
       let src_offset = get_block_start_pos end_block_index buffers in
       let dest_len = Int64.to_int (Int64.sub end_pos src_offset) in
-      let dest_offset = dest_arr_size - dest_len in
-      let dest_arr =
-        Option.map
-          (fun arr -> Bigarray.Array1.sub arr dest_offset dest_len)
-          dest_arr in
-      fill_and_blit end_block_index src_offset dest_arr
-    else
-      SessionM.return ()
+      if dest_len > 0 then begin
+        let dest_offset = dest_arr_size - dest_len in
+        let dest_arr =
+          Option.map
+            (fun arr -> Bigarray.Array1.sub arr dest_offset dest_len)
+            dest_arr in
+        Utils.log_with_header
+          "Fill ending block (remote id=%s, end_block_index=%d, \
+           src_offset=%Ld, dest_len=%d)\n%!"
+          remote_id end_block_index src_offset dest_len;
+        fill_and_blit end_block_index src_offset dest_arr
+      end else SessionM.return ()
+    end else SessionM.return ()
 
   let read_ahead read_ahead_buffers
       remote_id offset resource_size fill_array buffers =
