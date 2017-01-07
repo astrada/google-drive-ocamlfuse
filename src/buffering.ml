@@ -34,8 +34,26 @@ struct
     let src_off = Int64.to_int (Int64.sub offset block.start_pos) in
     let src_len = block.size - src_off in
     let len = min src_len dest_len in
-    let src_arr = Bigarray.Array1.sub block.buffer src_off len in
-    let dest_arr = Bigarray.Array1.sub dest_arr 0 len in
+    let src_arr =
+      try
+        Bigarray.Array1.sub block.buffer src_off len
+      with (Invalid_argument _) as e -> begin
+        Utils.log_with_header
+               "Invalid source array (src_off=%d, len=%d, block size=%d)\n%!"
+               src_off len (Bigarray.Array1.dim block.buffer);
+        raise e
+      end
+    in
+    let dest_arr =
+      try
+        Bigarray.Array1.sub dest_arr 0 len
+      with (Invalid_argument _) as e -> begin
+        Utils.log_with_header
+               "Invalid destination array (len=%d, dest_len=%d)\n%!"
+               len dest_len;
+        raise e
+      end
+    in
     Utils.with_lock block.mutex
       (fun () -> Bigarray.Array1.blit src_arr dest_arr)
 
@@ -154,7 +172,17 @@ struct
         let dest_offset = dest_arr_size - dest_len in
         let dest_arr =
           Option.map
-            (fun arr -> Bigarray.Array1.sub arr dest_offset dest_len)
+            (fun arr ->
+              try
+                Bigarray.Array1.sub arr dest_offset dest_len
+              with (Invalid_argument _) as e -> begin
+                Utils.log_with_header
+                  "Invalid ending block array (dest_offset=%d, dest_len=%d, \
+                   dim=%d)\n%!"
+                  dest_offset dest_len (Bigarray.Array1.dim arr);
+                raise e
+              end
+            )
             dest_arr in
         if end_block_index < 0 || src_offset < 0L then begin
           Utils.log_with_header
