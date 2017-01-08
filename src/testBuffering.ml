@@ -58,6 +58,7 @@ let test_with_lock_m () =
 let test_read_block () =
   let remote_id = "test" in
   let resource_size = 24L in
+  let pool_size = 160 in
   let block_size = 16 in
   let stream_block_size = 8 in
 
@@ -71,7 +72,7 @@ let test_read_block () =
     SessionM.return ()
   in
 
-  let memory_buffers = Buffering.MemoryBuffers.create block_size in
+  let memory_buffers = Buffering.MemoryBuffers.create block_size pool_size in
   let destination =
     Bigarray.Array1.create
       Bigarray.char Bigarray.c_layout (Int64.to_int resource_size) in

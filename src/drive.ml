@@ -1221,9 +1221,6 @@ let stream_resource_to_memory_buffer offset buffer resource =
     (fun start_pos block_buffer ->
        stream_resource start_pos block_buffer resource)
     ~dest_arr:buffer memory_buffers >>= fun () ->
-  let config = context |. Context.config_lens in
-  Buffering.MemoryBuffers.shrink_cache
-    config.Config.max_memory_cache_size memory_buffers;
   SessionM.return ()
 
 let stream_resource_to_read_ahead_buffers offset resource =

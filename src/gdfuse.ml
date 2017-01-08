@@ -160,6 +160,11 @@ let setup_application params =
   let max_upload_chunk_size = current_config.Config.max_upload_chunk_size in
   if max_upload_chunk_size <= 0 then
     failwith "max_upload_chunk_size should be > 0";
+  if current_config.Config.memory_buffer_size < 128 * 1024 then
+    failwith "memory_buffer_size should be >= 131072 (128k)";
+  if current_config.Config.max_memory_cache_size <
+     current_config.Config.memory_buffer_size then
+    failwith "max_memory_cache_size should be >= memory_buffer_size";
   let config =
     { current_config with
           Config.client_id;
@@ -231,7 +236,9 @@ let setup_application params =
     metadata_lock = Mutex.create ();
     skip_trash = params.skip_trash;
     memory_buffers =
-      Buffering.MemoryBuffers.create config.Config.memory_buffer_size;
+      Buffering.MemoryBuffers.create
+        config.Config.memory_buffer_size
+        config.Config.max_memory_cache_size;
     file_locks = Hashtbl.create Utils.hashtable_initial_size;
     thread_pool = ThreadPool.create ();
   } in
@@ -518,7 +525,7 @@ let () =
           let (_, bd) = ExtString.String.split o "=" in
           base_dir := bd
         with ExtString.Invalid_string ->
-          raise (Failure "Invalid mount option gdfroot"))
+          failwith "Invalid mount option gdfroot")
       base_dir_opt;
     let fuse_mount_opts =
       List.filter

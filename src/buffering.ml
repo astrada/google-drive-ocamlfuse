@@ -9,24 +9,26 @@ struct
     | Full
 
   type t = {
-    buffer : (char,
-              Bigarray.int8_unsigned_elt,
-              Bigarray.c_layout) Bigarray.Array1.t;
+    buffer : BufferPool.buffer;
+    sub_array : (char,
+                 Bigarray.int8_unsigned_elt,
+                 Bigarray.c_layout) Bigarray.Array1.t;
     start_pos : int64;
     size : int;
     state : state;
     last_access : float;
-    mutex : Mutex.t;
   }
 
-  let create offset size = {
-    buffer = Bigarray.Array1.create Bigarray.char Bigarray.c_layout size;
-    start_pos = offset;
-    size;
-    state = Empty;
-    last_access = Unix.gettimeofday ();
-    mutex = Mutex.create ();
-  }
+  let create offset size buffer_pool =
+    let buffer = BufferPool.acquire_buffer buffer_pool in
+    let sub_array = Bigarray.Array1.sub buffer.BufferPool.arr 0 size in
+    { buffer;
+      sub_array;
+      start_pos = offset;
+      size;
+      state = Empty;
+      last_access = Unix.gettimeofday ();
+    }
 
   let blit_to_arr dest_arr offset block =
     if block.state = Empty then invalid_arg "blit_to_arr";
@@ -36,11 +38,14 @@ struct
     let len = min src_len dest_len in
     let src_arr =
       try
-        Bigarray.Array1.sub block.buffer src_off len
+        Bigarray.Array1.sub block.sub_array src_off len
       with (Invalid_argument _) as e -> begin
         Utils.log_with_header
-               "Invalid source array (src_off=%d, len=%d, block size=%d)\n%!"
-               src_off len (Bigarray.Array1.dim block.buffer);
+          "Invalid source array (src_off=%d, len=%d, block size=%d, \
+           buffer id=%d)\n%!"
+          src_off len
+          (Bigarray.Array1.dim block.sub_array)
+          block.buffer.BufferPool.id;
         raise e
       end
     in
@@ -49,13 +54,12 @@ struct
         Bigarray.Array1.sub dest_arr 0 len
       with (Invalid_argument _) as e -> begin
         Utils.log_with_header
-               "Invalid destination array (len=%d, dest_len=%d)\n%!"
-               len dest_len;
+          "Invalid destination array (len=%d, dest_len=%d)\n%!"
+          len dest_len;
         raise e
       end
     in
-    Utils.with_lock block.mutex
-      (fun () -> Bigarray.Array1.blit src_arr dest_arr)
+    Bigarray.Array1.blit src_arr dest_arr
 
 end
 
@@ -66,13 +70,15 @@ struct
     files : (string, int list) Hashtbl.t;
     block_size : int;
     mutex : Mutex.t;
+    buffer_pool : BufferPool.t;
   }
 
-  let create ?(n = Utils.hashtable_initial_size) block_size = {
+  let create ?(n = Utils.hashtable_initial_size) block_size pool_size = {
     blocks = Hashtbl.create n;
     files = Hashtbl.create n;
     block_size;
     mutex = Mutex.create ();
+    buffer_pool = BufferPool.create ~pool_size ~buffer_size:block_size;
   }
 
   let get_block_index start_pos buffers =
@@ -84,6 +90,45 @@ struct
       (Int64.of_int block_index)
       (Int64.of_int buffers.block_size)
 
+  let release_lru_buffer_if_needed buffers =
+    let remove_block ((remote_id, block_index) as key) =
+      let block = Hashtbl.find buffers.blocks key in
+      Utils.log_with_header
+        "Releasing memory buffer (remote id=%s, index=%d, buffer id=%d)\n%!"
+        remote_id block_index block.Block.buffer.BufferPool.id;
+      Hashtbl.remove buffers.blocks key;
+      BufferPool.release_buffer block.Block.buffer buffers.buffer_pool
+    in
+    let get_total_size_and_lru_key () =
+      Hashtbl.fold
+        (fun k v (total, lru) ->
+           let total = total + v.Block.size in
+           let lru =
+             if lru = ("", 0) then k
+             else
+               let b = Hashtbl.find buffers.blocks lru in
+               if (v.Block.last_access < b.Block.last_access) then k
+               else lru in
+           (total, lru)
+        )
+        buffers.blocks
+        (0, ("", 0))
+    in
+    if Hashtbl.length buffers.blocks > 0 then begin
+      let free_buffers =
+        BufferPool.free_buffers buffers.buffer_pool in
+      Utils.log_with_header
+        "Buffer pool free buffers: %d\n%!"
+        free_buffers;
+      if free_buffers = 0 then begin
+        let (total_size, lru_key) = get_total_size_and_lru_key () in
+        Utils.log_with_header
+          "Memory cache size: %d\n%!"
+          total_size;
+        remove_block lru_key;
+      end
+    end
+
   let read_block
       remote_id offset resource_size fill_array ?dest_arr buffers =
     let get_block block_index = 
@@ -92,13 +137,17 @@ struct
            match Utils.safe_find buffers.blocks (remote_id, block_index) with
            | None ->
              let start_pos = get_block_start_pos block_index buffers in
+             release_lru_buffer_if_needed buffers;
+             Utils.log_with_header
+               "BEGIN: Acquiring memory buffer (remote id=%s, index=%d)\n%!"
+               remote_id block_index;
              let b =
                let size =
                  (Int64.to_int
                     (min
                        (Int64.of_int buffers.block_size)
                        (Int64.sub resource_size start_pos))) in
-               Block.create start_pos size in
+               Block.create start_pos size buffers.buffer_pool in
              Hashtbl.add buffers.blocks (remote_id, block_index) b;
              begin match Utils.safe_find buffers.files remote_id with
                | None ->
@@ -107,8 +156,9 @@ struct
                  Hashtbl.replace buffers.files remote_id (block_index :: bs)
              end;
              Utils.log_with_header
-               "Allocating memory buffer (remote id=%s, index=%d, size=%d)\n%!"
-               remote_id block_index b.Block.size;
+               "END: Acquiring memory buffer (remote id=%s, index=%d, \
+                size=%d, buffer id=%d)\n%!"
+               remote_id block_index b.Block.size b.Block.buffer.BufferPool.id;
              b
            | Some b -> b
         )
@@ -125,33 +175,35 @@ struct
     in
     let fill_and_blit block_index src_offset dest_arr =
       let block = get_block block_index in
-      Utils.with_lock_m block.Block.mutex
+      Utils.with_lock_m block.Block.buffer.BufferPool.mutex
         (get_block_m block_index >>= fun block ->
-         if block.Block.state = Block.Empty then begin
-           fill_array block.Block.start_pos block.Block.buffer >>= fun () ->
-           let block = {
-             block with
-             Block.state = Block.Full;
-           } in
+         begin if block.Block.state = Block.Empty then begin
+           fill_array
+             block.Block.start_pos
+             block.Block.sub_array >>= fun () ->
+           let block =
+             { block with
+               Block.state = Block.Full;
+             } in
            SessionM.return block
-         end else begin
+         end else
            SessionM.return block
-         end
-        ) >>= fun block ->
-      let block = {
-        block with
-        Block.last_access = Unix.gettimeofday ();
-      } in
-      replace_block block_index block;
-      Option.may
-        (fun arr -> Block.blit_to_arr arr src_offset block)
-        dest_arr;
-      SessionM.return ()
+         end >>= fun block ->
+         let block = {
+           block with
+           Block.last_access = Unix.gettimeofday ();
+         } in
+         replace_block block_index block;
+         Option.may
+           (fun arr -> Block.blit_to_arr arr src_offset block)
+           dest_arr;
+         SessionM.return ()
+        )
     in
     let start_block_index = get_block_index offset buffers in
     let dest_arr_size = Option.map_default Bigarray.Array1.dim 0 dest_arr in
-    let end_pos =
-      min resource_size (Int64.add offset (Int64.of_int dest_arr_size)) in
+    let end_pos_dest_arr = Int64.add offset (Int64.of_int dest_arr_size) in 
+    let end_pos = min resource_size end_pos_dest_arr in
     let end_block_index = get_block_index end_pos buffers in
     if start_block_index < 0 || offset < 0L then begin
       Utils.log_with_header
@@ -169,7 +221,9 @@ struct
       let src_offset = get_block_start_pos end_block_index buffers in
       let dest_len = Int64.to_int (Int64.sub end_pos src_offset) in
       if dest_len > 0 then begin
-        let dest_offset = dest_arr_size - dest_len in
+        let delta_end_pos =
+          Int64.to_int (Int64.sub end_pos_dest_arr end_pos) in
+        let dest_offset = dest_arr_size - dest_len - delta_end_pos in
         let dest_arr =
           Option.map
             (fun arr ->
@@ -239,61 +293,41 @@ struct
     loop [] read_ahead_buffers
 
   let remove_buffers remote_id buffers =
-    Utils.log_with_header
-      "BEGIN: Deallocating memory buffers (remote id=%s)\n%!"
-      remote_id;
-    begin match Utils.safe_find buffers.files remote_id with
-      | None ->
-        Utils.log_with_header
-          "END: Deallocating no memory buffers (remote id=%s)\n%!"
-          remote_id
-      | Some bs ->
-        List.iter
-          (fun b -> Hashtbl.remove buffers.blocks (remote_id, b))
-          bs;
-        Hashtbl.remove buffers.files remote_id;
-        Utils.log_with_header
-          "END: Deallocating %d memory buffers (remote id=%s)\n%!"
-          (List.length bs) remote_id
-    end
-
-
-  let shrink_cache target_size buffers =
-    let remove_block ((remote_id, block_index) as key) =
-      Utils.log_with_header
-        "Deallocating memory buffer (remote id=%s, index=%d)\n%!"
-        remote_id block_index;
-      Hashtbl.remove buffers.blocks key
-    in
-    let get_total_size_and_lru_key () =
-      Hashtbl.fold
-        (fun k v (total, lru) ->
-           let total = total + v.Block.size in
-           let lru =
-             if lru = ("", 0) then k
-             else
-               let b = Hashtbl.find buffers.blocks lru in
-               if (v.Block.last_access < b.Block.last_access) then k
-               else lru in
-           (total, lru)
-        )
-        buffers.blocks
-        (0, ("", 0))
-    in
-    let rec loop () =
-      if Hashtbl.length buffers.blocks > 0 then begin
-        let (total_size, lru_key) = get_total_size_and_lru_key () in
-        if total_size > target_size then begin
-          remove_block lru_key;
-          loop ()
-        end else begin
-          Utils.log_with_header
-            "Memory cache size: %d (target=%d)\n%!"
-            total_size target_size;
-        end
-      end
-    in
-    Utils.with_lock buffers.mutex loop
+    Utils.with_lock buffers.mutex
+      (fun () ->
+         Utils.log_with_header
+           "BEGIN: Releasing memory buffers (remote id=%s)\n%!"
+           remote_id;
+         begin match Utils.safe_find buffers.files remote_id with
+           | None ->
+             Utils.log_with_header
+               "END: Releasing no memory buffers (remote id=%s)\n%!"
+               remote_id
+           | Some bs ->
+             let ids =
+               List.map
+                 (fun block_index ->
+                    let block =
+                      Hashtbl.find buffers.blocks (remote_id, block_index) in
+                    string_of_int block.Block.buffer.BufferPool.id
+                 )
+                 bs in
+             List.iter
+               (fun block_index ->
+                  let block =
+                    Hashtbl.find buffers.blocks (remote_id, block_index) in
+                  Hashtbl.remove buffers.blocks (remote_id, block_index);
+                  BufferPool.release_buffer
+                    block.Block.buffer buffers.buffer_pool;
+               )
+               bs;
+             Hashtbl.remove buffers.files remote_id;
+             Utils.log_with_header
+               "END: Releasing %d memory buffers (remote id=%s, \
+                buffer ids=%s)\n%!"
+               (List.length bs) remote_id (String.concat ";" ids)
+         end
+      )
 
 end
 
