@@ -1,10 +1,14 @@
-type buffer = {
-  id : int;
-  arr : (char,
-         Bigarray.int8_unsigned_elt,
-         Bigarray.c_layout) Bigarray.Array1.t;
-  mutex : Mutex.t;
-}
+module Buffer =
+struct
+  type t = {
+    id : int;
+    arr : (char,
+           Bigarray.int8_unsigned_elt,
+           Bigarray.c_layout) Bigarray.Array1.t;
+    mutex : Mutex.t;
+  }
+
+end
 
 type t = {
   max_buffers : int;
@@ -12,7 +16,7 @@ type t = {
   mutex : Mutex.t;
   condition : Condition.t;
   buffer_size : int;
-  free_buffers : buffer Queue.t;
+  free_buffers : Buffer.t Queue.t;
   mutable pending_requests : int;
 }
 
@@ -54,7 +58,7 @@ let acquire_buffer buffer_pool =
        with Queue.Empty ->
          if buffer_pool.buffer_count < buffer_pool.max_buffers then begin
            buffer_pool.buffer_count <- buffer_pool.buffer_count + 1;
-           { id = buffer_pool.buffer_count;
+           { Buffer.id = buffer_pool.buffer_count;
              arr = Bigarray.Array1.create
                  Bigarray.char Bigarray.c_layout buffer_pool.buffer_size;
              mutex = Mutex.create ();

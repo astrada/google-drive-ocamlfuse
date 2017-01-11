@@ -9,7 +9,7 @@ struct
     | Full
 
   type t = {
-    buffer : BufferPool.buffer;
+    buffer : BufferPool.Buffer.t;
     sub_array : (char,
                  Bigarray.int8_unsigned_elt,
                  Bigarray.c_layout) Bigarray.Array1.t;
@@ -21,7 +21,7 @@ struct
 
   let create offset size buffer_pool =
     let buffer = BufferPool.acquire_buffer buffer_pool in
-    let sub_array = Bigarray.Array1.sub buffer.BufferPool.arr 0 size in
+    let sub_array = Bigarray.Array1.sub buffer.BufferPool.Buffer.arr 0 size in
     { buffer;
       sub_array;
       start_pos = offset;
@@ -45,7 +45,7 @@ struct
            buffer id=%d)\n%!"
           src_off len
           (Bigarray.Array1.dim block.sub_array)
-          block.buffer.BufferPool.id;
+          block.buffer.BufferPool.Buffer.id;
         raise e
       end
     in
@@ -95,7 +95,7 @@ struct
       let block = Hashtbl.find buffers.blocks key in
       Utils.log_with_header
         "Releasing memory buffer (remote id=%s, index=%d, buffer id=%d)\n%!"
-        remote_id block_index block.Block.buffer.BufferPool.id;
+        remote_id block_index block.Block.buffer.BufferPool.Buffer.id;
       Hashtbl.remove buffers.blocks key;
       BufferPool.release_buffer block.Block.buffer buffers.buffer_pool
     in
@@ -158,7 +158,8 @@ struct
              Utils.log_with_header
                "END: Acquiring memory buffer (remote id=%s, index=%d, \
                 size=%d, buffer id=%d)\n%!"
-               remote_id block_index b.Block.size b.Block.buffer.BufferPool.id;
+               remote_id block_index b.Block.size
+               b.Block.buffer.BufferPool.Buffer.id;
              b
            | Some b -> b
         )
@@ -175,7 +176,7 @@ struct
     in
     let fill_and_blit block_index src_offset dest_arr =
       let block = get_block block_index in
-      Utils.with_lock_m block.Block.buffer.BufferPool.mutex
+      Utils.with_lock_m block.Block.buffer.BufferPool.Buffer.mutex
         (get_block_m block_index >>= fun block ->
          begin if block.Block.state = Block.Empty then begin
            fill_array
@@ -309,7 +310,7 @@ struct
                  (fun block_index ->
                     let block =
                       Hashtbl.find buffers.blocks (remote_id, block_index) in
-                    string_of_int block.Block.buffer.BufferPool.id
+                    string_of_int block.Block.buffer.BufferPool.Buffer.id
                  )
                  bs in
              List.iter
