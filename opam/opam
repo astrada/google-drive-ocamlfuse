@@ -11,8 +11,8 @@ build: [
 ]
 install: ["ocaml" "setup.ml" "-install"]
 remove: [
-  ["ocaml" "%{etc}%/google-drive-ocamlfuse/_oasis_remove_.ml"
-    "%{etc}%/google-drive-ocamlfuse"]
+  ["ocaml" "%{etc}%/google-drive-ocamlfuse/setup.ml"
+    "-C" "%{etc}%/google-drive-ocamlfuse" "-uninstall"]
 ]
 build-test: [
   ["ocaml" "setup.ml" "-configure" "--enable-tests"]
