@@ -99,6 +99,8 @@ type t = {
   (* Specifies how many blocks (of [memory_buffer_size] bytes) can be
    * pre-fetched when streaming. *)
   read_ahead_buffers : int;
+  (* Fetch files with no parents and make them available in lost+found. *)
+  lost_and_found : bool;
 }
 
 let metadata_cache_time = {
@@ -273,6 +275,10 @@ let read_ahead_buffers = {
   GapiLens.get = (fun x -> x.read_ahead_buffers);
   GapiLens.set = (fun v x -> { x with read_ahead_buffers = v })
 }
+let lost_and_found = {
+  GapiLens.get = (fun x -> x.lost_and_found);
+  GapiLens.set = (fun v x -> { x with lost_and_found = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -333,6 +339,7 @@ let default = {
   memory_buffer_size = 1048576;
   max_memory_cache_size = 10485760;
   read_ahead_buffers = 3;
+  lost_and_found = false;
 }
 
 let default_debug = {
@@ -379,6 +386,7 @@ let default_debug = {
   memory_buffer_size = 1048576;
   max_memory_cache_size = 10485760;
   read_ahead_buffers = 3;
+  lost_and_found = false;
 }
 
 let of_table table =
@@ -470,6 +478,9 @@ let of_table table =
       read_ahead_buffers =
         get "read_ahead_buffers" int_of_string
           default.read_ahead_buffers;
+      lost_and_found =
+        get "lost_and_found" bool_of_string
+          default.lost_and_found;
     }
 
 let to_table data =
@@ -521,6 +532,7 @@ let to_table data =
     add "memory_buffer_size" (data.memory_buffer_size |> string_of_int);
     add "max_memory_cache_size" (data.max_memory_cache_size |> string_of_int);
     add "read_ahead_buffers" (data.read_ahead_buffers |> string_of_int);
+    add "lost_and_found" (data.lost_and_found |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =

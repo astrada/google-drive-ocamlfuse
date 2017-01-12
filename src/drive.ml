@@ -45,6 +45,7 @@ let root_folder_id = "root"
 let trash_directory = "/.Trash"
 let trash_directory_name_length = String.length trash_directory
 let trash_directory_base_path = "/.Trash/"
+let lost_and_found_directory = "/lost+found"
 let f_bsize = 4096L
 let change_limit = 50
 let max_link_target_length = 127
@@ -117,6 +118,10 @@ let disambiguate_filename
 let is_in_trash_directory path =
   if path = trash_directory then false
   else ExtString.String.starts_with path trash_directory_base_path
+
+let is_lost_and_found path config =
+  if not config.Config.lost_and_found then false
+  else ExtString.String.starts_with path lost_and_found_directory
 
 let get_path_in_cache path =
   if path = root_directory then
@@ -254,6 +259,16 @@ let create_root_resource trashed =
         trashed = Some trashed;
   }
 
+let create_lost_and_found_resource () =
+  let resource = create_resource lost_and_found_directory in
+  { resource with
+        Cache.Resource.remote_id = Some "";
+        mime_type = Some folder_mime_type;
+        size = Some 0L;
+        parent_path = "";
+        trashed = Some false;
+  }
+
 let get_unique_filename
     name
     full_file_extension
@@ -384,22 +399,30 @@ let lookup_resource path trashed =
   end end;
   resource
 
-let get_root_resource trashed =
+let get_well_known_resource path trashed =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
+  let config = context |. Context.config_lens in
   match lookup_resource root_directory trashed with
-      None ->
-        let root_resource = create_root_resource trashed in
-          Utils.log_with_header
-            "BEGIN: Saving root resource to db (id=%Ld)\n%!"
-            root_resource.Cache.Resource.id;
-          let inserted =
-            Cache.Resource.insert_resource cache root_resource in
-          Utils.log_with_header
-            "END: Saving root resource to db (id=%Ld)\n%!"
-            root_resource.Cache.Resource.id;
-          inserted
-    | Some resource -> resource
+  | None ->
+    let (well_known_resource, label) =
+      if path = root_directory then
+        (create_root_resource trashed, "root")
+      else if path = lost_and_found_directory &&
+              config.Config.lost_and_found then
+        (create_lost_and_found_resource (), "lost+found")
+      else invalid_arg ("Invalid well known path: " ^ path)
+    in
+    Utils.log_with_header
+      "BEGIN: Saving %s resource to db (id=%Ld)\n%!"
+      label well_known_resource.Cache.Resource.id;
+    let inserted =
+      Cache.Resource.insert_resource cache well_known_resource in
+    Utils.log_with_header
+      "END: Saving %s resource to db (id=%Ld)\n%!"
+      label well_known_resource.Cache.Resource.id;
+    inserted
+  | Some resource -> resource
 
 let update_cache_size delta metadata cache =
   Utils.log_with_header "BEGIN: Updating cache size (delta=%Ld) in db\n%!"
@@ -883,6 +906,7 @@ let rec get_folder_id path trashed =
       resource |. Cache.Resource.remote_id |. GapiLens.option_get in
     SessionM.return remote_id
 and get_resource path trashed =
+  let config = Context.get_ctx () |. Context.config_lens in
   let metadata_last_update =
     get_metadata () |. Cache.Metadata.last_update in
 
@@ -939,8 +963,14 @@ and get_resource path trashed =
   in
 
   if path = root_directory then
-    let root_resource = get_root_resource trashed in
+    let root_resource =
+      get_well_known_resource root_directory trashed in
     SessionM.return root_resource
+  else if path = lost_and_found_directory && not trashed &&
+          config.Config.lost_and_found then
+    let lost_and_found_resource =
+      get_well_known_resource lost_and_found_directory trashed in
+    SessionM.return lost_and_found_resource
   else
     let cache = Context.get_cache () in
     begin match lookup_resource path trashed with
@@ -1275,6 +1305,9 @@ let get_attr path =
     { stats with
           Unix.LargeFile.st_perm = stats.Unix.LargeFile.st_perm land 0o555
     }
+  else if path = lost_and_found_directory && not trashed &&
+          config.Config.lost_and_found then
+    context.Context.mountpoint_stats
   else begin
     let (resource, content_path) = do_request request_resource |> fst in
     let stat =
@@ -1385,6 +1418,9 @@ let read_dir path =
   in
 
   let (path_in_cache, trashed) = get_path_in_cache path in
+  let context = Context.get_ctx () in
+  let cache = context.Context.cache in
+  let config = context |. Context.config_lens in
 
   let request_folder =
     Utils.log_with_header
@@ -1409,12 +1445,24 @@ let read_dir path =
         "END: Getting explicitly trashed files: Found %d files\n%!"
         (List.length explicitly_trashed_files);
       SessionM.return (files @ explicitly_trashed_files, resource);
+    end else if path = lost_and_found_directory && not trashed &&
+                config.Config.lost_and_found then begin
+      Utils.log_with_header "BEGiN: Getting lost and found files\n%!";
+      let q = "'me' in owners" in
+      get_all_files q >>= fun all_owned_files ->
+      let lost_and_found_files =
+        List.filter
+          (fun file -> file.File.parents = [])
+          all_owned_files in
+      Utils.log_with_header
+        "END: Getting lost and found files: Found %d files\n%!"
+        (List.length lost_and_found_files);
+      SessionM.return (lost_and_found_files, resource);
     end else
       SessionM.return (files, resource);
     end
   in
 
-  let cache = Context.get_cache () in
   let resources =
     if check_resource_in_cache cache path_in_cache trashed then begin
       Utils.log_with_header
@@ -1481,8 +1529,13 @@ let read_dir path =
       (fun resource ->
          Filename.basename resource.Cache.Resource.path)
       resources in
-  if path = root_directory then
-    (Filename.basename trash_directory) :: filenames
+  let filenames =
+    if path = root_directory then
+      (Filename.basename trash_directory) :: filenames
+    else filenames in
+  if path = root_directory && not trashed &&
+     config.Config.lost_and_found then
+    (Filename.basename lost_and_found_directory) :: filenames
   else filenames
 (* END readdir *)
 
@@ -1779,6 +1832,10 @@ let create_remote_resource ?link_target is_folder path mode =
   if trashed then raise Permission_denied;
 
   let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  if is_lost_and_found path config && config.Config.lost_and_found
+  then raise Permission_denied;
+
   let cache = context.Context.cache in
   let parent_path = Filename.dirname path_in_cache in
   let create_file =
@@ -1977,6 +2034,14 @@ let rename path new_path =
   let (new_path_in_cache, target_trashed) = get_path_in_cache new_path in
   if trashed <> target_trashed then raise Permission_denied;
 
+  let config = Context.get_ctx () |. Context.config_lens in
+  if (path = lost_and_found_directory ||
+      is_lost_and_found new_path config) &&
+     not trashed &&
+     not target_trashed &&
+     config.Config.lost_and_found
+  then raise Permission_denied;
+
   let old_parent_path = Filename.dirname path_in_cache in
   let new_parent_path = Filename.dirname new_path_in_cache in
   let old_name = Filename.basename path_in_cache in
@@ -1987,10 +2052,7 @@ let rename path new_path =
       trash_resource
         (Cache.Resource.is_folder new_resource) target_trashed new_path
     in
-    begin if not target_trashed &&
-       not (Context.get_ctx ()
-        |. Context.config_lens
-        |. Config.keep_duplicates) then
+    begin if not target_trashed && not config.Config.keep_duplicates then
       Utils.try_with_m
         (trash_target_path ())
         (function
@@ -2035,10 +2097,17 @@ let rename path new_path =
           new_parent_path target_trashed >>= fun new_parent_resource ->
         let new_parent_id =
           new_parent_resource.Cache.Resource.remote_id |> Option.get in
-        get_resource
-          old_parent_path trashed >>= fun old_parent_resource ->
-        let old_parent_id =
-          old_parent_resource.Cache.Resource.remote_id |> Option.get in
+        begin if old_parent_path = lost_and_found_directory &&
+                 not trashed &&
+                 config.Config.lost_and_found then
+          SessionM.return ""
+        else
+          get_resource
+            old_parent_path trashed >>= fun old_parent_resource ->
+          let id =
+            old_parent_resource.Cache.Resource.remote_id |> Option.get in
+          SessionM.return id
+        end >>= fun old_parent_id ->
         let file_patch =
           { File.empty with
                 (* This is to avoid sending an empty file patch, that
