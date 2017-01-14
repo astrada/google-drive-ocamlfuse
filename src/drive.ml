@@ -46,6 +46,7 @@ let trash_directory = "/.Trash"
 let trash_directory_name_length = String.length trash_directory
 let trash_directory_base_path = "/.Trash/"
 let lost_and_found_directory = "/lost+found"
+let shared_with_me_directory = "/.shared"
 let f_bsize = 4096L
 let change_limit = 50
 let max_link_target_length = 127
@@ -119,9 +120,21 @@ let is_in_trash_directory path =
   if path = trash_directory then false
   else ExtString.String.starts_with path trash_directory_base_path
 
-let is_lost_and_found path config =
-  if not config.Config.lost_and_found then false
+let is_lost_and_found_root path trashed config =
+  if trashed || not config.Config.lost_and_found then false
+  else path = lost_and_found_directory
+
+let is_lost_and_found path trashed config =
+  if trashed || not config.Config.lost_and_found then false
   else ExtString.String.starts_with path lost_and_found_directory
+
+let is_shared_with_me_root path trashed config =
+  if trashed || not config.Config.shared_with_me then false
+  else path = shared_with_me_directory
+
+let is_shared_with_me path trashed config =
+  if trashed || not config.Config.shared_with_me then false
+  else ExtString.String.starts_with path shared_with_me_directory
 
 let get_path_in_cache path =
   if path = root_directory then
@@ -259,8 +272,8 @@ let create_root_resource trashed =
         trashed = Some trashed;
   }
 
-let create_lost_and_found_resource () =
-  let resource = create_resource lost_and_found_directory in
+let create_well_known_resource path =
+  let resource = create_resource path in
   { resource with
         Cache.Resource.remote_id = Some "";
         mime_type = Some folder_mime_type;
@@ -403,15 +416,17 @@ let get_well_known_resource path trashed =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
-  match lookup_resource root_directory trashed with
+  match lookup_resource path trashed with
   | None ->
     let (well_known_resource, label) =
       if path = root_directory then
         (create_root_resource trashed, "root")
-      else if path = lost_and_found_directory &&
-              config.Config.lost_and_found then
-        (create_lost_and_found_resource (), "lost+found")
-      else invalid_arg ("Invalid well known path: " ^ path)
+      else if is_lost_and_found_root path trashed config then
+        (create_well_known_resource lost_and_found_directory, "lost+found")
+      else if is_shared_with_me_root path trashed config then
+        (create_well_known_resource shared_with_me_directory, "shared with me")
+      else invalid_arg ("Invalid well known path: " ^ path ^ " trashed=" ^
+                        (string_of_bool trashed))
     in
     Utils.log_with_header
       "BEGIN: Saving %s resource to db (id=%Ld)\n%!"
@@ -581,6 +596,7 @@ let get_metadata () =
 
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
+  let config = context |. Context.config_lens in
 
   let update_resource_cache new_metadata old_metadata =
     let get_all_changes =
@@ -742,9 +758,24 @@ let get_metadata () =
             (delete_cached_resources new_metadata);
           Utils.log_with_header "END: Removing deleted resources\n%!";
           if List.length changes > 0 then begin
-            Utils.log_with_header "BEGIN: Invalidating trash bin resource\n%!";
+            Utils.log_with_header
+              "BEGIN: Invalidating trash bin resource\n%!";
             Cache.Resource.invalidate_trash_bin cache;
             Utils.log_with_header "END: Invalidating trash bin resource\n%!";
+            if config.Config.lost_and_found then begin
+              Utils.log_with_header
+                "BEGIN: Invalidating lost+found resource\n%!";
+              Cache.Resource.invalidate_path cache lost_and_found_directory;
+              Utils.log_with_header
+                "END: Invalidating lost+found resource\n%!";
+            end;
+            if config.Config.shared_with_me then begin
+              Utils.log_with_header
+                "BEGIN: Invalidating .shared resource\n%!";
+              Cache.Resource.invalidate_path cache shared_with_me_directory;
+              Utils.log_with_header
+                "END: Invalidating .shared resource\n%!";
+            end
           end;
           SessionM.return {
             new_metadata with
@@ -966,11 +997,14 @@ and get_resource path trashed =
     let root_resource =
       get_well_known_resource root_directory trashed in
     SessionM.return root_resource
-  else if path = lost_and_found_directory && not trashed &&
-          config.Config.lost_and_found then
+  else if is_lost_and_found_root path trashed config then
     let lost_and_found_resource =
       get_well_known_resource lost_and_found_directory trashed in
     SessionM.return lost_and_found_resource
+  else if is_shared_with_me_root path trashed config then
+    let shared_with_me_resource =
+      get_well_known_resource shared_with_me_directory trashed in
+    SessionM.return shared_with_me_resource
   else
     let cache = Context.get_cache () in
     begin match lookup_resource path trashed with
@@ -1300,13 +1334,13 @@ let get_attr path =
 
   if path = root_directory then
     context.Context.mountpoint_stats
-  else if path = trash_directory then
+  else if path = trash_directory ||
+          is_shared_with_me_root path trashed config then
     let stats = context.Context.mountpoint_stats in
     { stats with
-          Unix.LargeFile.st_perm = stats.Unix.LargeFile.st_perm land 0o555
+      Unix.LargeFile.st_perm = stats.Unix.LargeFile.st_perm land 0o555
     }
-  else if path = lost_and_found_directory && not trashed &&
-          config.Config.lost_and_found then
+  else if is_lost_and_found_root path trashed config then
     context.Context.mountpoint_stats
   else begin
     let (resource, content_path) = do_request request_resource |> fst in
@@ -1427,26 +1461,7 @@ let read_dir path =
       "BEGIN: Getting folder content (path=%s, trashed=%b)\n%!"
       path_in_cache trashed;
     get_resource path_in_cache trashed >>= fun resource ->
-    get_folder_id path_in_cache trashed >>= fun folder_id ->
-    let q =
-      Printf.sprintf "'%s' in parents and trashed = %b" folder_id trashed in
-    get_all_files q >>= fun files ->
-    Utils.log_with_header
-      "END: Getting folder content (path=%s, trashed=%b)\n%!"
-      path_in_cache trashed;
-    begin if path = trash_directory && trashed then begin
-      Utils.log_with_header "BEGiN: Getting explicitly trashed files\n%!";
-      let q =
-        Printf.sprintf "not '%s' in parents and trashed = true" folder_id in
-      get_all_files q >>= fun trashed_files ->
-      let explicitly_trashed_files =
-        List.filter (fun file -> file.File.explicitlyTrashed) trashed_files in
-      Utils.log_with_header
-        "END: Getting explicitly trashed files: Found %d files\n%!"
-        (List.length explicitly_trashed_files);
-      SessionM.return (files @ explicitly_trashed_files, resource);
-    end else if path = lost_and_found_directory && not trashed &&
-                config.Config.lost_and_found then begin
+    if is_lost_and_found_root path trashed config then begin
       Utils.log_with_header "BEGiN: Getting lost and found files\n%!";
       let q = "'me' in owners" in
       get_all_files q >>= fun all_owned_files ->
@@ -1458,8 +1473,36 @@ let read_dir path =
         "END: Getting lost and found files: Found %d files\n%!"
         (List.length lost_and_found_files);
       SessionM.return (lost_and_found_files, resource);
-    end else
-      SessionM.return (files, resource);
+    end else if is_shared_with_me_root path trashed config then begin
+      Utils.log_with_header "BEGiN: Getting shared with me files\n%!";
+      let q = "sharedWithMe = true" in
+      get_all_files q >>= fun shared_with_me_files ->
+      Utils.log_with_header
+        "END: Getting shared with me files: Found %d files\n%!"
+        (List.length shared_with_me_files);
+      SessionM.return (shared_with_me_files, resource);
+    end else begin
+      get_folder_id path_in_cache trashed >>= fun folder_id ->
+      let q =
+        Printf.sprintf "'%s' in parents and trashed = %b" folder_id trashed in
+      get_all_files q >>= fun files ->
+      Utils.log_with_header
+        "END: Getting folder content (path=%s, trashed=%b)\n%!"
+        path_in_cache trashed;
+      begin if path = trash_directory && trashed then begin
+        Utils.log_with_header "BEGiN: Getting explicitly trashed files\n%!";
+        let q =
+          Printf.sprintf "not '%s' in parents and trashed = true" folder_id in
+        get_all_files q >>= fun trashed_files ->
+        let explicitly_trashed_files =
+          List.filter (fun file -> file.File.explicitlyTrashed) trashed_files in
+        Utils.log_with_header
+          "END: Getting explicitly trashed files: Found %d files\n%!"
+          (List.length explicitly_trashed_files);
+        SessionM.return (files @ explicitly_trashed_files, resource);
+      end else
+        SessionM.return (files, resource);
+      end
     end
   in
 
@@ -1532,6 +1575,11 @@ let read_dir path =
   let filenames =
     if path = root_directory then
       (Filename.basename trash_directory) :: filenames
+    else filenames in
+  let filenames =
+    if path = root_directory && not trashed &&
+       config.Config.shared_with_me then
+      (Filename.basename shared_with_me_directory) :: filenames
     else filenames in
   if path = root_directory && not trashed &&
      config.Config.lost_and_found then
@@ -1833,8 +1881,9 @@ let create_remote_resource ?link_target is_folder path mode =
 
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
-  if is_lost_and_found path config && config.Config.lost_and_found
-  then raise Permission_denied;
+  if is_lost_and_found path trashed config ||
+     is_shared_with_me path trashed config then
+    raise Permission_denied;
 
   let cache = context.Context.cache in
   let parent_path = Filename.dirname path_in_cache in
@@ -1929,6 +1978,12 @@ let check_if_empty remote_id is_folder trashed =
 (* Delete (trash) resources *)
 let trash_resource is_folder trashed path =
   if trashed then raise Permission_denied;
+
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  if is_lost_and_found path trashed config ||
+     is_shared_with_me path trashed config then
+    raise Permission_denied;
 
   let trash resource =
     let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
@@ -2035,12 +2090,12 @@ let rename path new_path =
   if trashed <> target_trashed then raise Permission_denied;
 
   let config = Context.get_ctx () |. Context.config_lens in
-  if (path = lost_and_found_directory ||
-      is_lost_and_found new_path config) &&
-     not trashed &&
-     not target_trashed &&
-     config.Config.lost_and_found
-  then raise Permission_denied;
+  if is_lost_and_found_root path trashed config ||
+     is_lost_and_found new_path target_trashed config then
+    raise Permission_denied;
+  if is_shared_with_me path trashed config ||
+     is_shared_with_me new_path target_trashed config then
+    raise Permission_denied;
 
   let old_parent_path = Filename.dirname path_in_cache in
   let new_parent_path = Filename.dirname new_path_in_cache in
@@ -2097,9 +2152,7 @@ let rename path new_path =
           new_parent_path target_trashed >>= fun new_parent_resource ->
         let new_parent_id =
           new_parent_resource.Cache.Resource.remote_id |> Option.get in
-        begin if old_parent_path = lost_and_found_directory &&
-                 not trashed &&
-                 config.Config.lost_and_found then
+        begin if is_lost_and_found_root old_parent_path trashed config then
           SessionM.return ""
         else
           get_resource
