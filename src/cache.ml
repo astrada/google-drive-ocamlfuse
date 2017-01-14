@@ -265,6 +265,18 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_invalidate_path_stmt db =
+    let sql =
+      "UPDATE resource \
+       SET \
+         state = 'ToDownload' \
+       WHERE path LIKE :path \
+         AND state <> 'ToUpload' \
+         AND state <> 'Uploading' \
+         AND state <> 'NotFound';"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_trash_stmt db =
     let sql =
       "UPDATE resource \
@@ -827,6 +839,15 @@ struct
               bind_int stmt ":id" (Some id);
               final_step stmt)
            ids;
+         finalize_stmt stmt)
+
+  let invalidate_path cache path =
+    with_transaction cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_invalidate_path_stmt db in
+         reset_stmt stmt;
+         bind_text stmt ":path" (Some path);
+         final_step stmt;
          finalize_stmt stmt)
 
   let invalidate_all cache =
