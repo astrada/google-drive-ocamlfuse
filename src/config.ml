@@ -101,6 +101,8 @@ type t = {
   read_ahead_buffers : int;
   (* Fetch files with no parents and make them available in lost+found. *)
   lost_and_found : bool;
+  (* Fetch shared files and make them available in .shared *)
+  shared_with_me : bool;
 }
 
 let metadata_cache_time = {
@@ -279,6 +281,10 @@ let lost_and_found = {
   GapiLens.get = (fun x -> x.lost_and_found);
   GapiLens.set = (fun v x -> { x with lost_and_found = v })
 }
+let shared_with_me = {
+  GapiLens.get = (fun x -> x.shared_with_me);
+  GapiLens.set = (fun v x -> { x with shared_with_me = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -340,6 +346,7 @@ let default = {
   max_memory_cache_size = 10485760;
   read_ahead_buffers = 3;
   lost_and_found = false;
+  shared_with_me = false;
 }
 
 let default_debug = {
@@ -387,6 +394,7 @@ let default_debug = {
   max_memory_cache_size = 10485760;
   read_ahead_buffers = 3;
   lost_and_found = false;
+  shared_with_me = false;
 }
 
 let of_table table =
@@ -481,6 +489,9 @@ let of_table table =
       lost_and_found =
         get "lost_and_found" bool_of_string
           default.lost_and_found;
+      shared_with_me =
+        get "shared_with_me" bool_of_string
+          default.shared_with_me;
     }
 
 let to_table data =
@@ -533,6 +544,7 @@ let to_table data =
     add "max_memory_cache_size" (data.max_memory_cache_size |> string_of_int);
     add "read_ahead_buffers" (data.read_ahead_buffers |> string_of_int);
     add "lost_and_found" (data.lost_and_found |> string_of_bool);
+    add "shared_with_me" (data.shared_with_me |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =
