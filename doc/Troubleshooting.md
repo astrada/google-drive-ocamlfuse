@@ -3,15 +3,19 @@ discover and fix. To be extra sure, if you want, you can mount the filesystem
 in read-only mode, modifying the configuration (see the
 [documentation](https://github.com/astrada/google-drive-ocamlfuse/wiki/Configuration)),
 to avoid any write attempt to the server. Anyway, the `rm` command will simply
-trash your file, so you should always be able to rollback any changes. If you
-have problems, you can turn on debug logging:
+trash your file, so you should always be able to rollback any changes.
+
+If you have problems, you can turn on debug logging:
 
     $ google-drive-ocamlfuse -debug mountpoint
 
 In `~/.gdfuse/default` you can find `curl.log` that will track every request
 to the Google Drive API, and `gdfuse.log` that will log FUSE operations and
-cache management. If something goes wrong, you can try clearing the cache,
-with this command:
+cache management.
+
+Please note that the `-debug` option change che process behaviour by keeping it in foreground mode (so it's easier to see if the process is still active or if it stops abruptly).
+
+If something goes wrong, you can try clearing the cache, with this command:
 
     $ google-drive-ocamlfuse -cc
 

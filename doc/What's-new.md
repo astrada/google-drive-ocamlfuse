@@ -1,5 +1,11 @@
-0.6.x
+0.6.11
 ======
+
+* Access to unorganized files (those you can find searching for `is:unorganized owner:me` from the web interface): Activating `lost_and_found` config option, you will get a `/lost+found` directory where you will see all your unorganized files.
+* Access to "Shared with me" files. Activating `shared_with_me` config option, you will get a `/.shared` directory where you will see all files shared with you, even if you didn't add them to your Drive.
+
+0.6.x
+=====
 
 * Multi-threading is now enabled by default.
 * Permissions and ownership are persisted: Unix file mode, uid&gid are saved to Drive's appProperties.
