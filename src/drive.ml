@@ -854,25 +854,26 @@ let get_metadata () =
 
 let statfs () =
   let metadata = get_metadata () in
-  let f_blocks =
-    Int64.div metadata.Cache.Metadata.storage_quota_limit f_bsize in
-  let free_bytes = Int64.sub
-                     metadata.Cache.Metadata.storage_quota_limit
-                     metadata.Cache.Metadata.storage_quota_usage in
+  let limit =
+    if metadata.Cache.Metadata.storage_quota_limit = 0L then Int64.max_int
+    else metadata.Cache.Metadata.storage_quota_limit in
+  let f_blocks = Int64.div limit f_bsize in
+  let free_bytes =
+    Int64.sub limit metadata.Cache.Metadata.storage_quota_usage in
   let f_bfree = Int64.div free_bytes f_bsize in
-    { Unix_util.f_bsize;
-      f_blocks;
-      f_bfree;
-      f_bavail = f_bfree;
-      f_files = f_blocks;
-      f_ffree = f_bfree;
-      f_namemax = 256L;
-      (* ignored *)
-      f_frsize = 0L;
-      f_favail = 0L;
-      f_fsid = 0L;
-      f_flag = 0L;
-    }
+  { Unix_util.f_bsize;
+    f_blocks;
+    f_bfree;
+    f_bavail = f_bfree;
+    f_files = f_blocks;
+    f_ffree = f_bfree;
+    f_namemax = 256L;
+    (* ignored *)
+    f_frsize = 0L;
+    f_favail = 0L;
+    f_fsid = 0L;
+    f_flag = 0L;
+  }
 (* END Metadata *)
 
 (* Resources *)
