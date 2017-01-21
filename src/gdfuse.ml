@@ -24,21 +24,23 @@ let rng =
   string dev_rng 20 |> pseudo_rng
 
 (* Application configuration *)
-let create_default_config_store debug app_dir =
+let create_default_config_store debug xdg_base_directory path =
   let config =
     if debug then Config.default_debug
     else Config.default in
+  let data =
+    { config with
+      Config.xdg_base_directory
+    } in
   (* Save configuration file *)
   let config_store = {
-    Context.ConfigFileStore.path = app_dir |. AppDir.config_path;
-    data = config
-  }
-  in
+    Context.ConfigFileStore.path;
+    data;
+  } in
   Context.save_config_store config_store;
   config_store
 
-let get_config_store debug app_dir =
-  let config_path = app_dir |. AppDir.config_path in
+let get_config_store debug xdg_base_directory config_path =
   try
     Utils.log_with_header "Loading configuration from %s..." config_path;
     let config_store = Context.ConfigFileStore.load config_path in
@@ -46,7 +48,7 @@ let get_config_store debug app_dir =
     config_store
   with KeyValueStore.File_not_found ->
     Utils.log_message "not found.\n";
-    create_default_config_store debug app_dir
+    create_default_config_store debug xdg_base_directory config_path
 (* END Application configuration *)
 
 (* Application state *)
@@ -64,14 +66,14 @@ let create_empty_state_store app_dir =
     |> State.auth_request_id ^= request_id
     |> State.saved_version ^= Config.version in
   let state_store = {
-    Context.StateFileStore.path = app_dir |. AppDir.state_path;
+    Context.StateFileStore.path = app_dir.AppDir.state_path;
     data = state
   } in
   Context.save_state_store state_store;
   state_store
 
 let get_state_store app_dir =
-  let state_path = app_dir |. AppDir.state_path in
+  let state_path = app_dir.AppDir.state_path in
   try
     Utils.log_with_header "Loading application state from %s..." state_path;
     let state_store = Context.StateFileStore.load state_path in
@@ -83,16 +85,18 @@ let get_state_store app_dir =
 (* END Application state *)
 
 type application_params = {
-  debug: bool;
-  filesystem_label: string;
-  client_id: string;
-  client_secret: string;
-  mountpoint: string;
-  clear_cache: bool;
-  headless: bool;
-  skip_trash: bool;
-  base_dir: string;
-  multi_threading: bool;
+  debug : bool;
+  filesystem_label : string;
+  client_id : string;
+  client_secret : string;
+  mountpoint : string;
+  clear_cache : bool;
+  headless : bool;
+  skip_trash : bool;
+  base_dir : string;
+  multi_threading : bool;
+  config_path : string;
+  xdg_base_directory : bool;
 }
 
 let setup_application params =
@@ -131,16 +135,34 @@ let setup_application params =
   Utils.log_message "Starting application setup (label=%s, base_dir=%s).\n%!"
     params.filesystem_label
     params.base_dir;
-  let app_dir = AppDir.create params.filesystem_label params.base_dir in
+  let config_path =
+    AppDir.get_config_path
+      params.config_path
+      params.xdg_base_directory
+      params.base_dir
+      params.filesystem_label in
+  let config_store =
+    get_config_store params.debug params.xdg_base_directory config_path in
+  let current_config = config_store.Context.ConfigFileStore.data in
+  let current_config =
+    if params.xdg_base_directory then
+      { current_config with
+        Config.xdg_base_directory = params.xdg_base_directory
+      }
+    else current_config in
+  let app_dir =
+    AppDir.create
+      params.config_path
+      current_config
+      params.base_dir
+      params.filesystem_label in
   let () = AppDir.create_directories app_dir in
-  let app_log_path = app_dir |. AppDir.app_log_path in
+  let app_log_path = app_dir.AppDir.app_log_path in
   Utils.log_message "Opening log file: %s\n%!" app_log_path;
   let log_channel = open_out app_log_path in
   Utils.log_channel := log_channel;
   Utils.log_with_header "Setting up %s filesystem...\n%!"
     params.filesystem_label;
-  let config_store = get_config_store params.debug app_dir in
-  let current_config = config_store |. Context.ConfigFileStore.data in
   let client_id =
     if params.client_id = ""
     then current_config |. Config.client_id
@@ -176,7 +198,9 @@ let setup_application params =
   Context.save_config_store config_store;
   Utils.max_retries := config.Config.max_retries;
   let gapi_config =
-    let gapi_config = Config.create_gapi_config config params.debug app_dir in
+    let gapi_config =
+      Config.create_gapi_config config params.debug
+        app_dir.AppDir.curl_log_path in
     if client_id = "" || client_secret = "" then
       let oauth2_config =
         match gapi_config |. GapiConfig.auth with
@@ -505,10 +529,10 @@ let () =
   let clear_cache = ref false in
   let headless = ref false in
   let skip_trash = ref false in
+  let base_dir = ref "" in
   let multi_threading = ref false in
-  let base_dir =
-    let dir = Filename.concat (Sys.getenv "HOME") ".gdfuse" in
-    ref dir in
+  let config_path = ref "" in
+  let xdg_base_directory = ref false in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -586,6 +610,13 @@ let () =
        Arg.Set skip_trash,
        " enable permanent deletion mode. Default is false. Activate at your \
         own risk. Files deleted with this option *cannot* be restored.";
+       "-config",
+       Arg.Set_string config_path,
+       " use a custom config file path. \
+        Default is \"~/.gdfuse/[label]/config\".";
+       "-xdgbd",
+       Arg.Set xdg_base_directory,
+       " enable XDG Base Directory support. Default is false.";
       ]) in
   let () =
     Arg.parse
@@ -615,6 +646,8 @@ let () =
         skip_trash = !skip_trash;
         base_dir = !base_dir;
         multi_threading = !multi_threading;
+        config_path = !config_path;
+        xdg_base_directory = !xdg_base_directory;
       } in
       if !mountpoint = "" then begin
         setup_application { params with mountpoint = "." };

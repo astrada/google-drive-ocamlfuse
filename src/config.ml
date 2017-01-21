@@ -103,6 +103,14 @@ type t = {
   lost_and_found : bool;
   (* Fetch shared files and make them available in .shared *)
   shared_with_me : bool;
+  (* Enable XDG Base Directory support *)
+  xdg_base_directory : bool;
+  (* Path of the directory storing application state *)
+  data_directory : string;
+  (* Path of the directory storing application cache *)
+  cache_directory : string;
+  (* Path of the directory containing log files *)
+  log_directory : string;
 }
 
 let metadata_cache_time = {
@@ -285,6 +293,22 @@ let shared_with_me = {
   GapiLens.get = (fun x -> x.shared_with_me);
   GapiLens.set = (fun v x -> { x with shared_with_me = v })
 }
+let xdg_base_directory = {
+  GapiLens.get = (fun x -> x.xdg_base_directory);
+  GapiLens.set = (fun v x -> { x with xdg_base_directory = v })
+}
+let data_directory = {
+  GapiLens.get = (fun x -> x.data_directory);
+  GapiLens.set = (fun v x -> { x with data_directory = v })
+}
+let cache_directory = {
+  GapiLens.get = (fun x -> x.cache_directory);
+  GapiLens.set = (fun v x -> { x with cache_directory = v })
+}
+let log_directory = {
+  GapiLens.get = (fun x -> x.log_directory);
+  GapiLens.set = (fun v x -> { x with log_directory = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -347,6 +371,10 @@ let default = {
   read_ahead_buffers = 3;
   lost_and_found = false;
   shared_with_me = false;
+  xdg_base_directory = false;
+  data_directory = "";
+  cache_directory = "";
+  log_directory = "";
 }
 
 let default_debug = {
@@ -395,6 +423,10 @@ let default_debug = {
   read_ahead_buffers = 3;
   lost_and_found = false;
   shared_with_me = false;
+  xdg_base_directory = false;
+  data_directory = "";
+  cache_directory = "";
+  log_directory = "";
 }
 
 let of_table table =
@@ -492,6 +524,18 @@ let of_table table =
       shared_with_me =
         get "shared_with_me" bool_of_string
           default.shared_with_me;
+      xdg_base_directory =
+        get "xdg_base_directory" bool_of_string
+          default.xdg_base_directory;
+      data_directory =
+        get "data_directory" Std.identity
+          default.data_directory;
+      cache_directory =
+        get "cache_directory" Std.identity
+          default.cache_directory;
+      log_directory =
+        get "log_directory" Std.identity
+          default.log_directory;
     }
 
 let to_table data =
@@ -545,6 +589,10 @@ let to_table data =
     add "read_ahead_buffers" (data.read_ahead_buffers |> string_of_int);
     add "lost_and_found" (data.lost_and_found |> string_of_bool);
     add "shared_with_me" (data.shared_with_me |> string_of_bool);
+    add "xdg_base_directory" (data.xdg_base_directory |> string_of_bool);
+    add "data_directory" data.data_directory;
+    add "cache_directory" data.cache_directory;
+    add "log_directory" data.log_directory;
     table
 
 let debug_print out_ch start_time curl info_type info =
@@ -561,10 +609,10 @@ let debug_print out_ch start_time curl info_type info =
       info
       nl
 
-let create_gapi_config config debug app_dir =
+let create_gapi_config config debug curl_log_path =
   let gapi_config =
     if debug && (not config.curl_debug_off) then
-      let out_ch = open_out (app_dir |. AppDir.curl_log_path) in
+      let out_ch = open_out curl_log_path in
       let debug_function = debug_print out_ch (Unix.gettimeofday ()) in
         GapiConfig.default_debug
           |> GapiConfig.debug ^= Some (GapiConfig.Custom debug_function)

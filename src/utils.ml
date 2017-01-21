@@ -213,3 +213,21 @@ let with_retry ?(filter_exception = fun _ -> true) f label =
   in
   loop 0
 
+let safe_makedir dir =
+  let mkd ds =
+    let d = String.concat Filename.dir_sep ds in
+    if not (Sys.file_exists d) then
+      try
+        Unix.mkdir d 0o700
+      with Sys_error _ -> ()
+  in
+  let ds = Str.split (Str.regexp (Str.quote Filename.dir_sep)) dir in
+  List.fold_left
+    (fun xs x ->
+       let xs' = xs @ [x] in
+       mkd xs';
+       xs'
+    )
+    [""]
+    ds |> ignore
+
