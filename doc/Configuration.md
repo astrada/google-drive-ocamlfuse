@@ -183,6 +183,22 @@ When set to `true`, creates a new directory `/.shared` where you can access all 
 
     shared_with_me=false
 
+Enable XDG Base Directory support (to turn it on use `-xdgbd` command line option):
+
+    xdg_base_directory=false
+
+Path of the directory storing application state (if blank uses the default):
+
+    data_directory=
+
+Path of the directory storing application cache (if blank uses the default):
+
+    cache_directory=
+
+Path of the directory containing log files (if blank uses the default):
+
+    log_directory=
+
 ### Document export formats
 
 `desktop` format creates a shortcut to the document that will be opened in the web browser for edit.
