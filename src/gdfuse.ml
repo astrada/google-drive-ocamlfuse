@@ -37,6 +37,8 @@ let create_default_config_store debug xdg_base_directory path =
     Context.ConfigFileStore.path;
     data;
   } in
+  let config_dir = Filename.dirname path in
+  Utils.safe_makedir config_dir;
   Context.save_config_store config_store;
   config_store
 
