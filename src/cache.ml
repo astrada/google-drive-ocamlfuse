@@ -991,7 +991,8 @@ struct
       | "application/vnd.google-apps.presentation"
       | "application/vnd.google-apps.spreadsheet"
       | "application/vnd.google-apps.map"
-      | "application/vnd.google-apps.fusiontable" -> true
+      | "application/vnd.google-apps.fusiontable"
+      | "application/vnd.google-apps.script" -> true
       | _ -> false
 
   let is_document resource =
