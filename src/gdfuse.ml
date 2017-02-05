@@ -24,14 +24,10 @@ let rng =
   string dev_rng 20 |> pseudo_rng
 
 (* Application configuration *)
-let create_default_config_store debug xdg_base_directory path =
-  let config =
+let create_default_config_store debug path =
+  let data =
     if debug then Config.default_debug
     else Config.default in
-  let data =
-    { config with
-      Config.xdg_base_directory
-    } in
   (* Save configuration file *)
   let config_store = {
     Context.ConfigFileStore.path;
@@ -42,7 +38,7 @@ let create_default_config_store debug xdg_base_directory path =
   Context.save_config_store config_store;
   config_store
 
-let get_config_store debug xdg_base_directory config_path =
+let get_config_store debug config_path =
   try
     Utils.log_with_header "Loading configuration from %s..." config_path;
     let config_store = Context.ConfigFileStore.load config_path in
@@ -50,7 +46,7 @@ let get_config_store debug xdg_base_directory config_path =
     config_store
   with KeyValueStore.File_not_found ->
     Utils.log_message "not found.\n";
-    create_default_config_store debug xdg_base_directory config_path
+    create_default_config_store debug config_path
 (* END Application configuration *)
 
 (* Application state *)
@@ -137,27 +133,22 @@ let setup_application params =
   Utils.log_message "Starting application setup (label=%s, base_dir=%s).\n%!"
     params.filesystem_label
     params.base_dir;
-  let config_path =
+  let (config_path, xdg_base_directory) =
     AppDir.get_config_path
       params.config_path
       params.xdg_base_directory
       params.base_dir
       params.filesystem_label in
   let config_store =
-    get_config_store params.debug params.xdg_base_directory config_path in
+    get_config_store params.debug config_path in
   let current_config = config_store.Context.ConfigFileStore.data in
-  let current_config =
-    if params.xdg_base_directory then
-      { current_config with
-        Config.xdg_base_directory = params.xdg_base_directory
-      }
-    else current_config in
   let app_dir =
     AppDir.create
-      params.config_path
       current_config
+      params.config_path
       params.base_dir
-      params.filesystem_label in
+      params.filesystem_label
+      xdg_base_directory in
   let () = AppDir.create_directories app_dir in
   let app_log_path = app_dir.AppDir.app_log_path in
   Utils.log_message "Opening log file: %s\n%!" app_log_path;

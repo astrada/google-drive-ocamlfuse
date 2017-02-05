@@ -103,8 +103,6 @@ type t = {
   lost_and_found : bool;
   (* Fetch shared files and make them available in .shared *)
   shared_with_me : bool;
-  (* Enable XDG Base Directory support *)
-  xdg_base_directory : bool;
   (* Path of the directory storing application state *)
   data_directory : string;
   (* Path of the directory storing application cache *)
@@ -293,10 +291,6 @@ let shared_with_me = {
   GapiLens.get = (fun x -> x.shared_with_me);
   GapiLens.set = (fun v x -> { x with shared_with_me = v })
 }
-let xdg_base_directory = {
-  GapiLens.get = (fun x -> x.xdg_base_directory);
-  GapiLens.set = (fun v x -> { x with xdg_base_directory = v })
-}
 let data_directory = {
   GapiLens.get = (fun x -> x.data_directory);
   GapiLens.set = (fun v x -> { x with data_directory = v })
@@ -371,7 +365,6 @@ let default = {
   read_ahead_buffers = 3;
   lost_and_found = false;
   shared_with_me = false;
-  xdg_base_directory = false;
   data_directory = "";
   cache_directory = "";
   log_directory = "";
@@ -423,7 +416,6 @@ let default_debug = {
   read_ahead_buffers = 3;
   lost_and_found = false;
   shared_with_me = false;
-  xdg_base_directory = false;
   data_directory = "";
   cache_directory = "";
   log_directory = "";
@@ -524,9 +516,6 @@ let of_table table =
       shared_with_me =
         get "shared_with_me" bool_of_string
           default.shared_with_me;
-      xdg_base_directory =
-        get "xdg_base_directory" bool_of_string
-          default.xdg_base_directory;
       data_directory =
         get "data_directory" Std.identity
           default.data_directory;
@@ -589,7 +578,6 @@ let to_table data =
     add "read_ahead_buffers" (data.read_ahead_buffers |> string_of_int);
     add "lost_and_found" (data.lost_and_found |> string_of_bool);
     add "shared_with_me" (data.shared_with_me |> string_of_bool);
-    add "xdg_base_directory" (data.xdg_base_directory |> string_of_bool);
     add "data_directory" data.data_directory;
     add "cache_directory" data.cache_directory;
     add "log_directory" data.log_directory;

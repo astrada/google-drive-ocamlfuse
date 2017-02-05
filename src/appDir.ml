@@ -67,21 +67,22 @@ let xdg_cache_home =
 let get_config_path config_path xdg_base_directory base_dir fs_label =
   let xdg_config_dir = xdg_config_home // "gdfuse" // fs_label in
   let xdg_config_path = xdg_config_dir // "config" in
-  if config_path <> "" then config_path
+  if config_path <> "" then (config_path, false)
   else if xdg_base_directory then begin
     Utils.safe_makedir xdg_config_dir;
-    xdg_config_path
-  end else if Sys.file_exists xdg_config_path then xdg_config_path
+    (xdg_config_path, true)
+  end else if Sys.file_exists xdg_config_path then
+    (xdg_config_path, true)
   else
     let base_dir =
       if base_dir = "" then default_base_dir else base_dir in
-    base_dir // fs_label // "config"
+    (base_dir // fs_label // "config", false)
 
-let create config_path config base_dir fs_label =
+let create config config_path base_dir fs_label xdg_base_directory =
   let data_dir =
     if config.Config.data_directory <> "" then
       config.Config.data_directory
-    else if config.Config.xdg_base_directory then
+    else if xdg_base_directory then
       xdg_data_home // "gdfuse" // fs_label
     else 
       let base_dir =
@@ -90,12 +91,12 @@ let create config_path config base_dir fs_label =
   let cache_dir =
     if config.Config.cache_directory <> "" then
       config.Config.cache_directory
-    else if config.Config.xdg_base_directory then
+    else if xdg_base_directory then
       xdg_cache_home // "gdfuse" // fs_label
     else data_dir // "cache" in
   let log_dir =
     if config.Config.log_directory <> "" then config.Config.log_directory
-    else if config.Config.xdg_base_directory then cache_dir // "log"
+    else if xdg_base_directory then cache_dir // "log"
     else data_dir in
   { config_path;
     data_dir;
