@@ -9,3 +9,5 @@ _build
 setup.data
 setup.log
 
+_config.yml
+
