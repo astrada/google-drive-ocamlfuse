@@ -18,7 +18,7 @@ written in OCaml. It lets you mount your Google Drive on Linux.
 
 ### Resources
 
-* [Homepage](http://gdfuse.forge.ocamlcore.org/)
+* [Homepage](https://astrada.github.io/google-drive-ocamlfuse/)
 * [Wiki](https://github.com/astrada/google-drive-ocamlfuse/wiki): includes
   installation instructions, and more details about configuration, and
   authorization
@@ -42,7 +42,7 @@ install it, use the commands below:
     sudo add-apt-repository ppa:alessandro-strada/ppa
     sudo apt-get update
     sudo apt-get install google-drive-ocamlfuse
-    
+
 New beta versions are available on this
 [PPA](https://launchpad.net/~alessandro-strada/+archive/ubuntu/google-drive-ocamlfuse-beta).
 If you want to test them, use the commands below:
@@ -66,8 +66,8 @@ How to build
 
 [OCaml]: http://caml.inria.fr/ocaml/release.en.html
 [Findlib]: http://projects.camlcity.org/projects/findlib.html/
-[ocamlfuse]: http://sourceforge.net/projects/ocamlfuse/
-[gapi-ocaml]: http://forge.ocamlcore.org/projects/gapi-ocaml/
+[ocamlfuse]: https://github.com/astrada/ocamlfuse
+[gapi-ocaml]: https://github.com/astrada/gapi-ocaml
 [sqlite3-ocaml]: https://bitbucket.org/mmottl/sqlite3-ocaml
 
 ### Configuration and installation
@@ -148,8 +148,6 @@ Note also that Google Documents will be exported read-only.
 
 ### Support
 
-If you have questions, suggestions or want to report a problem, you can post
-to this [mailing
-list](https://lists.forge.ocamlcore.org/mailman/listinfo/gdfuse-devel). Or you
-may want to open an
-[issue](https://github.com/astrada/google-drive-ocamlfuse/issues) on github.
+If you have questions, suggestions or want to report a problem, you may want
+to open an [issue](https://github.com/astrada/google-drive-ocamlfuse/issues)
+on github.
