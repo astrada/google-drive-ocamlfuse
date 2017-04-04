@@ -38,7 +38,10 @@ let max_buffers buffer_pool =
   buffer_pool.max_buffers
 
 let pending_requests buffer_pool =
-  buffer_pool.pending_requests
+  Utils.with_lock buffer_pool.mutex
+    (fun () ->
+       buffer_pool.pending_requests
+    )
 
 let free_buffers buffer_pool =
   Utils.with_lock buffer_pool.mutex
