@@ -241,6 +241,15 @@ let setup_application params =
   Utils.log_message "done\nSetting up CURL...%!";
   let curl_state = GapiCurl.global_init () in
   Utils.log_message "done\n%!";
+  let memory_buffers =
+    Buffering.MemoryBuffers.create
+      config.Config.memory_buffer_size
+      config.Config.max_memory_cache_size in
+  let buffer_eviction_thread =
+    if config.Config.stream_large_files then
+      Buffering.MemoryBuffers.create_eviction_thread memory_buffers
+    else
+      Thread.create (fun () -> ()) () in
   let context = {
     Context.app_dir;
     config_store;
@@ -252,12 +261,10 @@ let setup_application params =
     metadata = None;
     metadata_lock = Mutex.create ();
     skip_trash = params.skip_trash;
-    memory_buffers =
-      Buffering.MemoryBuffers.create
-        config.Config.memory_buffer_size
-        config.Config.max_memory_cache_size;
+    memory_buffers;
     file_locks = Hashtbl.create Utils.hashtable_initial_size;
     thread_pool = ThreadPool.create ();
+    buffer_eviction_thread;
   } in
   Context.set_ctx context;
   let refresh_token = context |. Context.refresh_token_lens in
@@ -654,6 +661,12 @@ let () =
                "Waiting for pending upload threads (%d)...%!"
                (ThreadPool.pending_threads context.Context.thread_pool);
              ThreadPool.shutdown context.Context.thread_pool;
+             Utils.log_message
+               "done\nStopping buffer eviction thread (TID=%d)...%!"
+               (Thread.id context.Context.buffer_eviction_thread);
+             Buffering.MemoryBuffers.stop_eviction_thread
+               context.Context.memory_buffers;
+             Thread.join context.Context.buffer_eviction_thread;
              Utils.log_message "done\nCURL cleanup...%!";
              ignore (GapiCurl.global_cleanup context.Context.curl_state);
              Utils.log_message "done\nClearing context...%!";
