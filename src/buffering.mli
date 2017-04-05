@@ -12,6 +12,7 @@ sig
     files : (string, int list) Hashtbl.t;
     block_size : int;
     mutex : Mutex.t;
+    condition : Condition.t;
     buffer_pool : BufferPool.t;
     mutable stop_eviction_thread : bool;
   }

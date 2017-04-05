@@ -6,7 +6,13 @@ module Block =
 struct
   type state =
       Empty
+    | Writing
     | Full
+
+  let state_to_string = function
+    | Empty -> "Empty"
+    | Writing -> "Writing"
+    | Full -> "Full"
 
   type t = {
     buffer : BufferPool.Buffer.t;
@@ -15,12 +21,12 @@ struct
                  Bigarray.c_layout) Bigarray.Array1.t;
     start_pos : int64;
     size : int;
-    state : state;
-    last_access : float;
+    mutable state : state;
+    mutable last_access : float;
   }
 
-  let create offset size buffer_pool =
-    let buffer = BufferPool.acquire_buffer buffer_pool in
+  let create offset size mutex condition buffer_pool =
+    let buffer = BufferPool.acquire_buffer mutex condition buffer_pool in
     let sub_array = Bigarray.Array1.sub buffer.BufferPool.Buffer.arr 0 size in
     { buffer;
       sub_array;
@@ -31,7 +37,10 @@ struct
     }
 
   let blit_to_arr dest_arr offset block =
-    if block.state = Empty then invalid_arg "blit_to_arr";
+    if block.state = Empty then
+      invalid_arg "blit_to_arr (empty block)";
+    if block.state = Writing then
+      invalid_arg "blit_to_arr (partially written block)";
     let dest_len = Bigarray.Array1.dim dest_arr in
     let src_off = Int64.to_int (Int64.sub offset block.start_pos) in
     let src_len = block.size - src_off in
@@ -70,6 +79,7 @@ struct
     files : (string, int list) Hashtbl.t;
     block_size : int;
     mutex : Mutex.t;
+    condition : Condition.t;
     buffer_pool : BufferPool.t;
     mutable stop_eviction_thread : bool;
   }
@@ -79,6 +89,7 @@ struct
     files = Hashtbl.create n;
     block_size;
     mutex = Mutex.create ();
+    condition = Condition.create ();
     buffer_pool = BufferPool.create ~pool_size ~buffer_size:block_size;
     stop_eviction_thread = false;
   }
@@ -92,45 +103,70 @@ struct
       (Int64.of_int block_index)
       (Int64.of_int buffers.block_size)
 
-  let release_lru_buffer_if_needed check_condition buffers =
-    let remove_block ((remote_id, block_index) as key) =
-      let block = Hashtbl.find buffers.blocks key in
+  let remove_block
+      expected_state ((remote_id, block_index) as key) block buffers =
+    if block.Block.state = expected_state then begin
       Utils.log_with_header
-        "Releasing memory buffer (remote id=%s, index=%d, buffer id=%d)\n%!"
-        remote_id block_index block.Block.buffer.BufferPool.Buffer.id;
+        "Releasing memory buffer (remote id=%s, index=%d, buffer id=%d, \
+         state=%s)\n%!"
+        remote_id block_index
+        block.Block.buffer.BufferPool.Buffer.id
+        (Block.state_to_string block.Block.state);
       Hashtbl.remove buffers.blocks key;
-      BufferPool.release_buffer block.Block.buffer buffers.buffer_pool
-    in
-    let get_total_size_and_lru_key () =
+      BufferPool.release_buffer
+        block.Block.buffer buffers.condition buffers.buffer_pool
+    end else
+      Utils.log_with_header
+        "Cannot release memory buffer (remote id=%s, index=%d, \
+         buffer id=%d, state=%s, expected state=%s)\n%!"
+        remote_id block_index
+        block.Block.buffer.BufferPool.Buffer.id
+        (Block.state_to_string block.Block.state)
+        (Block.state_to_string expected_state)
+
+  let remove_full_block = remove_block Block.Full
+
+  let remove_partial_block = remove_block Block.Writing
+
+  let release_lru_buffer_if_needed check_condition buffers =
+    let null_key = ("", 0) in
+    let get_total_size_and_lru_block () =
       Hashtbl.fold
-        (fun k v (total, lru) ->
+        (fun k v (total, lru_key, lru_block) ->
            let total = total + v.Block.size in
-           let lru =
-             if lru = ("", 0) then k
-             else
-               let b = Hashtbl.find buffers.blocks lru in
-               if (v.Block.last_access < b.Block.last_access) then k
-               else lru in
-           (total, lru)
+           let (lru_key, lru_block) =
+             if v.Block.state = Block.Full then
+               match lru_block with
+               | None -> (k, Some v)
+               | Some b ->
+                 if v.Block.last_access < b.Block.last_access then (k, Some v)
+                 else (lru_key, lru_block)
+             else (lru_key, lru_block) in
+           (total, lru_key, lru_block)
         )
         buffers.blocks
-        (0, ("", 0))
+        (0, null_key, None)
     in
     if Hashtbl.length buffers.blocks > 0 then begin
       let free_buffers =
         BufferPool.free_buffers buffers.buffer_pool in
       let pending_requests =
         BufferPool.pending_requests buffers.buffer_pool in
-      Utils.log_with_header
-        "Buffer pool stats: free buffers=%d, pending requests=%d\n%!"
-        free_buffers
-        pending_requests;
       if check_condition free_buffers pending_requests then begin
-        let (total_size, lru_key) = get_total_size_and_lru_key () in
+        Utils.log_with_header
+          "Buffer pool stats: free buffers=%d, pending requests=%d\n%!"
+          free_buffers
+          pending_requests;
+        let (total_size, lru_key, lru_block) =
+          get_total_size_and_lru_block () in
         Utils.log_with_header
           "Memory cache size: %d\n%!"
           total_size;
-        remove_block lru_key;
+        match lru_block with
+        | None ->
+          Utils.log_with_header "Cannot find a full buffer to remove\n%!";
+        | Some b ->
+          remove_full_block lru_key b buffers
       end
     end
 
@@ -147,28 +183,23 @@ struct
 
   let read_block
       remote_id offset resource_size fill_array ?dest_arr buffers =
-    let get_block block_index mutex =
+    let get_block block_index =
       match Utils.safe_find buffers.blocks (remote_id, block_index) with
       | None ->
         let start_pos = get_block_start_pos block_index buffers in
-             (*
-             release_lru_buffer_if_no_free_buffer_left buffers;
-                *)
+        release_lru_buffer_if_no_free_buffer_left buffers;
         Utils.log_with_header
           "BEGIN: Acquiring memory buffer (remote id=%s, index=%d)\n%!"
           remote_id block_index;
-        Mutex.unlock mutex;
-        (* Exit from critical section because Block.create can be blocked
-         * if no free buffers are available. *)
         let b =
           let size =
             (Int64.to_int
                (min
                   (Int64.of_int buffers.block_size)
                   (Int64.sub resource_size start_pos))) in
-          Block.create start_pos size buffers.buffer_pool in
-        Mutex.lock mutex;
-        Hashtbl.add buffers.blocks (remote_id, block_index) b;
+          Block.create start_pos size
+            buffers.mutex buffers.condition buffers.buffer_pool in
+        Hashtbl.replace buffers.blocks (remote_id, block_index) b;
         begin match Utils.safe_find buffers.files remote_id with
           | None ->
             Hashtbl.add buffers.files remote_id [block_index]
@@ -181,46 +212,89 @@ struct
           remote_id block_index b.Block.size
           b.Block.buffer.BufferPool.Buffer.id;
         b
-      | Some b -> b
+      | Some b ->
+        Utils.log_with_header
+          "Got cached memory buffer (remote id=%s, index=%d, \
+           size=%d, buffer id=%d)\n%!"
+          remote_id block_index b.Block.size
+          b.Block.buffer.BufferPool.Buffer.id;
+        b
     in
-    let get_block_m block_index mutex s =
-      let block = get_block block_index mutex in
+    let get_block_m block_index s =
+      let block = get_block block_index in
       (block, s)
     in
-    let replace_block block_index block =
-      Hashtbl.replace buffers.blocks (remote_id, block_index) block
+    let wait_for_full_block block =
+      Utils.log_with_header
+        "Waiting for streaming completion (buffer id=%d, state=%s)\n%!"
+        block.Block.buffer.BufferPool.Buffer.id
+        (Block.state_to_string block.Block.state);
+      while block.Block.state = Block.Writing do
+        Condition.wait
+          block.Block.buffer.BufferPool.Buffer.condition
+          block.Block.buffer.BufferPool.Buffer.mutex;
+        Utils.log_with_header
+          "Streaming completed (buffer id=%d, state=%s)\n%!"
+          block.Block.buffer.BufferPool.Buffer.id
+          (Block.state_to_string block.Block.state);
+      done
     in
     let fill_and_blit block_index src_offset dest_arr =
       Utils.with_lock_m buffers.mutex
-        (get_block_m block_index buffers.mutex >>= fun block ->
-         Mutex.unlock buffers.mutex;
-         (* Switch from global lock to local buffer lock to allow
-          * concurrency. *)
-         Utils.with_lock_m block.Block.buffer.BufferPool.Buffer.mutex
-           (SessionM.return () >>= fun () ->
-            begin if block.Block.state = Block.Empty then begin
-                fill_array
-                  block.Block.start_pos
-                  block.Block.sub_array >>= fun () ->
-                let block =
-                  { block with
-                    Block.state = Block.Full;
-                  } in
-                SessionM.return block
-              end else
-                SessionM.return block
-            end >>= fun block ->
-            let block = {
-              block with
-              Block.last_access = Unix.gettimeofday ();
-            } in
-            Option.may
-              (fun arr -> Block.blit_to_arr arr src_offset block)
-              dest_arr;
-            SessionM.return block
-           ) >>= fun block ->
-         Mutex.lock buffers.mutex;
-         replace_block block_index block;
+        (get_block_m block_index >>= fun block ->
+         begin match block.Block.state with
+           | Block.Empty -> begin
+               Mutex.unlock buffers.mutex;
+               (* Switch from global lock to block lock to allow concurrent
+                * streaming. *)
+               Utils.with_lock_m block.Block.buffer.BufferPool.Buffer.mutex
+                 (SessionM.return () >>= fun () ->
+                  begin match block.Block.state with
+                    | Block.Empty -> begin
+                        block.Block.state <- Block.Writing;
+                        Utils.try_with_m
+                          (fill_array
+                             block.Block.start_pos
+                             block.Block.sub_array)
+                          (fun e ->
+                             remove_partial_block
+                               (remote_id, block_index) block buffers;
+                             raise e) >>= fun () ->
+                        block.Block.state <- Block.Full;
+                        Utils.log_with_header
+                          "Broadcasting streaming completion \
+                           (buffer id=%d, state=%s)\n%!"
+                          block.Block.buffer.BufferPool.Buffer.id
+                          (Block.state_to_string block.Block.state);
+                        Condition.broadcast
+                          block.Block.buffer.BufferPool.Buffer.condition;
+                        SessionM.return block
+                      end
+                    | Block.Full ->
+                      SessionM.return block
+                    | Block.Writing -> begin
+                        wait_for_full_block block;
+                        SessionM.return block
+                      end
+                  end
+                 ) >>= fun block ->
+               Mutex.lock buffers.mutex;
+               SessionM.return block
+             end
+           | Block.Full -> SessionM.return block
+           | Block.Writing -> begin
+               Utils.with_lock block.Block.buffer.BufferPool.Buffer.mutex
+                 (fun () -> wait_for_full_block block);
+               SessionM.return block
+             end
+         end >>= fun block ->
+         block.Block.last_access <- Unix.gettimeofday ();
+         Utils.with_lock block.Block.buffer.BufferPool.Buffer.mutex
+           (fun () ->
+              Option.may
+                (fun arr -> Block.blit_to_arr arr src_offset block)
+                dest_arr
+           );
          SessionM.return ()
         )
     in
@@ -342,7 +416,7 @@ struct
                     Hashtbl.find buffers.blocks (remote_id, block_index) in
                   Hashtbl.remove buffers.blocks (remote_id, block_index);
                   BufferPool.release_buffer
-                    block.Block.buffer buffers.buffer_pool;
+                    block.Block.buffer buffers.condition buffers.buffer_pool;
                )
                bs;
              Hashtbl.remove buffers.files remote_id;
@@ -360,7 +434,7 @@ struct
           (fun () -> release_lru_buffer_if_request_blocked buffers);
         Utils.with_lock buffers.mutex
           (fun () -> if buffers.stop_eviction_thread then raise Exit);
-        Thread.delay 1.0;
+        Thread.delay 10.0;
       done
     with Exit -> ()
 
