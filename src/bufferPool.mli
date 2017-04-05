@@ -6,6 +6,7 @@ sig
            Bigarray.int8_unsigned_elt,
            Bigarray.c_layout) Bigarray.Array1.t;
     mutex : Mutex.t;
+    condition : Condition.t;
   }
 
 end
@@ -20,7 +21,7 @@ val pending_requests : t -> int
 
 val free_buffers : t -> int
 
-val acquire_buffer : t -> Buffer.t
+val acquire_buffer : Mutex.t -> Condition.t -> t -> Buffer.t
 
-val release_buffer : Buffer.t -> t -> unit
+val release_buffer : Buffer.t -> Condition.t -> t -> unit
 
