@@ -8,11 +8,13 @@ struct
       Empty
     | Writing
     | Full
+    | Error of exn
 
   let state_to_string = function
     | Empty -> "Empty"
     | Writing -> "Writing"
     | Full -> "Full"
+    | Error e -> Printf.sprintf "Error(%s)" (Printexc.to_string e)
 
   type t = {
     buffer : BufferPool.Buffer.t;
@@ -37,10 +39,15 @@ struct
     }
 
   let blit_to_arr dest_arr offset block =
-    if block.state = Empty then
-      invalid_arg "blit_to_arr (empty block)";
-    if block.state = Writing then
-      invalid_arg "blit_to_arr (partially written block)";
+    begin match block.state with
+      | Empty
+      | Writing
+      | Error _ ->
+        invalid_arg
+          (Printf.sprintf
+             "blit_to_arr (block state=%s)" (state_to_string block.state));
+      | Full -> ()
+    end;
     let dest_len = Bigarray.Array1.dim dest_arr in
     let src_off = Int64.to_int (Int64.sub offset block.start_pos) in
     let src_len = block.size - src_off in
@@ -225,69 +232,87 @@ struct
       (block, s)
     in
     let wait_for_full_block block =
-      Utils.log_with_header
-        "Waiting for streaming completion (buffer id=%d, state=%s)\n%!"
-        block.Block.buffer.BufferPool.Buffer.id
-        (Block.state_to_string block.Block.state);
       while block.Block.state = Block.Writing do
+        Utils.log_with_header
+          "Waiting for streaming completion (buffer id=%d, state=%s)\n%!"
+          block.Block.buffer.BufferPool.Buffer.id
+          (Block.state_to_string block.Block.state);
         Condition.wait
           block.Block.buffer.BufferPool.Buffer.condition
           block.Block.buffer.BufferPool.Buffer.mutex;
-        Utils.log_with_header
-          "Streaming completed (buffer id=%d, state=%s)\n%!"
-          block.Block.buffer.BufferPool.Buffer.id
-          (Block.state_to_string block.Block.state);
-      done
+      done;
+      begin match block.Block.state with
+        | Block.Error e ->
+          Utils.log_with_header
+            "Streaming error (buffer id=%d, state=%s)\n%!"
+            block.Block.buffer.BufferPool.Buffer.id
+            (Block.state_to_string block.Block.state);
+          raise e
+        | _ ->
+          Utils.log_with_header
+            "Streaming completed (buffer id=%d, state=%s)\n%!"
+            block.Block.buffer.BufferPool.Buffer.id
+            (Block.state_to_string block.Block.state);
+      end
     in
     let fill_and_blit block_index src_offset dest_arr =
       Utils.with_lock_m buffers.mutex
         (get_block_m block_index >>= fun block ->
-         begin match block.Block.state with
-           | Block.Empty -> begin
-               Mutex.unlock buffers.mutex;
-               (* Switch from global lock to block lock to allow concurrent
-                * streaming. *)
-               Utils.with_lock_m block.Block.buffer.BufferPool.Buffer.mutex
-                 (SessionM.return () >>= fun () ->
-                  begin match block.Block.state with
-                    | Block.Empty -> begin
-                        block.Block.state <- Block.Writing;
-                        Utils.try_with_m
-                          (fill_array
-                             block.Block.start_pos
-                             block.Block.sub_array)
-                          (fun e ->
-                             remove_partial_block
-                               (remote_id, block_index) block buffers;
-                             raise e) >>= fun () ->
-                        block.Block.state <- Block.Full;
-                        Utils.log_with_header
-                          "Broadcasting streaming completion \
-                           (buffer id=%d, state=%s)\n%!"
-                          block.Block.buffer.BufferPool.Buffer.id
-                          (Block.state_to_string block.Block.state);
-                        Condition.broadcast
-                          block.Block.buffer.BufferPool.Buffer.condition;
-                        SessionM.return block
-                      end
-                    | Block.Full ->
-                      SessionM.return block
-                    | Block.Writing -> begin
-                        wait_for_full_block block;
-                        SessionM.return block
-                      end
-                  end
-                 ) >>= fun block ->
-               Mutex.lock buffers.mutex;
-               SessionM.return block
-             end
-           | Block.Full -> SessionM.return block
-           | Block.Writing -> begin
-               Utils.with_lock block.Block.buffer.BufferPool.Buffer.mutex
-                 (fun () -> wait_for_full_block block);
-               SessionM.return block
-             end
-         end >>= fun block ->
+         SessionM.return (block, block.Block.state)) >>= fun (block, state) ->
+      begin match state with
+        | Block.Empty
+        | Block.Error _ -> begin
+            (* Switch from global lock to block lock to allow concurrent
+             * streaming. *)
+            Utils.with_lock_m block.Block.buffer.BufferPool.Buffer.mutex
+              (SessionM.return () >>= fun () ->
+               begin match block.Block.state with
+                 | Block.Empty
+                 | Block.Error _ -> begin
+                     block.Block.state <- Block.Writing;
+                     Utils.try_with_m
+                       (fill_array
+                          block.Block.start_pos
+                          block.Block.sub_array)
+                       (fun e ->
+                          remove_partial_block
+                            (remote_id, block_index) block buffers;
+                          block.Block.state <- Block.Error e;
+                          Utils.log_with_header
+                            "Broadcasting streaming error \
+                             (buffer id=%d, state=%s)\n%!"
+                            block.Block.buffer.BufferPool.Buffer.id
+                            (Block.state_to_string block.Block.state);
+                          Condition.broadcast
+                            block.Block.buffer.BufferPool.Buffer.condition;
+                          raise e) >>= fun () ->
+                     block.Block.state <- Block.Full;
+                     Utils.log_with_header
+                       "Broadcasting streaming completion \
+                        (buffer id=%d, state=%s)\n%!"
+                       block.Block.buffer.BufferPool.Buffer.id
+                       (Block.state_to_string block.Block.state);
+                     Condition.broadcast
+                       block.Block.buffer.BufferPool.Buffer.condition;
+                     SessionM.return block
+                   end
+                 | Block.Full ->
+                   SessionM.return block
+                 | Block.Writing -> begin
+                     wait_for_full_block block;
+                     SessionM.return block
+                   end
+               end)
+          end
+        | Block.Full -> SessionM.return block
+        | Block.Writing -> begin
+            Utils.with_lock block.Block.buffer.BufferPool.Buffer.mutex
+              (fun () -> wait_for_full_block block);
+            SessionM.return block
+          end
+      end >>= fun block ->
+      Utils.with_lock_m buffers.mutex
+        (SessionM.return () >>= fun () ->
          block.Block.last_access <- Unix.gettimeofday ();
          Utils.with_lock block.Block.buffer.BufferPool.Buffer.mutex
            (fun () ->
@@ -430,6 +455,7 @@ struct
   let evict_cache buffers =
     try
       while true do
+        Utils.log_with_header "evict_cache loop\n%!";
         Utils.with_lock buffers.mutex
           (fun () -> release_lru_buffer_if_request_blocked buffers);
         Utils.with_lock buffers.mutex
