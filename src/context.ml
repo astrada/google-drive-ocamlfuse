@@ -33,7 +33,7 @@ type t = {
   (* Thread pool *)
   thread_pool : ThreadPool.t;
   (* Memory buffer eviction thread *)
-  buffer_eviction_thread : Thread.t;
+  buffer_eviction_thread : Thread.t option;
 }
 
 let app_dir = {

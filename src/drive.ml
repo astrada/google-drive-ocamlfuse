@@ -1277,9 +1277,23 @@ let stream_resource offset buffer resource =
     resource.Cache.Resource.id offset finish length;
   SessionM.return ()
 
+let start_buffer_eviction_thread context memory_buffers =
+  let config = context |. Context.config_lens in
+  if config.Config.stream_large_files then begin
+    if Option.is_none context.Context.buffer_eviction_thread then begin
+      let thread =
+        Buffering.MemoryBuffers.create_eviction_thread memory_buffers in
+      Utils.log_with_header
+        "Starting buffer eviction thread (TID=%d)\n%!"
+        (Thread.id thread);
+      Context.update_ctx (Context.buffer_eviction_thread ^= Some thread)
+    end
+  end
+
 let stream_resource_to_memory_buffer offset buffer resource =
   let context = Context.get_ctx () in
   let memory_buffers = context.Context.memory_buffers in
+  start_buffer_eviction_thread context memory_buffers;
   let remote_id = resource.Cache.Resource.remote_id |> Option.get in
   Buffering.MemoryBuffers.read_block
     remote_id offset (resource.Cache.Resource.size |> Option.get)
@@ -1291,6 +1305,7 @@ let stream_resource_to_memory_buffer offset buffer resource =
 let stream_resource_to_read_ahead_buffers offset resource =
   let context = Context.get_ctx () in
   let memory_buffers = context.Context.memory_buffers in
+  start_buffer_eviction_thread context memory_buffers;
   let remote_id = resource.Cache.Resource.remote_id |> Option.get in
   let config = context |. Context.config_lens in
   Buffering.MemoryBuffers.read_ahead config.Config.read_ahead_buffers
