@@ -181,6 +181,9 @@ let handle_default_exceptions =
     | GapiRequest.Forbidden _ ->
       Utils.log_with_header "Server error: Forbidden.\n%!";
       Utils.raise_m IO_error
+    | GapiRequest.Gone _ ->
+      Utils.log_with_header "Server error: Gone.\n%!";
+      Utils.raise_m IO_error
     | e -> Utils.raise_m e
 
 (* with_try with a default exception handler *)
