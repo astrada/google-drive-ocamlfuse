@@ -2,6 +2,8 @@ open GapiUtils.Infix
 open GapiMonad
 open GapiMonad.SessionM.Infix
 
+exception Invalid_block
+
 module Block =
 struct
   type state =
@@ -337,7 +339,7 @@ struct
            (fun _ -> string_of_int dest_arr_size)
            "N/A"
            dest_arr);
-      invalid_arg "fill_and_blit"
+      raise Invalid_block
     end;
     fill_and_blit start_block_index offset dest_arr >>= fun () ->
     if end_block_index <> start_block_index then begin
@@ -366,7 +368,7 @@ struct
             "Invalid ending block (remote id=%s, end_block_index=%d, \
              src_offset=%Ld, dest_len=%d, resource_size=%Ld)\n%!"
             remote_id end_block_index src_offset dest_len resource_size;
-          invalid_arg "fill_and_blit"
+          raise Invalid_block
         end;
         fill_and_blit end_block_index src_offset dest_arr
       end else SessionM.return ()

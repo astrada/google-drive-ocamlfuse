@@ -184,6 +184,8 @@ let handle_default_exceptions =
     | GapiRequest.Gone _ ->
       Utils.log_with_header "Server error: Gone.\n%!";
       Utils.raise_m IO_error
+    | Buffering.Invalid_block ->
+      Utils.raise_m Invalid_operation
     | e -> Utils.raise_m e
 
 (* with_try with a default exception handler *)

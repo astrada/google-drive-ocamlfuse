@@ -1,3 +1,5 @@
+exception Invalid_block
+
 module Block :
 sig
   type t
