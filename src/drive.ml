@@ -168,25 +168,28 @@ let handle_default_exceptions =
           | _ -> Utils.raise_m IO_error
         end
     end
-    | GapiRequest.PermissionDenied _ ->
-      Utils.log_with_header "Server error: Permission denied.\n%!";
-      Utils.raise_m Permission_denied
-    | GapiRequest.RequestTimeout _ ->
-      Utils.log_with_header "Server error: Request Timeout.\n%!";
-      Utils.raise_m Temporary_error
-    | GapiRequest.PreconditionFailed _
-    | GapiRequest.Conflict _ ->
-      Utils.log_with_header "Server error: Conflict.\n%!";
-      Utils.raise_m Temporary_error
-    | GapiRequest.Forbidden _ ->
-      Utils.log_with_header "Server error: Forbidden.\n%!";
-      Utils.raise_m IO_error
-    | GapiRequest.Gone _ ->
-      Utils.log_with_header "Server error: Gone.\n%!";
-      Utils.raise_m IO_error
-    | Buffering.Invalid_block ->
-      Utils.raise_m Invalid_operation
-    | e -> Utils.raise_m e
+  | GapiRequest.PermissionDenied _ ->
+    Utils.log_with_header "Server error: Permission denied.\n%!";
+    Utils.raise_m Permission_denied
+  | GapiRequest.RequestTimeout _ ->
+    Utils.log_with_header "Server error: Request Timeout.\n%!";
+    Utils.raise_m Temporary_error
+  | GapiRequest.PreconditionFailed _
+  | GapiRequest.Conflict _ ->
+    Utils.log_with_header "Server error: Conflict.\n%!";
+    Utils.raise_m Temporary_error
+  | GapiRequest.Forbidden _ ->
+    Utils.log_with_header "Server error: Forbidden.\n%!";
+    Utils.raise_m IO_error
+  | GapiRequest.Gone _ ->
+    Utils.log_with_header "Server error: Gone.\n%!";
+    Utils.raise_m IO_error
+  | GapiRequest.BadRequest _ ->
+    Utils.log_with_header "Server error: bad request.\n%!";
+    Utils.raise_m Temporary_error
+  | Buffering.Invalid_block ->
+    Utils.raise_m Invalid_operation
+  | e -> Utils.raise_m e
 
 (* with_try with a default exception handler *)
 let try_with_default f s =
