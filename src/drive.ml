@@ -41,7 +41,7 @@ let async_do_request f =
   thread
 
 let root_directory = "/"
-let root_folder_id = "root"
+let default_root_folder_id = "root"
 let trash_directory = "/.Trash"
 let trash_directory_name_length = String.length trash_directory
 let trash_directory_base_path = "/.Trash/"
@@ -270,7 +270,7 @@ let create_resource path =
     last_update = Unix.gettimeofday ();
   }
 
-let create_root_resource trashed =
+let create_root_resource root_folder_id trashed =
   let resource = create_resource root_directory in
   { resource with
         Cache.Resource.remote_id = Some root_folder_id;
@@ -422,13 +422,14 @@ let lookup_resource path trashed =
 
 let get_well_known_resource path trashed =
   let context = Context.get_ctx () in
+  let root_folder_id = context.Context.root_folder_id |> Option.get in
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
   match lookup_resource path trashed with
   | None ->
     let (well_known_resource, label) =
       if path = root_directory then
-        (create_root_resource trashed, "root")
+        (create_root_resource root_folder_id trashed, "root")
       else if is_lost_and_found_root path trashed config then
         (create_well_known_resource lost_and_found_directory, "lost+found")
       else if is_shared_with_me_root path trashed config then
@@ -563,6 +564,56 @@ let update_cache_size_for_documents cache resource content_path op =
 (* END Resource cache *)
 
 (* Metadata *)
+let get_file_from_server parent_folder_id name trashed =
+  Utils.log_with_header
+    "BEGIN: Getting resource %s (in folder %s) from server\n%!"
+    name parent_folder_id;
+  let q =
+    Printf.sprintf "name='%s' and '%s' in parents and trashed=%b"
+      (escape_apostrophe name) parent_folder_id trashed in
+  FilesResource.list
+    ~std_params:file_list_std_params
+    ~q
+    ~pageSize:1 >>= fun file_list ->
+  Utils.log_with_header
+    "END: Getting resource %s (in folder %s) from server\n%!"
+    name parent_folder_id;
+  let files = file_list.FileList.files in
+  if List.length files = 0 then
+    SessionM.return None
+  else
+    let file = files |. GapiLens.head in
+    SessionM.return (Some file)
+
+let get_root_folder_id config =
+  let rec loop path parent_folder_id =
+    let (name, rest) =
+      try
+        ExtString.String.split path "/"
+      with ExtString.Invalid_string -> (path, "")
+    in
+    match name with
+    | "" -> SessionM.return parent_folder_id
+    | n ->
+      get_file_from_server parent_folder_id n false >>= fun file ->
+      match file with
+      | None -> Utils.raise_m (Failure "Invalid root folder in configuration")
+      | Some f -> loop rest f.File.id
+  in
+  Utils.log_with_header
+    "BEGIN: Getting root folder id (root folder=%s) from server\n%!"
+    config.Config.root_folder;
+  begin match config.Config.root_folder with
+    | "" -> SessionM.return default_root_folder_id
+    | s when ExtString.String.starts_with s "/" ->
+      loop (String.sub s 1 (String.length s - 1)) default_root_folder_id
+    | s -> SessionM.return s
+  end >>= fun root_folder_id ->
+  Utils.log_with_header
+    "END: Getting root folder id (id=%s) from server\n%!"
+    root_folder_id;
+  SessionM.return root_folder_id
+
 let get_metadata () =
   let request_new_start_page_token =
     let std_params =
@@ -603,6 +654,7 @@ let get_metadata () =
   in
 
   let context = Context.get_ctx () in
+  let root_folder_id = context.Context.root_folder_id |> Option.get in
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
 
@@ -860,6 +912,12 @@ let get_metadata () =
            end
     )
 
+let init_filesystem () =
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  let root_folder_id = do_request (get_root_folder_id config) |> fst in
+  Context.update_ctx (Context.root_folder_id ^= Some root_folder_id)
+
 let statfs () =
   let metadata = get_metadata () in
   let limit =
@@ -885,27 +943,6 @@ let statfs () =
 (* END Metadata *)
 
 (* Resources *)
-let get_file_from_server parent_folder_id name trashed =
-  Utils.log_with_header
-    "BEGIN: Getting resource %s (in folder %s) from server\n%!"
-    name parent_folder_id;
-  let q =
-    Printf.sprintf "name='%s' and '%s' in parents and trashed=%b"
-      (escape_apostrophe name) parent_folder_id trashed in
-  FilesResource.list
-    ~std_params:file_list_std_params
-    ~q
-    ~pageSize:1 >>= fun file_list ->
-  Utils.log_with_header
-    "END: Getting resource %s (in folder %s) from server\n%!"
-    name parent_folder_id;
-  let files = file_list.FileList.files in
-  if List.length files = 0 then
-    SessionM.return None
-  else
-    let file = files |. GapiLens.head in
-    SessionM.return (Some file)
-
 let get_resource_from_server parent_folder_id name new_resource trashed cache =
   get_file_from_server parent_folder_id name trashed >>= fun file ->
   match file with
@@ -939,6 +976,8 @@ let check_resource_in_cache cache path trashed =
 
 let rec get_folder_id path trashed =
   if path = root_directory then
+    let context = Context.get_ctx () in
+    let root_folder_id = context.Context.root_folder_id |> Option.get in
     SessionM.return root_folder_id
   else
     get_resource path trashed >>= fun resource ->

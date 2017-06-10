@@ -34,6 +34,8 @@ type t = {
   thread_pool : ThreadPool.t;
   (* Memory buffer eviction thread *)
   buffer_eviction_thread : Thread.t option;
+  (* Root folder ID *)
+  root_folder_id : string option;
 }
 
 let app_dir = {
@@ -91,6 +93,10 @@ let thread_pool = {
 let buffer_eviction_thread = {
   GapiLens.get = (fun x -> x.buffer_eviction_thread);
   GapiLens.set = (fun v x -> { x with buffer_eviction_thread = v })
+}
+let root_folder_id = {
+  GapiLens.get = (fun x -> x.root_folder_id);
+  GapiLens.set = (fun v x -> { x with root_folder_id = v })
 }
 
 let config_lens =

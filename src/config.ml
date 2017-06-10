@@ -109,6 +109,8 @@ type t = {
   cache_directory : string;
   (* Path of the directory containing log files *)
   log_directory : string;
+  (* Folder id or remote path of the root folder *)
+  root_folder : string;
 }
 
 let metadata_cache_time = {
@@ -303,6 +305,10 @@ let log_directory = {
   GapiLens.get = (fun x -> x.log_directory);
   GapiLens.set = (fun v x -> { x with log_directory = v })
 }
+let root_folder = {
+  GapiLens.get = (fun x -> x.root_folder);
+  GapiLens.set = (fun v x -> { x with root_folder = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -368,6 +374,7 @@ let default = {
   data_directory = "";
   cache_directory = "";
   log_directory = "";
+  root_folder = "";
 }
 
 let default_debug = {
@@ -419,6 +426,7 @@ let default_debug = {
   data_directory = "";
   cache_directory = "";
   log_directory = "";
+  root_folder = "";
 }
 
 let of_table table =
@@ -525,6 +533,9 @@ let of_table table =
       log_directory =
         get "log_directory" Std.identity
           default.log_directory;
+      root_folder =
+        get "root_folder" Std.identity
+          default.root_folder;
     }
 
 let to_table data =
@@ -581,6 +592,7 @@ let to_table data =
     add "data_directory" data.data_directory;
     add "cache_directory" data.cache_directory;
     add "log_directory" data.log_directory;
+    add "root_folder" data.root_folder;
     table
 
 let debug_print out_ch start_time curl info_type info =

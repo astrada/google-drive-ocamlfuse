@@ -260,6 +260,7 @@ let setup_application params =
     file_locks = Hashtbl.create Utils.hashtable_initial_size;
     thread_pool = ThreadPool.create ();
     buffer_eviction_thread = None;
+    root_folder_id = None;
   } in
   Context.set_ctx context;
   let refresh_token = context |. Context.refresh_token_lens in
@@ -305,7 +306,12 @@ let handle_exception e label param =
         raise (Unix.Unix_error (Unix.EIO, label, param))
 
 let init_filesystem () =
-  Utils.log_with_header "init_filesystem\n%!"
+  Utils.log_with_header "init_filesystem\n%!";
+  try
+    Drive.init_filesystem ()
+  with e ->
+    Utils.log_exception e;
+    handle_exception e "init_filesystem" ""
 
 let statfs path =
   Utils.log_with_header "statfs %s\n%!" path;
@@ -313,7 +319,7 @@ let statfs path =
     Drive.statfs ()
   with e ->
     Utils.log_exception e;
-    raise (Unix.Unix_error (Unix.EIO, "statfs", path))
+    handle_exception e "statfs" path
 
 let getattr path =
   Utils.log_with_header "getattr %s\n%!" path;
