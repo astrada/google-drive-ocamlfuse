@@ -15,6 +15,7 @@ written in OCaml. It lets you mount your Google Drive on Linux.
 * Unix permissions and ownership
 * Symbolic links
 * Read-ahead buffers when streaming
+* Accessing content shared with you (requires [configuration](doc/Configuration.md))
 
 ### Resources
 
