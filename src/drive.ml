@@ -341,9 +341,17 @@ let update_resource_from_file ?state resource file =
           if cached_name <> file.File.name then
             recompute_path resource file.File.name
           else resource.Cache.Resource.path
-      | None -> resource.Cache.Resource.path
-  in
+      | None -> resource.Cache.Resource.path in
   let parent_path = Filename.dirname path in
+  let new_state = Option.default resource.Cache.Resource.state state in
+  let new_size =
+    match new_state with
+    | Cache.Resource.State.Uploading
+    | Cache.Resource.State.ToUpload ->
+      resource.Cache.Resource.size
+    | _ ->
+      Some file.File.size
+  in
   { resource with
         Cache.Resource.remote_id = Some file.File.id;
         name = Some file.File.name;
@@ -355,7 +363,7 @@ let update_resource_from_file ?state resource file =
         file_extension = Some file.File.fileExtension;
         full_file_extension = Some file.File.fullFileExtension;
         md5_checksum = Some file.File.md5Checksum;
-        size = Some file.File.size;
+        size = new_size;
         can_edit = Some file.File.capabilities.File.Capabilities.canEdit;
         trashed = Some file.File.trashed;
         web_view_link = Some file.File.webViewLink;
@@ -369,7 +377,7 @@ let update_resource_from_file ?state resource file =
         last_update = Unix.gettimeofday ();
         path;
         parent_path;
-        state = Option.default resource.Cache.Resource.state state;
+        state = new_state
   }
 
 let insert_resource_into_cache ?state cache resource file =
@@ -398,6 +406,15 @@ let update_cached_resource_state cache state id =
     id (Cache.Resource.State.to_string state);
   Cache.Resource.update_resource_state cache state id;
   Utils.log_with_header "END: Updating resource state in db (id=%Ld)\n%!" id
+
+let update_cached_resource_state_and_size cache state size id =
+  Utils.log_with_header
+    "BEGIN: Updating resource state and size in db (id=%Ld, state=%s, \
+     size=%Ld)\n%!"
+    id (Cache.Resource.State.to_string state) size;
+  Cache.Resource.update_resource_state_and_size cache state size id;
+  Utils.log_with_header
+    "END: Updating resource state and size in db (id=%Ld)\n%!" id
 
 let lookup_resource path trashed =
   Utils.log_with_header "BEGIN: Loading resource %s (trashed=%b) from db\n%!"
@@ -1525,7 +1542,7 @@ let read_dir path =
       path_in_cache trashed;
     get_resource path_in_cache trashed >>= fun resource ->
     if is_lost_and_found_root path trashed config then begin
-      Utils.log_with_header "BEGiN: Getting lost and found files\n%!";
+      Utils.log_with_header "BEGIN: Getting lost and found files\n%!";
       let q = "'me' in owners" in
       get_all_files q >>= fun all_owned_files ->
       let lost_and_found_files =
@@ -1537,7 +1554,7 @@ let read_dir path =
         (List.length lost_and_found_files);
       SessionM.return (lost_and_found_files, resource);
     end else if is_shared_with_me_root path trashed config then begin
-      Utils.log_with_header "BEGiN: Getting shared with me files\n%!";
+      Utils.log_with_header "BEGIN: Getting shared with me files\n%!";
       let q = "sharedWithMe = true" in
       get_all_files q >>= fun shared_with_me_files ->
       Utils.log_with_header
@@ -1553,7 +1570,7 @@ let read_dir path =
         "END: Getting folder content (path=%s, trashed=%b)\n%!"
         path_in_cache trashed;
       begin if path = trash_directory && trashed then begin
-        Utils.log_with_header "BEGiN: Getting explicitly trashed files\n%!";
+        Utils.log_with_header "BEGIN: Getting explicitly trashed files\n%!";
         let q =
           Printf.sprintf "not '%s' in parents and trashed = true" folder_id in
         get_all_files q >>= fun trashed_files ->
@@ -1853,12 +1870,13 @@ let start_uploading_if_dirty path =
 let upload resource =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
-  update_cached_resource_state cache
-    Cache.Resource.State.Uploading resource.Cache.Resource.id;
   let content_path = Cache.get_content_path cache resource in
-  let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
   let file_source =
     GapiMediaResource.create_file_resource content_path in
+  let size = file_source.GapiMediaResource.content_length in
+  update_cached_resource_state_and_size cache
+    Cache.Resource.State.Uploading size resource.Cache.Resource.id;
+  let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
   let resource_mime_type =
     resource |. Cache.Resource.mime_type |> Option.get in
   let content_type = file_source |. GapiMediaResource.content_type in
@@ -1872,8 +1890,10 @@ let upload resource =
     if file_source.GapiMediaResource.content_length = 0L then None
     else Some file_source in
   Utils.log_with_header
-    "BEGIN: Uploading file (id=%Ld, path=%s, cache path=%s, content type=%s).\n%!"
-    resource.Cache.Resource.id resource.Cache.Resource.path content_path mime_type;
+    "BEGIN: Uploading file (id=%Ld, path=%s, cache path=%s, \
+     content type=%s, content_length=%Ld).\n%!"
+    resource.Cache.Resource.id resource.Cache.Resource.path
+    content_path mime_type size;
   let file_patch = File.empty |> File.modifiedTime ^= GapiDate.now () in
   FilesResource.update
     ~std_params:file_std_params
@@ -2074,7 +2094,7 @@ let trash_resource is_folder trashed path =
         if is_folder then begin
           let (path_in_cache, _) = get_path_in_cache path in
           Utils.log_with_header
-            "BEGiN: Trashing folder old content (path=%s)\n%!"
+            "BEGIN: Trashing folder old content (path=%s)\n%!"
             path_in_cache;
           Cache.Resource.trash_all_with_parent_path cache path_in_cache;
           Utils.log_with_header
@@ -2093,7 +2113,7 @@ let delete_resource is_folder path =
     let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
     check_if_empty remote_id is_folder trashed >>= fun () ->
     Utils.log_with_header
-      "BEGiN: Permanently deleting file (remote id=%s)\n%!"
+      "BEGIN: Permanently deleting file (remote id=%s)\n%!"
       remote_id;
     FilesResource.delete
       ~std_params:file_std_params
@@ -2109,7 +2129,7 @@ let delete_resource is_folder path =
         delete_cached_resource resource;
         if is_folder then begin
           Utils.log_with_header
-            "BEGiN: Deleting folder old content (path=%s, trashed=%b) from cache\n%!"
+            "BEGIN: Deleting folder old content (path=%s, trashed=%b) from cache\n%!"
             path_in_cache trashed;
           Cache.Resource.delete_all_with_parent_path
             cache path_in_cache trashed;

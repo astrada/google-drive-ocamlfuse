@@ -213,6 +213,16 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_update_state_and_size_stmt db =
+    let sql =
+      "UPDATE resource \
+       SET \
+         state = :state, \
+         size = :size \
+       WHERE id = :id;"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_delete_all_with_parent_path db =
     let sql =
       "DELETE \
@@ -353,7 +363,7 @@ struct
        FROM resource \
        WHERE parent_path = :parent_path \
          AND trashed = :trashed \
-         AND state IN ('Synchronized', 'ToDownload');"
+         AND state <> 'NotFound';"
     in
       Sqlite3.prepare db sql
 
@@ -775,6 +785,16 @@ struct
       (fun db ->
          let stmt = ResourceStmts.prepare_update_state_stmt db in
          bind_text stmt ":state" (Some (State.to_string state));
+         bind_int stmt ":id" (Some id);
+         final_step stmt;
+         finalize_stmt stmt)
+
+  let update_resource_state_and_size cache state size id =
+    with_transaction cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_update_state_and_size_stmt db in
+         bind_text stmt ":state" (Some (State.to_string state));
+         bind_int stmt ":size" (Some size);
          bind_int stmt ":id" (Some id);
          final_step stmt;
          finalize_stmt stmt)
