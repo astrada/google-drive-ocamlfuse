@@ -20,10 +20,12 @@ let test_max_buffers_remainder () =
 
 let test_acquire_buffer () =
   let buffer_pool = BufferPool.create ~pool_size:10 ~buffer_size:10 in
-  let buffer = BufferPool.acquire_buffer buffer_pool in
+  let mutex = Mutex.create () in
+  let condition = Condition.create () in
+  let buffer = BufferPool.acquire_buffer mutex condition buffer_pool in
   Bigarray.Array1.set buffer.BufferPool.Buffer.arr 0 'a';
-  BufferPool.release_buffer buffer buffer_pool;
-  let buffer' = BufferPool.acquire_buffer buffer_pool in
+  BufferPool.release_buffer buffer condition buffer_pool;
+  let buffer' = BufferPool.acquire_buffer mutex condition buffer_pool in
   assert_equal
     ~printer:Std.string_of_char
     'a'
@@ -32,7 +34,9 @@ let test_acquire_buffer () =
 let test_pending_requests () =
   let flag = ref false in
   let buffer_pool = BufferPool.create ~pool_size:10 ~buffer_size:10 in
-  let buffer = BufferPool.acquire_buffer buffer_pool in
+  let mutex = Mutex.create () in
+  let condition = Condition.create () in
+  let buffer = BufferPool.acquire_buffer mutex condition buffer_pool in
   assert_equal
     ~printer:string_of_int
     0
@@ -40,7 +44,7 @@ let test_pending_requests () =
   Bigarray.Array1.set buffer.BufferPool.Buffer.arr 0 'b';
   let thread = Thread.create
       (fun () ->
-         let b = BufferPool.acquire_buffer buffer_pool in
+         let b = BufferPool.acquire_buffer mutex condition buffer_pool in
          flag := Bigarray.Array1.get b.BufferPool.Buffer.arr 0 = 'a'
       ) () in
   Thread.delay 0.05;
@@ -49,7 +53,7 @@ let test_pending_requests () =
     1
     (BufferPool.pending_requests buffer_pool);
   Bigarray.Array1.set buffer.BufferPool.Buffer.arr 0 'a';
-  BufferPool.release_buffer buffer buffer_pool;
+  BufferPool.release_buffer buffer condition buffer_pool;
   Thread.join thread;
   assert_equal
     ~printer:string_of_int

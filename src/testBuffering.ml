@@ -6,11 +6,11 @@ open GapiMonad.SessionM.Infix
 
 let print_array arr =
   let len = Bigarray.Array1.dim arr in
-  let r = String.make len ' ' in
+  let r = Bytes.make len ' ' in
   for i = 0 to (len - 1) do
     r.[i] <- Bigarray.Array1.get arr i
   done;
-  r
+  Bytes.to_string r
 
 let session = {
   GapiConversation.Session.curl = GapiCurl.Initialized;
