@@ -59,10 +59,10 @@ How to build
 
 ### Requirements
 
-* [OCaml][] >= 3.12.0
+* [OCaml][] >= 4.02.3
 * [Findlib][] >= 1.2.7
 * [ocamlfuse][] >= 2.7.1
-* [gapi-ocaml][] >= 0.2.14
+* [gapi-ocaml][] >= 0.3.5
 * [sqlite3-ocaml][] >= 1.6.1
 
 [OCaml]: http://caml.inria.fr/ocaml/release.en.html

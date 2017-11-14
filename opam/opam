@@ -22,11 +22,11 @@ build-test: [
 depends: [
   "base-threads" {build}
   "camlidl" {build}
-  "gapi-ocaml" {>= "0.2.14"}
+  "gapi-ocaml" {>= "0.3.5"}
   "ocamlbuild" {build}
   "ocamlfind" {build}
   "ocamlfuse"
   "ounit" {test}
   "sqlite3"
 ]
-available: [ ocaml-version >= "3.12.0" ]
+available: [ ocaml-version >= "4.02.3" ]

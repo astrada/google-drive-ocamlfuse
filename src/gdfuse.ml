@@ -53,6 +53,7 @@ let get_config_store debug config_path =
 let generate_request_id () =
   Cryptokit.Random.string rng 32
     |> Base64.str_encode
+    |> Bytes.to_string
     |> ExtString.String.replace_chars
       (function
         | '+' -> "-"
