@@ -2,4 +2,4 @@
 
 (library
  ((name google_drive_ocamlfuse)
-  (libraries (gapi-ocaml Fuse sqlite3 threads camlidl))))
+  (libraries (cryptokit extlib gapi-ocaml Fuse sqlite3 threads camlidl))))

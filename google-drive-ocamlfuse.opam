@@ -17,6 +17,8 @@ depends: [
   "gapi-ocaml" {>= "0.3.5"}
   "jbuilder" {build}
   "ocamlfuse"
+  "cryptokit"
+  "extlib"
   "ounit" {test}
   "sqlite3"
 ]
