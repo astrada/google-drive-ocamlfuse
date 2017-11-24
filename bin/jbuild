@@ -1,7 +1,7 @@
 (jbuild_version 1)
 
 (executables
- ((libraries (google_drive_ocamlfuse))
+ ((libraries (threads google_drive_ocamlfuse))
   (names (gdfuse))))
 
 (install

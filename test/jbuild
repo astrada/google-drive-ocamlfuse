@@ -1,7 +1,7 @@
 (jbuild_version 1)
 
 (executable
- ((libraries (google_drive_ocamlfuse oUnit))
+ ((libraries (threads google_drive_ocamlfuse oUnit))
   (name testSuite)))
 
 (alias
