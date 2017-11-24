@@ -1,0 +1,10 @@
+(jbuild_version 1)
+
+(executable
+ ((libraries (google_drive_ocamlfuse oUnit))
+  (name testSuite)))
+
+(alias
+ ((name runtest)
+  (deps (testSuite.exe))
+  (action (run ${<}))))

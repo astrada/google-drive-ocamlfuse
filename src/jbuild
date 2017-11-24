@@ -1,0 +1,6 @@
+(jbuild_version 1)
+
+(library
+ ((name google_drive_ocamlfuse)
+  (wrapped false)
+  (libraries (cryptokit extlib gapi-ocaml Fuse sqlite3 threads camlidl))))
