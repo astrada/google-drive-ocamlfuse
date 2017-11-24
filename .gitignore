@@ -2,12 +2,8 @@
 *.bak
 
 _build
-*.byte
-*.native
-
-*.docdir
-setup.data
-setup.log
+*.merlin
+*.install
 
 _config.yml
 
