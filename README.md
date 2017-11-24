@@ -75,16 +75,15 @@ How to build
 
 To build the executable, run
 
-    ocaml setup.ml -configure
-    ocaml setup.ml -build
+    jbuilder build @install
 
 To install it, run (as root, if your user doesn't have enough privileges)
 
-    ocaml setup.ml -install
+    jbuilder install
 
 To uninstall anything that was previously installed, execute
 
-    ocaml setup.ml -uninstall
+    jbuilder uninstall
 
 ### Usage
 
