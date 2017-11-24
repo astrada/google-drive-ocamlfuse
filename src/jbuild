@@ -1,0 +1,5 @@
+(jbuild_version 1)
+
+(library
+ ((name google_drive_ocamlfuse)
+  (libraries (gapi-ocaml Fuse sqlite3 threads camlidl))))

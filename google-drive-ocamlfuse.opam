@@ -6,25 +6,16 @@ homepage: "http://gdfuse.forge.ocamlcore.org/"
 dev-repo: "https://github.com/astrada/google-drive-ocamlfuse.git"
 bug-reports: "https://github.com/astrada/google-drive-ocamlfuse/issues"
 build: [
-  ["ocaml" "setup.ml" "-configure" "--prefix" prefix]
-  ["ocaml" "setup.ml" "-build"]
-]
-install: ["ocaml" "setup.ml" "-install"]
-remove: [
-  ["ocaml" "%{etc}%/google-drive-ocamlfuse/setup.ml"
-    "-C" "%{etc}%/google-drive-ocamlfuse" "-uninstall"]
+  ["jbuilder" "build" "-p" name "-j" jobs]
 ]
 build-test: [
-  ["ocaml" "setup.ml" "-configure" "--enable-tests"]
-  ["ocaml" "setup.ml" "-build"]
-  ["ocaml" "setup.ml" "-test"]
+  ["jbuilder" "runtest" "-p" name "-j" jobs]
 ]
 depends: [
   "base-threads" {build}
   "camlidl" {build}
   "gapi-ocaml" {>= "0.3.5"}
-  "ocamlbuild" {build}
-  "ocamlfind" {build}
+  "jbuilder" {build}
   "ocamlfuse"
   "ounit" {test}
   "sqlite3"
