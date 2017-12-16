@@ -111,6 +111,8 @@ type t = {
   log_directory : string;
   (* Folder id or remote path of the root folder *)
   root_folder : string;
+  (* Team drive id *)
+  team_drive_id : string;
 }
 
 let metadata_cache_time = {
@@ -309,6 +311,10 @@ let root_folder = {
   GapiLens.get = (fun x -> x.root_folder);
   GapiLens.set = (fun v x -> { x with root_folder = v })
 }
+let team_drive_id = {
+  GapiLens.get = (fun x -> x.team_drive_id);
+  GapiLens.set = (fun v x -> { x with team_drive_id = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -375,6 +381,7 @@ let default = {
   cache_directory = "";
   log_directory = "";
   root_folder = "";
+  team_drive_id = "";
 }
 
 let default_debug = {
@@ -427,6 +434,7 @@ let default_debug = {
   cache_directory = "";
   log_directory = "";
   root_folder = "";
+  team_drive_id = "";
 }
 
 let of_table table =
@@ -536,6 +544,9 @@ let of_table table =
       root_folder =
         get "root_folder" Std.identity
           default.root_folder;
+      team_drive_id =
+        get "team_drive_id" Std.identity
+          default.team_drive_id;
     }
 
 let to_table data =
@@ -593,6 +604,7 @@ let to_table data =
     add "cache_directory" data.cache_directory;
     add "log_directory" data.log_directory;
     add "root_folder" data.root_folder;
+    add "team_drive_id" data.team_drive_id;
     table
 
 let debug_print out_ch start_time curl info_type info =

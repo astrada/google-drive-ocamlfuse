@@ -14,7 +14,7 @@ build-test: [
 depends: [
   "base-threads" {build}
   "camlidl" {build}
-  "gapi-ocaml" {>= "0.3.5"}
+  "gapi-ocaml" {>= "0.3.6"}
   "jbuilder" {build}
   "ocamlfuse"
   "cryptokit"
