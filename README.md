@@ -70,7 +70,7 @@ How to build
 [Findlib]: http://projects.camlcity.org/projects/findlib.html/
 [ocamlfuse]: https://github.com/astrada/ocamlfuse
 [gapi-ocaml]: https://github.com/astrada/gapi-ocaml
-[sqlite3-ocaml]: https://bitbucket.org/mmottl/sqlite3-ocaml
+[sqlite3-ocaml]: https://mmottl.github.io/sqlite3-ocaml/
 
 ### Configuration and installation
 
