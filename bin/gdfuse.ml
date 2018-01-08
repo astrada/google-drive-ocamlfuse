@@ -632,7 +632,7 @@ let () =
 
   if !show_version then begin
     Printf.printf "google-drive-ocamlfuse, version %s\n\
-                   Copyright (C) 2012-2017 Alessandro Strada\n\
+                   Copyright (C) 2012-2018 Alessandro Strada\n\
                    License MIT\n"
       Config.version;
   end else begin
