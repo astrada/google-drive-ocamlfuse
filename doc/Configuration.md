@@ -1,4 +1,6 @@
-The configuration file is saved in `~/.gdfuse/default/config` (or `~/.gdfuse/label/config` if a label was specified on the command line). The parser is very simple and only accepts lines in the form `key=value`, without spaces, comments, or anything else.
+By default the configuration file is first created in `~/.gdfuse/default/config` (or `~/.gdfuse/label/config` if a label was specified on the command line). If the program is launched with the `-xdgbd` flag, however, the file is instead created in `~/.config/gdfuse/default/config` or `~/.config/gdfuse/label/config`; see [Configuration path priority](#configuration-path-priority) for more details.
+
+The parser is very simple and only accepts lines in the form `key=value`, without spaces, comments, or anything else.
 
 ### Content
 
@@ -179,11 +181,11 @@ When set to `true`, creates a new directory `/lost+found` where you can access u
 
     lost_and_found=false
 
-When set to `true`, creates a new directory `/.shared` where you can access all files that are shared with you (those you can get in the `Shared with me` section of the web interface):
+When set to `true`, creates a new read-only directory `/.shared` where you can access all files that are shared with you (those you can get in the `Shared with me` section of the web interface):
 
     shared_with_me=false
 
-Enable XDG Base Directory support (to turn it on use `-xdgbd` command line option):
+Enable XDG Base Directory support (to turn it on use `-xdgbd` command line option; see [Configuration path priority](#configuration-path-priority) for more information):
 
     xdg_base_directory=false
 
@@ -199,6 +201,14 @@ Path of the directory containing log files (if blank uses the default):
 
     log_directory=
 
+[Since 0.6.20] Specifies a Google Drive folder to use as root, if you don't want to expose your entire drive from your mountpoint. You can use a folder id or a full remote path:
+
+    root_folder=
+
+[Since 0.6.23] Specifies the Team Drive id, if you want to mount a [[Team Drive|Team Drives]]:
+
+    team_drive_id=
+
 ### Document export formats
 
 `desktop` format creates a shortcut to the document that will be opened in the web browser for edit.
@@ -210,3 +220,16 @@ If you don't want to export a specific kind of docs, just remove the format port
 no drawings will be exported.
 
 Note that if you change any export format, you will have to clear the cache (using `-cc` command line option). Note also that this feature works only if you set `docs_file_extension=true`.
+
+### Configuration path priority
+
+The application reads or initializes its configuration according to the following logic:
+
+1. `$XDG_CONFIG_HOME/gdfuse/` is read if already existing;
+2. Otherwise `$HOME/.gdfuse/` is read if already existing;
+3. Otherwise `$XDG_CONFIG_HOME/gdfuse/` is created, but only if the `-xdgbd` flag has been passed to the command;
+4. Otherwise `$HOME/.gdfuse/` is created.
+
+This is done in compliance with the [XDG Base Directory Specification](http://standards.freedesktop.org/basedir-spec/latest/).
+
+The `xdg_base_directory` option in the `default/config` (or `label/config`) file acts independently from the mechanism above: if set to `true` (default with the `-xdgbd` flag), it tells the program to also use the `$XDG_DATA_HOME` and `$XDG_CACHE_HOME` paths; if set to `false`, all the user's data will stay under the `gdfuse` directory, wherever it is located.

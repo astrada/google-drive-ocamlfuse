@@ -16,6 +16,7 @@ written in OCaml. It lets you mount your Google Drive on Linux.
 * Symbolic links
 * Read-ahead buffers when streaming
 * Accessing content shared with you (requires [configuration](doc/Configuration.md))
+* Team Drive [Support](https://github.com/astrada/google-drive-ocamlfuse/wiki/Team-Drives)
 
 ### Resources
 

@@ -61,6 +61,4 @@ Now log out and back in again and your Google Drive should be mounted on `~/Goog
 
 By inserting the following line into ~/.profile the shell will test wether something has already been mounted on your target mountpoint, and if not, will execute the mount.
 
-    $ mount | grep '/home/meersjo/GoogleDrive' >/dev/null || /usr/bin/google-drive-ocamlfuse '/home/meersjo/GoogleDrive'
-
-Full path specification is required in the grep part. The mount part would probably work with the ~/ shorthand.
+    $ mount | grep "${HOME}/GoogleDrive" >/dev/null || /usr/bin/google-drive-ocamlfuse "${HOME}/GoogleDrive"

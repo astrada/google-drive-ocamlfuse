@@ -21,4 +21,4 @@ To unmount the filesystem, issue this command:
 Options
 -------
 
-Run `google-drive-ocamlfuse -help` to get all the command options available. To find more details about `-o` mount options, you can refer to this [page](http://blog.woralelandia.com/2012/07/16/fuse-mount-options/). Non-standard mount option `gdfroot` can be used to specify a custom path to the configuration directory (default is `$HOME/.gdfuse`).
+Run `google-drive-ocamlfuse -help` to get all the command options available. To find more details about `-o` mount options, you can refer to this [page](http://manpages.ubuntu.com/manpages/zesty/man8/mount.fuse.8.html). Non-standard mount option `gdfroot` can be used to specify a custom path to the configuration directory (default is `$HOME/.gdfuse`).
