@@ -18,3 +18,5 @@ There are Ubuntu packages in this [PPA](https://launchpad.net/~alessandro-strada
 * Unix permissions and ownership
 * Symbolic links
 * Read-ahead buffers when streaming
+* Accessing content shared with you (requires [configuration](doc/Configuration.md))
+* Team Drive [Support](https://github.com/astrada/google-drive-ocamlfuse/wiki/Team-Drives)
