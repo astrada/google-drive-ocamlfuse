@@ -2421,13 +2421,24 @@ let chown path uid gid =
   let update =
     let chown resource =
       let remote_id = resource |. Cache.Resource.remote_id |> Option.get in
-      Utils.log_with_header "BEGIN: Updating owner (remote id=%s, uid=%d gid=%d)\n%!"
-        remote_id uid gid;
+      let id_to_string id =
+        let id64 = Int64.of_int id in
+        let minus_one_32_unsigned = Int64.pred (Int64.shift_left 1L 32) in
+        if id64 = Int64.minus_one || id64 = minus_one_32_unsigned then ""
+        else string_of_int id in
+      let uid_string = id_to_string uid in
+      let gid_string = id_to_string gid in
+      Utils.log_with_header "BEGIN: Updating owner (remote id=%s, uid=%s gid=%s)\n%!"
+        remote_id uid_string gid_string;
+      let app_properties =
+        if gid_string = "" then []
+        else [Cache.Resource.gid_to_app_property gid_string] in
+      let app_properties =
+        if uid_string = "" then app_properties
+        else Cache.Resource.uid_to_app_property uid_string :: app_properties
+      in
       let file_patch = File.empty
-        |> File.appProperties ^= [
-             Cache.Resource.uid_to_app_property uid;
-             Cache.Resource.gid_to_app_property gid;
-           ] in
+         |> File.appProperties ^= app_properties in
       FilesResource.update
         ~supportsTeamDrives:true
         ~std_params:file_std_params

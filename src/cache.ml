@@ -695,14 +695,14 @@ struct
       (find_app_property "uid" app_properties)
 
   let uid_to_app_property uid =
-    ("uid", string_of_int uid)
+    ("uid", uid)
 
   let get_gid app_properties =
     app_property_to_int64
       (find_app_property "gid" app_properties)
 
   let gid_to_app_property gid =
-    ("gid", string_of_int gid)
+    ("gid", gid)
 
   let get_link_target app_properties =
     find_app_property "l" app_properties
