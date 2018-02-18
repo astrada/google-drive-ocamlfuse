@@ -32,6 +32,12 @@ let file_download_std_params =
   { GapiService.StandardParameters.default with
         GapiService.StandardParameters.alt = "media"
   }
+let changes_std_params =
+  { GapiService.StandardParameters.default with
+        GapiService.StandardParameters.fields =
+          "changes(removed,file(" ^ file_fields ^ "),fileId),\
+           nextPageToken,newStartPageToken"
+  }
 
 let do_request = Oauth2.do_request
 let async_do_request f =
@@ -607,6 +613,15 @@ let get_file_from_server parent_folder_id name trashed =
     let file = files |. GapiLens.head in
     SessionM.return (Some file)
 
+let get_root_folder_id_from_server () =
+  Utils.log_with_header "BEGIN: Getting root resource from server\n%!";
+  FilesResource.get
+    ~supportsTeamDrives:true
+    ~std_params:file_std_params
+    ~fileId:default_root_folder_id >>= fun file ->
+  Utils.log_with_header "END: Getting root resource from server\n%!";
+  SessionM.return file.File.id
+
 let get_root_folder_id config =
   let rec loop path parent_folder_id =
     let (name, rest) =
@@ -637,6 +652,11 @@ let get_root_folder_id config =
     | s when ExtString.String.starts_with s "/" ->
       loop (String.sub s 1 (String.length s - 1)) default_root_id
     | s -> SessionM.return s
+  end >>= fun root_folder_id ->
+  begin if root_folder_id = default_root_folder_id then
+      get_root_folder_id_from_server ()
+    else
+      SessionM.return root_folder_id
   end >>= fun root_folder_id ->
   Utils.log_with_header
     "END: Getting root folder id (id=%s) from server\n%!"
@@ -693,17 +713,11 @@ let get_metadata () =
   let update_resource_cache new_metadata old_metadata =
     let get_all_changes =
       let rec loop pageToken accu =
-        let std_params =
-          { GapiService.StandardParameters.default with
-                GapiService.StandardParameters.fields =
-                  "changes(removed,file(parents,trashed),fileId),\
-                   nextPageToken,newStartPageToken"
-          } in
         ChangesResource.list
           ~supportsTeamDrives:true
           ~teamDriveId:config.Config.team_drive_id
           ~includeTeamDriveItems:(config.Config.team_drive_id <> "")
-          ~std_params
+          ~std_params:changes_std_params
           ~includeRemoved:true
           ~pageToken >>= fun change_list ->
         let changes = change_list.ChangeList.changes @ accu in
@@ -749,7 +763,7 @@ let get_metadata () =
       List.map get_id resources
     in
 
-    let get_file_id_from_change change =
+    let get_resource_from_change change =
       [Cache.Resource.select_resource_with_remote_id cache
          change.Change.fileId]
     in
@@ -818,16 +832,16 @@ let get_metadata () =
               List.fold_left
                 (fun xs change ->
                    let mapped_changes = map_change change in
-                     List.fold_left
-                       (fun xs' c ->
-                          match c with
-                              None -> xs'
-                            | Some x ->
-                                if not (List.mem x xs') then
-                                  x :: xs'
-                                else xs')
-                       xs
-                       mapped_changes)
+                   List.fold_left
+                     (fun xs' c ->
+                        match c with
+                            None -> xs'
+                          | Some x ->
+                              if not (List.mem x xs') then
+                                x :: xs'
+                              else xs')
+                     xs
+                     mapped_changes)
                 []
                 filtered_changes in
             update_cache cache xs;
@@ -840,20 +854,33 @@ let get_metadata () =
                not change.Change.file.File.trashed)
             get_ids_to_update
             (fun cache ids ->
+               Utils.log_with_header "Invalidating resources: ids=%s\n%!"
+                 (String.concat ", " (List.map Int64.to_string ids));
                Cache.Resource.invalidate_resources cache ids);
           Utils.log_with_header "END: Updating resource cache\n";
           Utils.log_with_header "BEGIN: Updating trashed resources\n%!";
           update_resource_cache_from_changes
             (fun change -> change.Change.file.File.trashed)
-            get_file_id_from_change
+            get_resource_from_change
             (fun cache resources ->
+               Utils.log_with_header "Trashing resources: ids=%s\n%!"
+                 (String.concat ", "
+                    (List.map
+                       (fun r -> Int64.to_string r.Cache.Resource.id)
+                       resources));
                Cache.Resource.trash_resources cache resources);
           Utils.log_with_header "END: Updating trashed resources\n";
           Utils.log_with_header "BEGIN: Removing deleted resources\n%!";
           update_resource_cache_from_changes
             (fun change -> change.Change.removed)
-            get_file_id_from_change
-            (delete_cached_resources new_metadata);
+            get_resource_from_change
+            (fun cache resources ->
+               Utils.log_with_header "Deleting resources: ids=%s\n%!"
+                 (String.concat ", "
+                    (List.map
+                       (fun r -> Int64.to_string r.Cache.Resource.id)
+                       resources));
+               delete_cached_resources new_metadata cache resources);
           Utils.log_with_header "END: Removing deleted resources\n%!";
           if List.length changes > 0 then begin
             Utils.log_with_header
