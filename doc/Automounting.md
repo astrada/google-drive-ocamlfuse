@@ -21,7 +21,7 @@ exit 0
 
     gdfuse#default  /home/$USERNAME/gdrive     fuse    uid=1000,gid=1000,user     0       0
 
-If `uid` and `gid` of your user are different from 1000, modify the above line accordingly.
+If `uid` and `gid` of your user are different from 1000, modify the above line accordingly. Note that the "user" option implies noexec, nosuid and nodev. To be able to execute scripts etc. in gdrive, append ",exec" to "user".
 
 And then you can use `mount` to mount your Google Drive. Maybe you will be asked for your password.
 

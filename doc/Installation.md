@@ -22,6 +22,33 @@ This [PPA repository](https://launchpad.net/~alessandro-strada/+archive/ubuntu/g
 
     yaourt -S google-drive-ocamlfuse
 
+## Debian Stretch
+
+1. Run following commands
+
+    `apt install software-properties-common dirmngr`  
+    `add-apt-repository ppa:alessandro-strada/ppa`  
+    `nano /etc/apt/sources.list.d/alessandro-strada-ubuntu-ppa-bionic.list`  
+
+2. Edit the file
+
+    a. replace **bionic** at the end of both lines with **xenial**, otherwise you will get stuck with version 0.6.21,  
+    where team drive does not work properly  
+    b. uncomment the second line  
+
+3. So it looks like this:
+
+    `deb http://ppa.launchpad.net/alessandro-strada/ppa/ubuntu xenial main`  
+    `deb-src http://ppa.launchpad.net/alessandro-strada/ppa/ubuntu xenial main`  
+
+4. Then you need to add the key otherwise the command **apt update** will not take the new sourcelist into account
+
+    `apt-key adv --keyserver keyserver.ubuntu.com --recv-keys AD5F235DF639B041`  
+    `apt update`  
+    `apt install google-drive-ocamlfuse`  
+
+5. You are done
+
 ## Installing from source
 
 If you are using a different distribution or you want to build the package from source, you may want to use OPAM (an OCaml package manager). If you are on a Debian Jessie, check out these instructions (contributed by Martin Gallant): [[How to install from source on Debian Jessie]].

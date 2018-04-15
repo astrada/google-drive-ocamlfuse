@@ -4,7 +4,7 @@ _notes on [rsync](https://rsync.samba.org/) usage with `google-drive-ocamlfuse` 
 
 `rsync` copies the files using temporary random names by default (e.g. `.filename.pdf.0MN9tN`), but the content type is assigned derived the file extension, and when the file is uploaded, the extension is wrong. There's a [known google drive api issue](http://stackoverflow.com/questions/14629839/unable-to-update-mimetype-using-google-drive-api) on updating mimeType so the mimeType stays wrong.
 
-This doesn't affect the actual file content but it impacts on how google drive manage the file (i.e.: a pdf file identified as `application/octet-stream` won't show any preview and won't open in google drive leaving download as the only option)
+This doesn't affect the actual file content but it impacts how google drive manages the file (i.e.: a pdf file identified as `application/octet-stream` won't show any preview and won't open in google drive leaving download as the only option)
 
 The workaround is to use rsync option `--inplace` that avoids creating temporary files (see issue [#21](https://github.com/astrada/google-drive-ocamlfuse/issues/21))
 

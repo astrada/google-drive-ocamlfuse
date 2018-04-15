@@ -14,11 +14,11 @@ Create `fuse` group (if not already present):
 
 Debian has a special user group to allow fuse access. Log out, and log back in after this to make change effective:
 
-    sudo adduser *user* fuse
+    sudo usermod -a -G fuse *user*
 
 I think this is a bug in Jessie, as this was already done in all my other Debian boxes:
 
-    sudo chown root.fuse /dev/fuse
+    sudo chown root:fuse /dev/fuse
     sudo chmod 660 /dev/fuse
 
 Get the packages installed. I used the default on all installer prompts:
@@ -30,7 +30,3 @@ Get the packages installed. I used the default on all installer prompts:
     opam depext google-drive-ocamlfuse
     opam install google-drive-ocamlfuse
     . /home/*user*/.opam/opam-init/init.sh > /dev/null 2> /dev/null || true
-
-*Note*: if you are using `root` to install opam, init script will be located in `/root/.opam/opam-init/init.sh`, and you will need to `chmod +x` it, because otherwise you will get a permission denied error.
-
-*Note (from BS):* google-drive-ocamlfuse wasn't present for me. I found I needed to create a link to the binary. e.g. ln -s ~/.opam/<version>/bin/google-drive-ocamlfuse /usr/local/bin/google-drive-ocamlfuse. In my case, at the time, it was: ln -s ~/.opam/4.02.1/bin/google-drive-ocamlfuse google-drive-ocamlfuse
