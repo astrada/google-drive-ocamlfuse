@@ -1,7 +1,5 @@
 open OUnit
 
-open GapiUtils.Infix
-
 let test_max_buffers () =
   let buffer_pool = BufferPool.create ~pool_size:1000 ~buffer_size:100 in
   let max_buffers = BufferPool.max_buffers buffer_pool in

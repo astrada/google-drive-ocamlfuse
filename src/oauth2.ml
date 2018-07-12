@@ -1,7 +1,5 @@
 open GapiUtils.Infix
 open GapiLens.Infix
-open GapiMonad
-open GapiMonad.SessionM.Infix
 
 let scope = [GapiDriveV2Service.Scope.drive]
 

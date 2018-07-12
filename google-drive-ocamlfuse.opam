@@ -6,16 +6,16 @@ homepage: "http://gdfuse.forge.ocamlcore.org/"
 dev-repo: "https://github.com/astrada/google-drive-ocamlfuse.git"
 bug-reports: "https://github.com/astrada/google-drive-ocamlfuse/issues"
 build: [
-  ["jbuilder" "build" "-p" name "-j" jobs]
+  ["dune" "build" "-p" name "-j" jobs "--profile release"]
 ]
 build-test: [
-  ["jbuilder" "runtest" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name "-j" jobs "--profile release"]
 ]
 depends: [
   "base-threads" {build}
   "camlidl" {build}
   "gapi-ocaml" {>= "0.3.6"}
-  "jbuilder" {build}
+  "dune" {build}
   "ocamlfuse"
   "cryptokit"
   "extlib"

@@ -1,0 +1,8 @@
+(executables
+ (flags :standard -w -3-27-58)
+ (libraries threads google_drive_ocamlfuse)
+ (names gdfuse))
+
+(install
+ (section bin)
+ (files (gdfuse.exe as google-drive-ocamlfuse)))

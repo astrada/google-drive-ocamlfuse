@@ -1,6 +1,5 @@
 open GapiUtils.Infix
 open GapiLens.Infix
-open GapiLens.StateInfix
 
 let default_fs_label = "default"
 

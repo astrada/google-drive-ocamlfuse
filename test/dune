@@ -1,0 +1,9 @@
+(executable
+ (flags :standard -w -3)
+ (libraries threads google_drive_ocamlfuse oUnit)
+ (name testSuite))
+
+(alias
+ (name runtest)
+ (deps testSuite.exe)
+ (action (run ./testSuite.exe)))

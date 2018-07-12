@@ -78,15 +78,15 @@ How to build
 
 To build the executable, run
 
-    jbuilder build @install
+    dune build @install
 
 To install it, run (as root, if your user doesn't have enough privileges)
 
-    jbuilder install
+    dune install
 
 To uninstall anything that was previously installed, execute
 
-    jbuilder uninstall
+    dune uninstall
 
 ### Usage
 

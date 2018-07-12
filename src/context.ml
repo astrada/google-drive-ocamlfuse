@@ -1,4 +1,3 @@
-open GapiUtils.Infix
 open GapiLens.Infix
 
 module ConfigFileStore = KeyValueStore.MakeFileStore(Config)

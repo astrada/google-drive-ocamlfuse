@@ -1,8 +1,6 @@
 open OUnit
 
-open GapiUtils.Infix
 open GapiMonad
-open GapiMonad.SessionM.Infix
 
 let print_array arr =
   let len = Bigarray.Array1.dim arr in
@@ -37,7 +35,7 @@ let test_with_lock_m () =
       )
   in
   let tq = Queue.create () in
-  for i = 1 to 10 do
+  for _ = 1 to 10 do
     let t = Thread.create switch session in
     Queue.push t tq;
   done;
