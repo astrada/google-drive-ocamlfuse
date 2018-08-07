@@ -1,0 +1,36 @@
+Source: google-drive-ocamlfuse
+Section: ocaml
+Priority: optional
+Maintainer: Alessandro Strada <alessandro.strada@gmail.com>
+Build-Depends:
+  debhelper (>= 8.0.0),
+  dh-ocaml (>= 0.9~),
+  ocaml-nox (>= 4.02.3~),
+  ocaml-best-compilers,
+  ocaml-findlib,
+  jbuilder,
+  libgapi-ocaml-dev (>= 0.3.6),
+  libfuse-ocaml-dev (>= 2.7.1),
+  libsqlite3-ocaml-dev (>= 1.6.1),
+  libfuse-dev (>= 2.7)
+Standards-Version: 3.9.7
+Homepage: http://gdfuse.forge.ocamlcore.org/
+
+Package: google-drive-ocamlfuse
+Architecture: any
+Depends:
+ ${ocaml:Depends}, 
+ ${shlibs:Depends},
+ ${misc:Depends}
+Description: FUSE filesystem for Google Drive
+ google-drive-ocamlfuse is a FUSE filesystem backed by Google Drive,
+ written in OCaml. It lets you mount your Google Drive on Linux.
+ .
+ Features
+ .
+  - Full read/write access to ordinary files and folders
+  - Read-only access to Google Docs, Sheets, and Slides (exported to
+    configurable formats)
+  - Multiple account support
+  - Duplicate file handling
+  - Access to trash (`.Trash` directory)

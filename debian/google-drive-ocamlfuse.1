@@ -1,0 +1,105 @@
+.TH google\-drive\-ocamlfuse 1 "Sept 7, 2013" "google\-drive\-ocamlfuse manpage"
+.SH NAME
+.PP
+google\-drive\-ocamlfuse \- FUSE filesystem over Google Drive
+.SH SYNOPSIS
+.PP
+google\-drive\-ocamlfuse [\f[I]options\f[]][*mountpoint*]
+.SH DESCRIPTION
+.PP
+This program is a FUSE filesystem backed by Google Drive, written in
+OCaml.
+It lets you mount your Google Drive on Linux.
+.PP
+The first time, you can run \f[C]google\-drive\-ocamlfuse\f[] without
+parameters:
+.IP
+.nf
+\f[C]
+\ \ \ \ google\-drive\-ocamlfuse
+\f[]
+.fi
+.PP
+This command will create the default application directory
+(\f[C]~/.gdfuse/default\f[]), containing the configuration file config.
+And it will start a web browser to obtain authorization to access your
+Google Drive.
+This will let you modify default configuration before mounting the
+filesystem.
+.PP
+Then you can mount the filesystem:
+.IP
+.nf
+\f[C]
+\ \ \ \ google\-drive\-ocamlfuse\ mountpoint
+\f[]
+.fi
+.PP
+If you have more than one account, you can run:
+.IP
+.nf
+\f[C]
+\ \ \ \ google\-drive\-ocamlfuse\ \-label\ label\ [mountpoint]
+\f[]
+.fi
+.PP
+Using \f[C]label\f[] to distinguish different accounts.
+The program will use the directory \f[C]~/.gdfuse/label\f[] to host
+configuration, application state, and file cache.
+No file is shared among different accounts, so you can have a different
+configuration for each one.
+.PP
+To get a complete list of options, run
+\f[C]google\-drive\-ocamlfuse\ \-help\f[].
+.SH TROUBLESHOOTING
+.PP
+This application is still under testing, so there are probably bugs to
+discover and fix.
+To be extra sure, if you want, you can mount the filesystem in
+read\-only mode, modifying the configuration (see the documentation), to
+avoid any write attempt to the server.
+Anyway, the rm command will simply trash your file, so you should always
+be able to rollback any changes.
+If you have problems, you can turn on debug logging:
+.IP
+.nf
+\f[C]
+\ \ \ \ google\-drive\-ocamlfuse\ \-debug\ mountpoint
+\f[]
+.fi
+.PP
+In \f[C]~/.gdfuse/default\f[] you can find \f[C]curl.log\f[] that will
+track every request to the Google Drive API, and \f[C]gdfuse.log\f[]
+that will log FUSE operations and cache management.
+If something goes wrong, you can try clearing the cache, with this
+command:
+.IP
+.nf
+\f[C]
+\ \ \ \ google\-drive\-ocamlfuse\ \-cc
+\f[]
+.fi
+.PP
+If something still doesn\[aq]t work, try starting from scratch removing
+everything in \f[C]~/.gdfuse/default\f[].
+In this case you will need to reauthorize the application.
+.PP
+Note that in order to reduce latency, the application will query the
+server and check for changes only every 60 seconds (configurable).
+So, if you make a change to your documents (server side), you won\[aq]t
+see it immediately in the mounted filesystem.
+.PP
+Note also that, at least for now, Google Documents will be exported
+read\-only.
+.SH FILES
+.PP
+\f[C]~/.gdfuse/default/config\f[] The configuration file
+.SH SEE ALSO
+.PP
+google\-drive\-ocamlfuse online documentation may be found here:
+<https://github.com/astrada/google-drive-ocamlfuse/wiki>.
+.PP
+The google\-drive\-ocamlfuse source code may be downloaded from
+<https://github.com/astrada/google-drive-ocamlfuse>.
+.SH AUTHORS
+Alessandro Strada.

@@ -1,0 +1,400 @@
+google-drive-ocamlfuse (0.6.25-0ubuntu2) cosmic; urgency=low
+
+  * No change port to cosmic.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 06 Aug 2018 11:33:18 +0200
+
+google-drive-ocamlfuse (0.6.25-0ubuntu1) bionic; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 18 Feb 2018 18:05:01 +0100
+
+google-drive-ocamlfuse (0.6.24-0ubuntu1) bionic; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 13 Jan 2018 12:44:02 +0100
+
+google-drive-ocamlfuse (0.6.23-0ubuntu1) zesty; urgency=low
+
+  * Add TeamDrive support.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 17 Dec 2017 19:09:12 +0100
+
+google-drive-ocamlfuse (0.6.21-0ubuntu2) artful; urgency=low
+
+  * No change port to artful.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 10 Aug 2017 17:10:04 +0200
+
+google-drive-ocamlfuse (0.6.21-0ubuntu1) zesty; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Wed, 09 Aug 2017 12:29:19 +0200
+
+google-drive-ocamlfuse (0.6.20-0ubuntu1) zesty; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 10 Jun 2017 19:40:47 +0200
+
+google-drive-ocamlfuse (0.6.19-0ubuntu1) zesty; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 02 May 2017 20:59:05 +0200
+
+google-drive-ocamlfuse (0.6.18-0ubuntu2) zesty; urgency=low
+
+  * No change port to zesty.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 25 Apr 2017 11:15:24 +0200
+
+google-drive-ocamlfuse (0.6.18-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 06 Apr 2017 21:51:04 +0200
+
+google-drive-ocamlfuse (0.6.17-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 05 Feb 2017 18:19:08 +0100
+
+google-drive-ocamlfuse (0.6.16-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 30 Jan 2017 20:17:47 +0100
+
+google-drive-ocamlfuse (0.6.15-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Fri, 27 Jan 2017 19:35:52 +0100
+
+google-drive-ocamlfuse (0.6.13-0ubuntu1) yakkety; urgency=low
+
+  * Add XDG Base Directory support
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 22 Jan 2017 18:37:44 +0100
+
+google-drive-ocamlfuse (0.6.12-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 16 Jan 2017 22:10:45 +0100
+
+google-drive-ocamlfuse (0.6.11-0ubuntu1) yakkety; urgency=low
+
+  * Add lost+found directory
+  * Add .shared directory
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 14 Jan 2017 15:28:02 +0100
+
+google-drive-ocamlfuse (0.6.10-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 09 Jan 2017 20:08:07 +0100
+
+google-drive-ocamlfuse (0.6.9-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Fri, 06 Jan 2017 18:37:56 +0100
+
+google-drive-ocamlfuse (0.6.8-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 01 Jan 2017 21:06:44 +0100
+
+google-drive-ocamlfuse (0.6.7-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 17 Dec 2016 18:15:44 +0100
+
+google-drive-ocamlfuse (0.6.6-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 15 Dec 2016 23:18:52 +0100
+
+google-drive-ocamlfuse (0.6.5-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 12 Dec 2016 22:39:52 +0100
+
+google-drive-ocamlfuse (0.6.4-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 08 Dec 2016 14:03:58 +0100
+
+google-drive-ocamlfuse (0.6.3-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Wed, 07 Dec 2016 15:04:00 +0100
+
+google-drive-ocamlfuse (0.6.2-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 04 Dec 2016 22:26:36 +0100
+
+google-drive-ocamlfuse (0.6.1-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 29 Nov 2016 21:19:36 +0100
+
+google-drive-ocamlfuse (0.6.0-0ubuntu1) yakkety; urgency=low
+
+  * Add permissions and ownership persistence
+  * Allow soft links
+  * Change conflicting name handling
+  * Implement (optional) read-ahead buffers when streaming
+  * Use Drive API v3
+  * Enable multi-threading by default
+  * Fix cache size tracking
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 24 Oct 2016 21:14:37 +0200
+
+google-drive-ocamlfuse (0.5.25-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 24 Oct 2016 21:14:37 +0200
+
+google-drive-ocamlfuse (0.5.24-0ubuntu1) yakkety; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 17 Oct 2016 19:18:15 +0200
+
+google-drive-ocamlfuse (0.5.23-0ubuntu1) yakkety; urgency=low
+
+  * Optimize file uploading
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 17 Oct 2016 00:08:50 +0200
+
+google-drive-ocamlfuse (0.5.22-0ubuntu3) xenial; urgency=low
+
+  * No-change port to xenial
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 11 Apr 2016 23:03:31 +0200
+
+google-drive-ocamlfuse (0.5.22-0ubuntu2) wily; urgency=low
+
+  * Update dependencies
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 17 Mar 2016 21:56:43 +0100
+
+google-drive-ocamlfuse (0.5.22-0ubuntu1) wily; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 16 Jan 2016 15:54:32 +0100
+
+google-drive-ocamlfuse (0.5.21-0ubuntu1) wily; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 15 Dec 2015 00:06:05 +0100
+
+google-drive-ocamlfuse (0.5.20-0ubuntu1) wily; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 06 Dec 2015 15:02:45 +0100
+
+google-drive-ocamlfuse (0.5.19-0ubuntu1) wily; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 01 Dec 2015 22:58:54 +0100
+
+google-drive-ocamlfuse (0.5.18-0ubuntu2) wily; urgency=low
+
+  * No change port to wily
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 29 Nov 2015 21:30:58 +0100
+
+google-drive-ocamlfuse (0.5.18-0ubuntu1) vivid; urgency=low
+
+  * Add mount option to specify configuration directory
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 12 Sep 2015 10:03:43 +0200
+
+google-drive-ocamlfuse (0.5.17-0ubuntu1) vivid; urgency=low
+
+  * Add icon configuration options for desktop shortcuts
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 16 Jun 2015 21:57:36 +0200
+
+google-drive-ocamlfuse (0.5.16-0ubuntu1) vivid; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 07 Jun 2015 15:49:52 +0200
+
+google-drive-ocamlfuse (0.5.15-0ubuntu1) vivid; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 30 Apr 2015 21:37:36 +0200
+
+google-drive-ocamlfuse (0.5.14-0ubuntu1) utopic; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 04 Apr 2015 19:03:27 +0200
+
+google-drive-ocamlfuse (0.5.13-0ubuntu1) utopic; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 05 Feb 2015 23:49:15 +0100
+
+google-drive-ocamlfuse (0.5.12-0ubuntu1) utopic; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 20 Nov 2014 23:20:03 +0100
+
+google-drive-ocamlfuse (0.5.11-0ubuntu1) utopic; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 10 Nov 2014 23:38:07 +0100
+
+google-drive-ocamlfuse (0.5.10-0ubuntu1) trusty; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Wed, 01 Oct 2014 19:45:23 +0200
+
+google-drive-ocamlfuse (0.5.9-0ubuntu1) trusty; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 25 Sep 2014 20:02:52 +0200
+
+google-drive-ocamlfuse (0.5.8-0ubuntu1) trusty; urgency=low
+
+  * Better error handling
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 21 Sep 2014 23:38:59 +0200
+
+google-drive-ocamlfuse (0.5.6-0ubuntu1) trusty; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Wed, 03 Sep 2014 00:05:04 +0200
+
+google-drive-ocamlfuse (0.5.5-0ubuntu1) trusty; urgency=low
+
+  * Add options to permanently delete files
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Wed, 27 Aug 2014 17:54:39 +0200
+
+google-drive-ocamlfuse (0.5.4-0ubuntu1) trusty; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 26 Aug 2014 17:04:10 +0200
+
+google-drive-ocamlfuse (0.5.3-0ubuntu2) trusty; urgency=low
+
+  * No-change port to trusty
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 05 Apr 2014 12:12:23 +0200
+
+google-drive-ocamlfuse (0.5.3-0ubuntu1) saucy; urgency=low
+
+  * Add headless mode option.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 01 Feb 2014 12:40:59 +0100
+
+google-drive-ocamlfuse (0.5.2-0ubuntu1) saucy; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 08 Dec 2013 13:02:02 +0100
+
+google-drive-ocamlfuse (0.5.1-0ubuntu1) saucy; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 03 Nov 2013 23:05:47 +0100
+
+google-drive-ocamlfuse (0.5-0ubuntu1) saucy; urgency=low
+
+  * Add maximum cache size
+  * Get Google Docs size using HEAD instead of GET
+  * Modify default docs_file_extension to true
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 02 Nov 2013 16:48:35 +0100
+
+google-drive-ocamlfuse (0.4.8-0ubuntu1) saucy; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Fri, 25 Oct 2013 19:53:53 +0200
+
+google-drive-ocamlfuse (0.4.7-0ubuntu1) saucy; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Fri, 18 Oct 2013 18:23:55 +0200
+
+google-drive-ocamlfuse (0.4.6-0ubuntu1) raring; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Mon, 07 Oct 2013 20:56:20 +0200
+
+google-drive-ocamlfuse (0.4.5-0ubuntu1) raring; urgency=low
+
+  * Add option to display file extensions for Google Docs
+  * Add desktop format to create a desktop shortcut to the document that will
+    be opened in the web browser for edit.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 01 Oct 2013 23:10:59 +0200
+
+google-drive-ocamlfuse (0.4.4-0ubuntu1) raring; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 23 Sep 2013 23:46:35 +0200
+
+google-drive-ocamlfuse (0.4.3-0ubuntu1) raring; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 21 Sep 2013 12:10:43 +0200
+
+google-drive-ocamlfuse (0.4.2-0ubuntu1) raring; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 14 Sep 2013 09:50:20 +0200
+
+google-drive-ocamlfuse (0.4.1-0ubuntu1) raring; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 12 Sep 2013 23:16:08 +0200
+
+google-drive-ocamlfuse (0.4-0ubuntu1) raring; urgency=low
+
+  * Initial release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 07 Sep 2013 11:35:30 +0200

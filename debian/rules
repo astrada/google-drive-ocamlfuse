@@ -1,0 +1,41 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+#export DH_OPTIONS=-v
+
+DESTDIR=$(CURDIR)/debian/tmp
+
+include /usr/share/ocaml/ocamlvars.mk
+
+OCAMLFIND_LDCONF=ignore
+export OCAMLFIND_LDCONF
+
+%:
+	dh $@ --with ocaml
+
+.PHONY: override_dh_auto_build
+override_dh_auto_build:
+	jbuilder build @install
+
+.PHONY: override_dh_auto_test
+override_dh_auto_test:
+	true
+
+.PHONY: override_dh_auto_install
+override_dh_auto_install:
+	mkdir -p $(DESTDIR)/usr/bin
+	cp -Lv _build/install/default/bin/google-drive-ocamlfuse $(DESTDIR)/usr/bin
+
+.PHONY: override_dh_install
+override_dh_install:
+	dh_install --fail-missing
+
+.PHONY: override_dh_auto_clean
+override_dh_auto_clean:
+	jbuilder clean
+
+debian/google-drive-ocamlfuse.1: debian/google-drive-ocamlfuse.mkd
+	pandoc -s -w man $^ -o $@
+
