@@ -24,18 +24,18 @@ Executable "google-drive-ocamlfuse"
   CompiledObject: best
   BuildDepends: gapi-ocaml (>= 0.2.14), Fuse, sqlite3, threads, camlidl
 
-# Executables
-Executable "test_suite"
-  Build$: flag(tests)
-  Path: src
-  MainIs: testSuite.ml
-  Install: false
-  BuildDepends: oUnit, gapi-ocaml (>= 0.2.14), threads
-
-Test core
-  Run$: flag(tests)
-  Command: $test_suite
-  TestTools: test_suite
+## Executables
+#Executable "test_suite"
+#  Build$: flag(tests)
+#  Path: src
+#  MainIs: testSuite.ml
+#  Install: false
+#  BuildDepends: oUnit, gapi-ocaml (>= 0.2.14), threads
+#
+#Test core
+#  Run$: flag(tests)
+#  Command: $test_suite
+#  TestTools: test_suite
 
 # VCS
 SourceRepository head
