@@ -2,6 +2,7 @@ type cache_t = {
   cache_dir : string;
   db_path : string;
   busy_timeout : int;
+  in_memory : bool;
 }
 
 val create_cache : AppDir.t -> Config.t -> cache_t

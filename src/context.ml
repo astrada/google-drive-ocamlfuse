@@ -14,7 +14,7 @@ type t = {
   (* Gapi configuration *)
   gapi_config : GapiConfig.t;
   (* Sqlite3 cache *)
-  cache : Cache.t;
+  cache : Cache.cache_t;
   (* CURL global state *)
   curl_state : [`Initialized] GapiCurl.t;
   (* Mountpoint current stats *)

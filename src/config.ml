@@ -113,6 +113,9 @@ type t = {
   root_folder : string;
   (* Team drive id *)
   team_drive_id : string;
+  (* Specifies to cache metadata in memory and periodically save them to disk.
+   *)
+  metadata_memory_cache: bool;
 }
 
 let metadata_cache_time = {
@@ -315,6 +318,10 @@ let team_drive_id = {
   GapiLens.get = (fun x -> x.team_drive_id);
   GapiLens.set = (fun v x -> { x with team_drive_id = v })
 }
+let metadata_memory_cache = {
+  GapiLens.get = (fun x -> x.metadata_memory_cache);
+  GapiLens.set = (fun v x -> { x with metadata_memory_cache = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -382,6 +389,7 @@ let default = {
   log_directory = "";
   root_folder = "";
   team_drive_id = "";
+  metadata_memory_cache = true;
 }
 
 let default_debug = {
@@ -435,6 +443,7 @@ let default_debug = {
   log_directory = "";
   root_folder = "";
   team_drive_id = "";
+  metadata_memory_cache = true;
 }
 
 let of_table table =
@@ -547,6 +556,9 @@ let of_table table =
       team_drive_id =
         get "team_drive_id" Std.identity
           default.team_drive_id;
+      metadata_memory_cache =
+        get "metadata_memory_cache" bool_of_string
+          default.metadata_memory_cache;
     }
 
 let to_table data =
@@ -605,6 +617,7 @@ let to_table data =
     add "log_directory" data.log_directory;
     add "root_folder" data.root_folder;
     add "team_drive_id" data.team_drive_id;
+    add "metadata_memory_cache" (data.metadata_memory_cache |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =

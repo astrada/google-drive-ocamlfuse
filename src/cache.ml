@@ -429,19 +429,22 @@ end
 (* END Prepare SQL *)
 
 (* Open/close db *)
-type t = {
+type cache_t = {
   cache_dir : string;
   db_path : string;
   busy_timeout : int;
+  in_memory : bool;
 }
 
 let create_cache app_dir config =
   let cache_dir = app_dir.AppDir.cache_dir in
   let db_path = Filename.concat cache_dir "cache.db" in
   let busy_timeout = config.Config.sqlite3_busy_timeout in
+  let in_memory = config.Config.metadata_memory_cache in
   { cache_dir;
     db_path;
     busy_timeout;
+    in_memory;
   }
 
 let open_db cache =
