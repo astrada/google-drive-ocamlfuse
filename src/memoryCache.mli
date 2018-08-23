@@ -1,0 +1,35 @@
+module Resource :
+sig
+  val insert_resource : CacheData.t -> CacheData.Resource.t -> CacheData.Resource.t
+  val update_resource : CacheData.t -> CacheData.Resource.t -> unit
+  val update_resource_state : CacheData.t -> CacheData.Resource.State.t -> int64 -> unit
+  val update_resource_state_and_size :
+    CacheData.t -> CacheData.Resource.State.t -> int64 -> int64 -> unit
+  val delete_resource : CacheData.t -> CacheData.Resource.t -> unit
+  val delete_not_found_resource_with_path : CacheData.t -> string -> unit
+  val delete_resources : CacheData.t -> CacheData.Resource.t list -> unit
+  val insert_resources : CacheData.t -> CacheData.Resource.t list -> string -> bool -> CacheData.Resource.t list
+  val invalidate_resources : CacheData.t -> int64 list -> unit
+  val invalidate_path : CacheData.t -> string -> unit
+  val invalidate_all : CacheData.t -> unit
+  val invalidate_trash_bin : CacheData.t -> unit
+  val trash_resources : CacheData.t -> CacheData.Resource.t list -> unit
+  val delete_all_with_parent_path : CacheData.t -> string -> bool -> unit
+  val trash_all_with_parent_path : CacheData.t -> string -> unit
+  val update_all_timestamps : CacheData.t -> float -> unit
+  val select_resource_with_path : CacheData.t -> string -> bool -> CacheData.Resource.t option
+  val select_resource_with_remote_id : CacheData.t -> string -> CacheData.Resource.t option
+  val select_resources_with_parent_path : CacheData.t -> string -> bool -> CacheData.Resource.t list
+  val select_resources_order_by_last_update : CacheData.t -> CacheData.Resource.t list
+
+end
+
+module Metadata :
+sig
+  val insert_metadata : CacheData.t -> CacheData.Metadata.t -> unit
+  val select_metadata : CacheData.t -> CacheData.Metadata.t option
+  val update_cache_size : CacheData.t -> int64 -> unit
+end
+
+val setup : CacheData.t -> unit
+
