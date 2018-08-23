@@ -14,13 +14,13 @@ type t = {
   (* Gapi configuration *)
   gapi_config : GapiConfig.t;
   (* Sqlite3 cache *)
-  cache : Cache.cache_t;
+  cache : CacheData.t;
   (* CURL global state *)
   curl_state : [`Initialized] GapiCurl.t;
   (* Mountpoint current stats *)
   mountpoint_stats : Unix.LargeFile.stats;
   (* Current metadata *)
-  metadata : Cache.Metadata.t option;
+  metadata : CacheData.Metadata.t option;
   (* Metadata lock *)
   metadata_lock : Mutex.t;
   (* Whether permanently delete files *)
@@ -117,7 +117,7 @@ let metadata_lens =
   metadata |-- GapiLens.option_get
 
 let metadata_last_update_lens =
-  metadata_lens |-- Cache.Metadata.last_update
+  metadata_lens |-- CacheData.Metadata.last_update
 
 module ConcurrentContext =
   ConcurrentGlobal.Make(struct type u = t let label = "context" end)
