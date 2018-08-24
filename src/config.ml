@@ -396,7 +396,7 @@ let default = {
   root_folder = "";
   team_drive_id = "";
   metadata_memory_cache = true;
-  metadata_memory_cache_saving_interval = 600;
+  metadata_memory_cache_saving_interval = 60;
 }
 
 let default_debug = {
