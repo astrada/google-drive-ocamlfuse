@@ -9,6 +9,7 @@ sig
   val delete_not_found_resource_with_path : CacheData.t -> string -> unit
   val delete_resources : CacheData.t -> CacheData.Resource.t list -> unit
   val insert_resources : CacheData.t -> CacheData.Resource.t list -> string -> bool -> CacheData.Resource.t list
+  val flush_resources : CacheData.t -> CacheData.Resource.t list -> unit
   val invalidate_resources : CacheData.t -> int64 list -> unit
   val invalidate_path : CacheData.t -> string -> unit
   val invalidate_all : CacheData.t -> unit
@@ -21,6 +22,7 @@ sig
   val select_resource_with_remote_id : CacheData.t -> string -> CacheData.Resource.t option
   val select_resources_with_parent_path : CacheData.t -> string -> bool -> CacheData.Resource.t list
   val select_resources_order_by_last_update : CacheData.t -> CacheData.Resource.t list
+  val select_all_resources : CacheData.t -> CacheData.Resource.t list
 
 end
 

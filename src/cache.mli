@@ -38,4 +38,5 @@ val delete_files_from_cache : CacheData.t -> CacheData.Resource.t list -> int64
 val setup_db : CacheData.t -> unit
 val clean_up_cache : CacheData.t -> unit
 val compute_cache_size : CacheData.t -> int64
+val flush : CacheData.t -> unit
 

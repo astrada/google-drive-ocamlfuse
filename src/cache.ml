@@ -3,10 +3,13 @@ let create_cache app_dir config =
   let db_path = Filename.concat cache_dir "cache.db" in
   let busy_timeout = config.Config.sqlite3_busy_timeout in
   let in_memory = config.Config.metadata_memory_cache in
+  let autosaving_interval =
+    config.Config.metadata_memory_cache_saving_interval in
   { CacheData.cache_dir;
     db_path;
     busy_timeout;
     in_memory;
+    autosaving_interval;
   }
 
 module Resource =
@@ -197,8 +200,9 @@ let delete_files_from_cache cache resources =
 
 (* Setup *)
 let setup_db cache =
-  MemoryCache.setup cache;
-  DbCache.setup_db cache
+  DbCache.setup_db cache;
+  if cache.CacheData.in_memory then
+    MemoryCache.setup cache
 (* END Setup *)
 
 let clean_up_cache cache =
@@ -231,4 +235,8 @@ let compute_cache_size cache =
       0L
       (Sys.readdir cache.CacheData.cache_dir)
   end else 0L
+
+let flush cache =
+  if cache.CacheData.in_memory then
+    MemoryCache.flush_db cache
 

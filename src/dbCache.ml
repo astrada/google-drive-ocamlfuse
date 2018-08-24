@@ -173,6 +173,38 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_insert_with_id_stmt db =
+    let sql =
+      "INSERT INTO resource (" ^ fields ^ ") \
+       VALUES ( \
+         :id, \
+         :remote_id, \
+         :name, \
+         :mime_type, \
+         :created_time, \
+         :modified_time, \
+         :viewed_by_me_time, \
+         :file_extension, \
+         :full_file_extension, \
+         :md5_checksum, \
+         :size, \
+         :can_edit, \
+         :trashed, \
+         :web_view_link, \
+         :version, \
+         :file_mode_bits, \
+         :uid, \
+         :gid, \
+         :link_target, \
+         :xattrs, \
+         :parent_path, \
+         :path, \
+         :state, \
+         :last_update \
+       );"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_update_stmt db =
     let sql =
       "UPDATE resource \
@@ -340,6 +372,13 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_delete_all_stmt db =
+    let sql =
+      "DELETE \
+       FROM resource;"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_select_with_path_stmt db =
     let sql =
       "SELECT " ^ fields ^ " \
@@ -374,6 +413,13 @@ struct
        WHERE state = 'Synchronized' \
          AND size > 0 \
        ORDER BY last_update;"
+    in
+      Sqlite3.prepare db sql
+
+  let prepare_select_all_resources db =
+    let sql =
+      "SELECT " ^ fields ^ " \
+       FROM resource;"
     in
       Sqlite3.prepare db sql
 
@@ -589,6 +635,22 @@ struct
          finalize_stmt stmt;
          results)
 
+  let flush_resources cache resources =
+    with_transaction cache
+      (fun db ->
+         let delete_stmt = ResourceStmts.prepare_delete_all_stmt db in
+         final_step delete_stmt;
+         finalize_stmt delete_stmt;
+         let insert_stmt = ResourceStmts.prepare_insert_with_id_stmt db in
+         List.iter
+           (fun resource -> 
+              reset_stmt insert_stmt;
+              bind_int insert_stmt ":id" (Some resource.CacheData.Resource.id);
+              bind_resource_parameters insert_stmt resource;
+              final_step insert_stmt)
+           resources;
+         finalize_stmt insert_stmt)
+
   let invalidate_resources cache ids =
     with_transaction cache
       (fun db ->
@@ -731,6 +793,17 @@ struct
     with_transaction cache
       (fun db ->
          let stmt = ResourceStmts.prepare_select_order_by_last_update db in
+         let results =
+           select_all_rows stmt
+             (fun _ -> ())
+             row_to_resource in
+         finalize_stmt stmt;
+         results)
+
+  let select_all_resources cache =
+    with_transaction cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_select_all_resources db in
          let results =
            select_all_rows stmt
              (fun _ -> ())

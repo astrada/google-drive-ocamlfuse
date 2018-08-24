@@ -261,8 +261,10 @@ let setup_application params =
     thread_pool = ThreadPool.create ();
     buffer_eviction_thread = None;
     root_folder_id = None;
+    flush_db_thread = None;
   } in
   Context.set_ctx context;
+  MemoryCache.start_flush_db_thread cache;
   let refresh_token = context |. Context.refresh_token_lens in
   if refresh_token = "" then
     if client_id = "" || client_secret = "" then
@@ -662,6 +664,8 @@ let () =
                "Waiting for pending upload threads (%d)...%!"
                (ThreadPool.pending_threads context.Context.thread_pool);
              ThreadPool.shutdown context.Context.thread_pool;
+             Utils.log_message "done\nFlushing cache...%!";
+             Cache.flush context.Context.cache;
              begin match context.Context.buffer_eviction_thread with
                | None -> ()
                | Some buffer_eviction_thread -> begin
@@ -671,6 +675,16 @@ let () =
                    Buffering.MemoryBuffers.stop_eviction_thread
                      context.Context.memory_buffers;
                    Thread.join buffer_eviction_thread;
+                 end
+             end;
+             begin match context.Context.flush_db_thread with
+               | None -> ()
+               | Some flush_db_thread -> begin
+                   Utils.log_message
+                     "done\nStopping flush DB thread (TID=%d)...%!"
+                     (Thread.id flush_db_thread);
+                   MemoryCache.stop_flush_db_thread ();
+                   Thread.join flush_db_thread;
                  end
              end;
              Utils.log_message "done\nCURL cleanup...%!";

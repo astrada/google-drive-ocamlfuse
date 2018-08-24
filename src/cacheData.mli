@@ -3,6 +3,7 @@ type t = {
   db_path : string;
   busy_timeout : int;
   in_memory : bool;
+  autosaving_interval : int;
 }
 
 module Resource :

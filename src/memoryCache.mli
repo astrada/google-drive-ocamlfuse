@@ -32,4 +32,8 @@ sig
 end
 
 val setup : CacheData.t -> unit
+val flush_db : CacheData.t -> unit
+
+val stop_flush_db_thread : unit -> unit
+val start_flush_db_thread : CacheData.t -> unit
 

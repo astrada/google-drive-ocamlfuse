@@ -116,6 +116,8 @@ type t = {
   (* Specifies to cache metadata in memory and periodically save them to disk.
    *)
   metadata_memory_cache: bool;
+  (* Interval (in seconds) between metadata memory cache saving. *)
+  metadata_memory_cache_saving_interval: int;
 }
 
 let metadata_cache_time = {
@@ -322,6 +324,10 @@ let metadata_memory_cache = {
   GapiLens.get = (fun x -> x.metadata_memory_cache);
   GapiLens.set = (fun v x -> { x with metadata_memory_cache = v })
 }
+let metadata_memory_cache_saving_interval = {
+  GapiLens.get = (fun x -> x.metadata_memory_cache_saving_interval);
+  GapiLens.set = (fun v x -> { x with metadata_memory_cache_saving_interval = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -390,6 +396,7 @@ let default = {
   root_folder = "";
   team_drive_id = "";
   metadata_memory_cache = true;
+  metadata_memory_cache_saving_interval = 600;
 }
 
 let default_debug = {
@@ -444,6 +451,7 @@ let default_debug = {
   root_folder = "";
   team_drive_id = "";
   metadata_memory_cache = true;
+  metadata_memory_cache_saving_interval = 60;
 }
 
 let of_table table =
@@ -559,6 +567,9 @@ let of_table table =
       metadata_memory_cache =
         get "metadata_memory_cache" bool_of_string
           default.metadata_memory_cache;
+      metadata_memory_cache_saving_interval =
+        get "metadata_memory_cache_saving_interval" int_of_string
+          default.metadata_memory_cache_saving_interval;
     }
 
 let to_table data =
@@ -618,6 +629,8 @@ let to_table data =
     add "root_folder" data.root_folder;
     add "team_drive_id" data.team_drive_id;
     add "metadata_memory_cache" (data.metadata_memory_cache |> string_of_bool);
+    add "metadata_memory_cache_saving_interval"
+      (data.metadata_memory_cache_saving_interval |> string_of_int);
     table
 
 let debug_print out_ch start_time curl info_type info =
