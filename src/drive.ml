@@ -1990,19 +1990,8 @@ let upload_with_retry path =
   with_retry try_upload resource
 
 let upload_if_dirty path =
-  let context = Context.get_ctx () in
-  let start_async_upload () =
-    ThreadPool.add_work
-      do_request (upload_with_retry path)
-      context.Context.thread_pool
-  in
   if start_uploading_if_dirty path then begin
-    let config = context |. Context.config_lens in
-    if config.Config.async_upload then begin
-      start_async_upload ()
-    end else begin
-      do_request (upload_with_retry path) |> ignore
-    end
+    do_request (upload_with_retry path) |> ignore
   end
 
 (* flush *)
