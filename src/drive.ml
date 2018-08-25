@@ -743,22 +743,26 @@ let get_metadata () =
           cache change.Change.fileId in
       let resources =
         match selected_resource with
-            None ->
-              let remote_ids =
-                match change.Change.file.File.parents with
-                    [] -> [root_folder_id]
-                  | ids -> ids
-              in
-              List.map
-                (Cache.Resource.select_resource_with_remote_id cache)
-                remote_ids
-          | Some r ->
-              let parent_resource =
-                Cache.Resource.select_resource_with_path cache
-                  r.CacheData.Resource.parent_path
-                  false
-              in
-              [parent_resource; selected_resource]
+        | None ->
+          let remote_ids =
+            match change.Change.file.File.parents with
+              [] -> [root_folder_id]
+            | ids -> ids
+          in
+          List.map
+            (Cache.Resource.select_resource_with_remote_id cache)
+            remote_ids
+        | Some r ->
+          if change.Change.file.File.version > 0L &&
+             change.Change.file.File.version >
+               Option.default 0L r.CacheData.Resource.version then
+            let parent_resource =
+              Cache.Resource.select_resource_with_path cache
+                r.CacheData.Resource.parent_path
+                false
+            in
+            [parent_resource; selected_resource]
+          else []
       in
       List.map get_id resources
     in
