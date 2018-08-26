@@ -2,6 +2,8 @@ open GapiUtils.Infix
 open GapiMonad
 open GapiMonad.SessionM.Infix
 
+exception Temporary_error
+
 (* Globals *)
 let start_time = Unix.gettimeofday ()
 let verbose = ref false

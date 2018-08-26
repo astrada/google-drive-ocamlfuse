@@ -73,6 +73,17 @@ let do_request go =
       GaeProxy.refresh_access_token ();
       (* Retry with refreshed token *)
       try_request (n + 1)
+    | Utils.Temporary_error as e ->
+      if n < !Utils.max_retries then begin
+        let n' = n + 1 in
+        Utils.log_with_header "Retrying (%d/%d)\n%!" n' !Utils.max_retries;
+        GapiUtils.wait_exponential_backoff n;
+        (* Retry on timeout *)
+        try_request n'
+      end else begin
+        Utils.log_with_header "Giving up\n%!";
+        raise e
+      end
     | GapiService.ServiceError (_, e) ->
       Utils.log_with_header "ServiceError\n%!";
       let message =

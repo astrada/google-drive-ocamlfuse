@@ -12,7 +12,6 @@ exception IO_error
 exception Invalid_operation
 exception No_attribute
 exception Permission_denied
-exception Temporary_error
 
 let folder_mime_type = "application/vnd.google-apps.folder"
 let file_fields =
@@ -169,7 +168,7 @@ let handle_default_exceptions =
           | "userRateLimitExceeded"
           | "rateLimitExceeded"
           | "backendError"
-          | "downloadQuotaExceeded" -> Utils.raise_m Temporary_error
+          | "downloadQuotaExceeded" -> Utils.raise_m Utils.Temporary_error
           | "insufficientFilePermissions" -> Utils.raise_m Permission_denied
           | _ -> Utils.raise_m IO_error
         end
@@ -179,11 +178,11 @@ let handle_default_exceptions =
     Utils.raise_m Permission_denied
   | GapiRequest.RequestTimeout _ ->
     Utils.log_with_header "Server error: Request Timeout.\n%!";
-    Utils.raise_m Temporary_error
+    Utils.raise_m Utils.Temporary_error
   | GapiRequest.PreconditionFailed _
   | GapiRequest.Conflict _ ->
     Utils.log_with_header "Server error: Conflict.\n%!";
-    Utils.raise_m Temporary_error
+    Utils.raise_m Utils.Temporary_error
   | GapiRequest.Forbidden _ ->
     Utils.log_with_header "Server error: Forbidden.\n%!";
     Utils.raise_m IO_error
@@ -192,7 +191,7 @@ let handle_default_exceptions =
     Utils.raise_m IO_error
   | GapiRequest.BadRequest _ ->
     Utils.log_with_header "Server error: bad request.\n%!";
-    Utils.raise_m Temporary_error
+    Utils.raise_m Utils.Temporary_error
   | Buffering.Invalid_block ->
     Utils.raise_m Invalid_operation
   | e -> Utils.raise_m e
@@ -1181,7 +1180,7 @@ let with_retry f resource =
     Utils.try_with_m
       (f res)
       (function
-           Temporary_error ->
+           Utils.Temporary_error ->
              if n >= !Utils.max_retries then begin
                Utils.raise_m IO_error
              end else begin
