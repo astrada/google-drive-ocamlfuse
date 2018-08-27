@@ -742,25 +742,12 @@ let get_metadata () =
           cache change.Change.fileId in
       let resources =
         match selected_resource with
-        | None ->
-          let remote_ids =
-            match change.Change.file.File.parents with
-              [] -> [root_folder_id]
-            | ids -> ids
-          in
-          List.map
-            (Cache.Resource.select_resource_with_remote_id cache)
-            remote_ids
+        | None -> []
         | Some r ->
           if change.Change.file.File.version > 0L &&
              change.Change.file.File.version >
                Option.default 0L r.CacheData.Resource.version then
-            let parent_resource =
-              Cache.Resource.select_resource_with_path cache
-                r.CacheData.Resource.parent_path
-                false
-            in
-            [parent_resource; selected_resource]
+            [selected_resource]
           else []
       in
       List.map get_id resources
@@ -769,6 +756,41 @@ let get_metadata () =
     let get_resource_from_change change =
       [Cache.Resource.select_resource_with_remote_id cache
          change.Change.fileId]
+    in
+
+    let get_new_resource_from_change change =
+      match Cache.Resource.select_resource_with_remote_id cache
+              change.Change.fileId with
+      | None ->
+        let parent_resources =
+          let parent_remote_ids =
+            match change.Change.file.File.parents with
+              [] -> [root_folder_id]
+            | ids -> ids
+          in
+          List.map
+            (Cache.Resource.select_resource_with_remote_id cache)
+            parent_remote_ids |>
+          List.filter
+            (function Some r -> r.CacheData.Resource.state =
+                                CacheData.Resource.State.Synchronized
+                    | None -> false)
+        in
+        begin match parent_resources with
+        | [] -> []
+        | prs ->
+          let parent_path =
+            List.hd prs |. GapiLens.option_get |. CacheData.Resource.path in 
+          let (filename_table, _) =
+            build_resource_tables parent_path false in
+          let filename =
+            get_unique_filename_from_file change.Change.file filename_table in
+          let resource_path =
+            Filename.concat parent_path filename in
+          let resource = create_resource resource_path in
+          [Some (resource, change.Change.file)]
+        end
+      | Some _ -> []
     in
 
     let request_remaining_changes start_page_token_db =
@@ -850,6 +872,21 @@ let get_metadata () =
             update_cache cache xs;
           in
 
+          Utils.log_with_header "BEGIN: Adding new resources to cache\n%!";
+          update_resource_cache_from_changes
+            (fun change ->
+               not change.Change.removed &&
+               not change.Change.file.File.trashed)
+            get_new_resource_from_change
+            (fun cache resources_and_files ->
+               List.iter
+                 (fun (resource, file) ->
+                    insert_resource_into_cache cache resource file |>
+                    ignore
+                 )
+                 resources_and_files
+               );
+          Utils.log_with_header "END: Adding new resources to cache\n";
           Utils.log_with_header "BEGIN: Updating resource cache\n%!";
           update_resource_cache_from_changes
             (fun change ->
