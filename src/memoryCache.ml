@@ -454,14 +454,18 @@ let setup cache =
   let metadata = DbCache.Metadata.select_metadata cache in
   let resources = Hashtbl.create 1024 in
   let all_resources = DbCache.Resource.select_all_resources cache in
+  let last_id = ref 0L in
   List.iter
     (fun r ->
+       if r.CacheData.Resource.id > !last_id then begin
+         last_id := r.CacheData.Resource.id
+       end;
        Hashtbl.replace resources r.CacheData.Resource.id r)
     all_resources;
   let data = {
     metadata;
     resources;
-    last_id = 0L;
+    last_id = !last_id;
     dirty = false;
     stop_flush_db_tread = false;
   } in
