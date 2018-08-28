@@ -116,6 +116,8 @@ type t = {
   metadata_memory_cache: bool;
   (* Interval (in seconds) between metadata memory cache saving. *)
   metadata_memory_cache_saving_interval: int;
+  (* Specifies to download files that Drive considers abusive (malware, etc.) *)
+  acknowledge_abuse: bool;
 }
 
 let metadata_cache_time = {
@@ -322,6 +324,10 @@ let metadata_memory_cache_saving_interval = {
   GapiLens.get = (fun x -> x.metadata_memory_cache_saving_interval);
   GapiLens.set = (fun v x -> { x with metadata_memory_cache_saving_interval = v })
 }
+let acknowledge_abuse = {
+  GapiLens.get = (fun x -> x.acknowledge_abuse);
+  GapiLens.set = (fun v x -> { x with acknowledge_abuse = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -390,6 +396,7 @@ let default = {
   team_drive_id = "";
   metadata_memory_cache = true;
   metadata_memory_cache_saving_interval = 60;
+  acknowledge_abuse = false;
 }
 
 let default_debug = {
@@ -444,6 +451,7 @@ let default_debug = {
   team_drive_id = "";
   metadata_memory_cache = true;
   metadata_memory_cache_saving_interval = 60;
+  acknowledge_abuse = false;
 }
 
 let of_table table =
@@ -560,6 +568,9 @@ let of_table table =
       metadata_memory_cache_saving_interval =
         get "metadata_memory_cache_saving_interval" int_of_string
           default.metadata_memory_cache_saving_interval;
+      acknowledge_abuse =
+        get "acknowledge_abuse" bool_of_string
+          default.acknowledge_abuse;
     }
 
 let to_table data =
@@ -620,6 +631,7 @@ let to_table data =
     add "metadata_memory_cache" (data.metadata_memory_cache |> string_of_bool);
     add "metadata_memory_cache_saving_interval"
       (data.metadata_memory_cache_saving_interval |> string_of_int);
+    add "acknowledge_abuse" (data.acknowledge_abuse |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =

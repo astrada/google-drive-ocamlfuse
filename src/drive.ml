@@ -152,6 +152,16 @@ let get_path_in_cache path =
   else
     (path, false)
 
+let match_service_error reason =
+  function
+  | GapiService.ServiceError (_, e) ->
+    begin match e.GapiError.RequestError.errors with
+      | [] -> false
+      | e :: _ ->
+        e.GapiError.SingleError.reason = reason
+    end
+  | _ -> false
+
 let handle_default_exceptions =
   function
   | GapiService.ServiceError (_, e) ->
@@ -1270,6 +1280,30 @@ let create_desktop_entry resource content_path config =
         (Option.default "" resource.CacheData.Resource.web_view_link)
         icon_entry)
 
+let download_media media_download fileId =
+  Utils.try_with_m
+    (FilesResource.get
+       ~supportsTeamDrives:true
+       ~std_params:file_download_std_params
+       ~media_download
+       ~fileId)
+    (fun e ->
+       let config = Context.get_ctx () |. Context.config_lens in
+       if match_service_error "cannotDownloadAbusiveFile" e &&
+          config.Config.acknowledge_abuse then begin
+         Utils.log_with_header
+           "Warning: abusive file detected, but downloading anyway (fileId=%s)\n%!"
+           fileId;
+         FilesResource.get
+           ~supportsTeamDrives:true
+           ~acknowledgeAbuse:true
+           ~std_params:file_download_std_params
+           ~media_download
+           ~fileId >>= fun file ->
+         SessionM.return file
+       end else
+         handle_default_exceptions e)
+
 let download_resource resource =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
@@ -1295,11 +1329,7 @@ let download_resource resource =
         ~mimeType >>= fun () ->
       SessionM.return ()
     end else if Option.default 0L resource.CacheData.Resource.size > 0L then begin
-      FilesResource.get
-        ~supportsTeamDrives:true
-        ~std_params:file_download_std_params
-        ~media_download
-        ~fileId >>= fun _ ->
+      download_media media_download fileId >>= fun _ ->
       SessionM.return ()
     end else begin
       Utils.log_with_header
@@ -1421,13 +1451,7 @@ let stream_resource offset buffer resource =
     range_spec;
   } in
   let fileId = resource |. CacheData.Resource.remote_id |> Option.get in
-  try_with_default
-    (FilesResource.get
-       ~supportsTeamDrives:true
-       ~std_params:file_download_std_params
-       ~media_download
-       ~fileId
-    ) >>= fun _ ->
+  download_media media_download fileId >>= fun _ ->
   Utils.log_with_header
     "END: Stream resource (id=%Ld, offset=%Ld, finish=%Ld, length=%d)\n%!"
     resource.CacheData.Resource.id offset finish length;
