@@ -715,7 +715,6 @@ let get_metadata () =
   in
 
   let context = Context.get_ctx () in
-  let root_folder_id = context.Context.root_folder_id |> Option.get in
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
 
@@ -775,7 +774,7 @@ let get_metadata () =
         let parent_resources =
           let parent_remote_ids =
             match change.Change.file.File.parents with
-              [] -> [root_folder_id]
+              [] -> []
             | ids -> ids
           in
           List.map
