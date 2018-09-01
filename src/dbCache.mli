@@ -34,4 +34,7 @@ sig
 end
 
 val setup_db : CacheData.t -> unit
+val check_clean_shutdown : CacheData.t -> bool
+val set_clean_shutdown : CacheData.t -> unit
+val reset_clean_shutdown : CacheData.t -> unit
 

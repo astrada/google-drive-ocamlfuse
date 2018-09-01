@@ -434,7 +434,8 @@ struct
      start_page_token, "
   let app_fields =
     "cache_size, \
-     last_update"
+     last_update, \
+     clean_shutdown"
 
   let fields_without_id = api_fields_without_id ^ app_fields
   let fields = "id, " ^ fields_without_id
@@ -449,7 +450,8 @@ struct
          :storage_quota_usage, \
          :start_page_token, \
          :cache_size, \
-         :last_update \
+         :last_update, \
+         :clean_shutdown \
        );"
     in
     Sqlite3.prepare db sql
@@ -467,6 +469,15 @@ struct
       "UPDATE metadata \
        SET \
          cache_size = cache_size + :delta \
+       WHERE id = 1;"
+    in
+    Sqlite3.prepare db sql
+
+  let prepare_set_clean_shutdown_stmt db =
+    let sql =
+      "UPDATE metadata \
+       SET \
+         clean_shutdown = :flag \
        WHERE id = 1;"
     in
     Sqlite3.prepare db sql
@@ -825,13 +836,14 @@ struct
     bind_text stmt ":start_page_token" (Some metadata.start_page_token);
     bind_int stmt ":cache_size" (Some metadata.cache_size);
     bind_float stmt ":last_update" (Some metadata.last_update);
+    bind_bool stmt ":clean_shutdown" (Some metadata.clean_shutdown);
     final_step stmt
 
-  let insert_metadata cache resource =
+  let insert_metadata cache metadata =
     with_transaction cache
       (fun db ->
          let stmt = MetadataStmts.prepare_insert_stmt db in
-         save_metadata stmt resource;
+         save_metadata stmt metadata;
          finalize_stmt stmt)
 
   let row_to_metadata row_data =
@@ -841,6 +853,7 @@ struct
       start_page_token = row_data.(3) |> data_to_string |> Option.get;
       cache_size = row_data.(4) |> data_to_int64 |> Option.get;
       last_update = row_data.(5) |> data_to_float |> Option.get;
+      clean_shutdown = row_data.(6) |> data_to_bool |> Option.get;
     }
 
   let select_metadata cache =
@@ -857,6 +870,14 @@ struct
       (fun db ->
          let stmt = MetadataStmts.prepare_update_cache_size_stmt db in
          bind_int stmt ":delta" (Some delta);
+         final_step stmt;
+         finalize_stmt stmt)
+
+  let set_clean_shutdown cache flag =
+    with_transaction cache
+      (fun db ->
+         let stmt = MetadataStmts.prepare_set_clean_shutdown_stmt db in
+         bind_bool stmt ":flag" (Some flag);
          final_step stmt;
          finalize_stmt stmt)
   (* END Queries *)
@@ -906,7 +927,8 @@ let setup_db cache =
             storage_quota_usage INTEGER NOT NULL, \
             start_page_token TEXT NOT NULL, \
             cache_size INTEGER NOT NULL, \
-            last_update REAL NOT NULL \
+            last_update REAL NOT NULL, \
+            clean_shutdown INTEGER NULL \
          ); \
          UPDATE resource \
          SET state = 'ToDownload' \
@@ -916,4 +938,17 @@ let setup_db cache =
          WHERE state = 'Uploading'; \
          COMMIT TRANSACTION;" |> ignore)
 (* END Setup *)
+
+let check_clean_shutdown cache =
+  let db_metadata = Metadata.select_metadata cache in
+  Option.map_default
+    (fun m -> m.CacheData.Metadata.clean_shutdown)
+    true
+    db_metadata
+
+let set_clean_shutdown cache =
+  Metadata.set_clean_shutdown cache true
+
+let reset_clean_shutdown cache =
+  Metadata.set_clean_shutdown cache false
 

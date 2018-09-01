@@ -118,6 +118,7 @@ sig
     start_page_token : string;
     cache_size : int64;
     last_update : float;
+    clean_shutdown : bool;
   }
 
   val display_name : (t, string) GapiLens.t
@@ -126,6 +127,7 @@ sig
   val start_page_token : (t, string) GapiLens.t
   val cache_size : (t, int64) GapiLens.t
   val last_update : (t, float) GapiLens.t
+  val clean_shutdown : (t, bool) GapiLens.t
 
   val is_valid : int -> t -> bool
 end

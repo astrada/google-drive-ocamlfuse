@@ -264,6 +264,19 @@ let setup_application params =
     flush_db_thread = None;
   } in
   Context.set_ctx context;
+  if not (DbCache.check_clean_shutdown cache) then begin
+    Utils.log_with_header
+      "google-drive-ocamlfuse didn't shut down correctly.%!\n";
+    if not params.clear_cache then begin
+      Utils.log_message "Cleaning up cache...%!";
+      Cache.clean_up_cache cache;
+      Utils.log_message "done\nSetting up cache db...%!";
+      Cache.setup_db cache;
+      Utils.log_message "done\n...%!";
+    end;
+  end else begin
+    DbCache.reset_clean_shutdown cache;
+  end;
   MemoryCache.start_flush_db_thread cache;
   let refresh_token = context |. Context.refresh_token_lens in
   if refresh_token = "" then
@@ -664,8 +677,6 @@ let () =
                "Waiting for pending upload threads (%d)...%!"
                (ThreadPool.pending_threads context.Context.thread_pool);
              ThreadPool.shutdown context.Context.thread_pool;
-             Utils.log_message "done\nFlushing cache...%!";
-             Cache.flush context.Context.cache;
              begin match context.Context.buffer_eviction_thread with
                | None -> ()
                | Some buffer_eviction_thread -> begin
@@ -687,6 +698,10 @@ let () =
                    Thread.join flush_db_thread;
                  end
              end;
+             Utils.log_message "done\nFlushing cache...\n%!";
+             Cache.flush context.Context.cache;
+             Utils.log_message "Storing clean shutdown flag...%!";
+             DbCache.set_clean_shutdown context.Context.cache;
              Utils.log_message "done\nCURL cleanup...%!";
              ignore (GapiCurl.global_cleanup context.Context.curl_state);
              Utils.log_message "done\nClearing context...%!";

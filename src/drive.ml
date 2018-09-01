@@ -710,6 +710,7 @@ let get_metadata () =
       start_page_token;
       cache_size;
       last_update = Unix.gettimeofday ();
+      clean_shutdown = false;
     } in
     SessionM.return metadata
   in

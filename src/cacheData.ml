@@ -391,6 +391,7 @@ struct
     start_page_token : string;
     cache_size : int64;
     last_update : float;
+    clean_shutdown : bool;
   }
 
   let display_name = {
@@ -416,6 +417,10 @@ struct
   let last_update = {
     GapiLens.get = (fun x -> x.last_update);
     GapiLens.set = (fun v x -> { x with last_update = v })
+  }
+  let clean_shutdown = {
+    GapiLens.get = (fun x -> x.clean_shutdown);
+    GapiLens.set = (fun v x -> { x with clean_shutdown = v })
   }
 
   let is_valid metadata_cache_time metadata =
