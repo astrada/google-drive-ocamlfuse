@@ -401,7 +401,7 @@ let default = {
   root_folder = "";
   team_drive_id = "";
   metadata_memory_cache = true;
-  metadata_memory_cache_saving_interval = 60;
+  metadata_memory_cache_saving_interval = 30;
   acknowledge_abuse = false;
   desktop_entry_exec = "";
 }
@@ -457,7 +457,7 @@ let default_debug = {
   root_folder = "";
   team_drive_id = "";
   metadata_memory_cache = true;
-  metadata_memory_cache_saving_interval = 60;
+  metadata_memory_cache_saving_interval = 30;
   acknowledge_abuse = false;
   desktop_entry_exec = "";
 }
