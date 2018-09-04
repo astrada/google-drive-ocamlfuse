@@ -98,7 +98,7 @@ let do_request go =
 
 (* Get access token using the installed apps flow or print authorization URL
  * if headleass mode is on *)
-let get_access_token headless =
+let get_access_token headless browser =
   let context = Context.get_ctx () in
   let config_lens = context |. Context.config_lens in
   let client_id = config_lens |. Config.client_id in
@@ -116,7 +116,7 @@ let get_access_token headless =
         Printf.printf
           "Please, open the following URL in a web browser: %s\n%!"
           url;
-      end else Utils.start_browser url;
+      end else Utils.start_browser browser url;
       Printf.printf "Please enter the verification code: %!";
       input_line stdin
     else

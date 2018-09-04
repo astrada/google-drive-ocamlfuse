@@ -95,6 +95,7 @@ type application_params = {
   multi_threading : bool;
   config_path : string;
   xdg_base_directory : bool;
+  browser : string;
 }
 
 let setup_application params =
@@ -113,7 +114,7 @@ let setup_application params =
         |> Context.save_state_from_context;
       try
         let url = get_authorization_url request_id in
-        Utils.start_browser url;
+        Utils.start_browser params.browser url;
         GaeProxy.start_server_polling ()
       with
           GaeProxy.ServerError e ->
@@ -287,7 +288,7 @@ let setup_application params =
       else
         get_auth_tokens_from_server ()
     else
-      Oauth2.get_access_token headless
+      Oauth2.get_access_token headless params.browser
   else
     Utils.log_message "Refresh token already present.\n%!"
 (* END setup *)
@@ -549,6 +550,7 @@ let () =
   let multi_threading = ref false in
   let config_path = ref "" in
   let xdg_base_directory = ref false in
+  let browser = ref "" in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -633,6 +635,10 @@ let () =
        "-xdgbd",
        Arg.Set xdg_base_directory,
        " enable XDG Base Directory support. Default is false.";
+       "-browser",
+       Arg.Set_string browser,
+       " starts a specific browser to access authorization page. \
+        Default is xdg-open, firefox, google-chrome, chromium-browser, open.";
       ]) in
   let () =
     Arg.parse
@@ -664,6 +670,7 @@ let () =
         multi_threading = !multi_threading;
         config_path = !config_path;
         xdg_base_directory = !xdg_base_directory;
+        browser = !browser;
       } in
       if !mountpoint = "" then begin
         setup_application { params with mountpoint = "." };

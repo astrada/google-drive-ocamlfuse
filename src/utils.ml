@@ -166,7 +166,7 @@ let xattr_flags_to_string = function
   | Fuse.REPLACE -> "REPLACE"
 
 (* Browser *)
-let start_browser url =
+let start_browser browser url =
   let start_process browser =
     let command = Printf.sprintf "%s \"%s\"" browser url in
     log_with_header "BEGIN: Starting web browser with command: %s\n" command;
@@ -180,7 +180,9 @@ let start_browser url =
       false
     end
   in
-  let browsers = ["xdg-open"; "firefox"; "google-chrome"; "chromium-browser"; "open"] in
+  let browsers =
+    if browser <> "" then [browser]
+    else ["xdg-open"; "firefox"; "google-chrome"; "chromium-browser"; "open"] in
   let status =
     List.fold_left
       (fun result browser ->
