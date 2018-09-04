@@ -95,6 +95,7 @@ type application_params = {
   multi_threading : bool;
   config_path : string;
   xdg_base_directory : bool;
+  browser : string;
 }
 
 let setup_application params =
@@ -113,7 +114,7 @@ let setup_application params =
         |> Context.save_state_from_context;
       try
         let url = get_authorization_url request_id in
-        Utils.start_browser url;
+        Utils.start_browser params.browser url;
         GaeProxy.start_server_polling ()
       with
           GaeProxy.ServerError e ->
@@ -261,8 +262,23 @@ let setup_application params =
     thread_pool = ThreadPool.create ();
     buffer_eviction_thread = None;
     root_folder_id = None;
+    flush_db_thread = None;
   } in
   Context.set_ctx context;
+  if not (DbCache.check_clean_shutdown cache) then begin
+    Utils.log_with_header
+      "google-drive-ocamlfuse didn't shut down correctly.%!\n";
+    if not params.clear_cache then begin
+      Utils.log_message "Cleaning up cache...%!";
+      Cache.clean_up_cache cache;
+      Utils.log_message "done\nSetting up cache db...%!";
+      Cache.setup_db cache;
+      Utils.log_message "done\n...%!";
+    end;
+  end else begin
+    DbCache.reset_clean_shutdown cache;
+  end;
+  MemoryCache.start_flush_db_thread cache;
   let refresh_token = context |. Context.refresh_token_lens in
   if refresh_token = "" then
     if client_id = "" || client_secret = "" then
@@ -272,7 +288,7 @@ let setup_application params =
       else
         get_auth_tokens_from_server ()
     else
-      Oauth2.get_access_token headless
+      Oauth2.get_access_token headless params.browser
   else
     Utils.log_message "Refresh token already present.\n%!"
 (* END setup *)
@@ -534,6 +550,7 @@ let () =
   let multi_threading = ref false in
   let config_path = ref "" in
   let xdg_base_directory = ref false in
+  let browser = ref "" in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -618,6 +635,10 @@ let () =
        "-xdgbd",
        Arg.Set xdg_base_directory,
        " enable XDG Base Directory support. Default is false.";
+       "-browser",
+       Arg.Set_string browser,
+       " starts a specific browser to access authorization page. \
+        Default is xdg-open, firefox, google-chrome, chromium-browser, open.";
       ]) in
   let () =
     Arg.parse
@@ -649,6 +670,7 @@ let () =
         multi_threading = !multi_threading;
         config_path = !config_path;
         xdg_base_directory = !xdg_base_directory;
+        browser = !browser;
       } in
       if !mountpoint = "" then begin
         setup_application { params with mountpoint = "." };
@@ -673,6 +695,20 @@ let () =
                    Thread.join buffer_eviction_thread;
                  end
              end;
+             begin match context.Context.flush_db_thread with
+               | None -> ()
+               | Some flush_db_thread -> begin
+                   Utils.log_message
+                     "done\nStopping flush DB thread (TID=%d)...%!"
+                     (Thread.id flush_db_thread);
+                   MemoryCache.stop_flush_db_thread ();
+                   Thread.join flush_db_thread;
+                 end
+             end;
+             Utils.log_message "done\nFlushing cache...\n%!";
+             Cache.flush context.Context.cache;
+             Utils.log_message "Storing clean shutdown flag...%!";
+             DbCache.set_clean_shutdown context.Context.cache;
              Utils.log_message "done\nCURL cleanup...%!";
              ignore (GapiCurl.global_cleanup context.Context.curl_state);
              Utils.log_message "done\nClearing context...%!";

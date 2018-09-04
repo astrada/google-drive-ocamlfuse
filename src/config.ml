@@ -2,7 +2,7 @@ open GapiUtils.Infix
 open GapiLens.Infix
 
 let application_name = "google-drive-ocamlfuse"
-let version = "0.6.27"
+let version = "0.7.0"
 
 type t = {
   (* Number of seconds metadata should be cached. *)
@@ -73,8 +73,6 @@ type t = {
   (* Specifies whether large files are read-only. Checked only if
    * [stream_large_files] is [true]. *)
   large_file_read_only : bool;
-  (* Specifies whether to start uploading in a parallel thread. *)
-  async_upload : bool;
   (* Specifies connection timeout in milliseconds *)
   connect_timeout_ms : int;
   (* Max download speed (on a single transfer) in bytes/second. *)
@@ -113,6 +111,15 @@ type t = {
   root_folder : string;
   (* Team drive id *)
   team_drive_id : string;
+  (* Specifies to cache metadata in memory and periodically save them to disk.
+   *)
+  metadata_memory_cache: bool;
+  (* Interval (in seconds) between metadata memory cache saving. *)
+  metadata_memory_cache_saving_interval: int;
+  (* Specifies to download files that Drive considers abusive (malware, etc.) *)
+  acknowledge_abuse: bool;
+  (* Executable used to open desktop entries *)
+  desktop_entry_exec : string;
 }
 
 let metadata_cache_time = {
@@ -243,10 +250,6 @@ let large_file_read_only = {
   GapiLens.get = (fun x -> x.large_file_read_only);
   GapiLens.set = (fun v x -> { x with large_file_read_only = v })
 }
-let async_upload = {
-  GapiLens.get = (fun x -> x.async_upload);
-  GapiLens.set = (fun v x -> { x with async_upload = v })
-}
 let connect_timeout_ms = {
   GapiLens.get = (fun x -> x.connect_timeout_ms);
   GapiLens.set = (fun v x -> { x with connect_timeout_ms = v })
@@ -315,6 +318,22 @@ let team_drive_id = {
   GapiLens.get = (fun x -> x.team_drive_id);
   GapiLens.set = (fun v x -> { x with team_drive_id = v })
 }
+let metadata_memory_cache = {
+  GapiLens.get = (fun x -> x.metadata_memory_cache);
+  GapiLens.set = (fun v x -> { x with metadata_memory_cache = v })
+}
+let metadata_memory_cache_saving_interval = {
+  GapiLens.get = (fun x -> x.metadata_memory_cache_saving_interval);
+  GapiLens.set = (fun v x -> { x with metadata_memory_cache_saving_interval = v })
+}
+let acknowledge_abuse = {
+  GapiLens.get = (fun x -> x.acknowledge_abuse);
+  GapiLens.set = (fun v x -> { x with acknowledge_abuse = v })
+}
+let desktop_entry_exec = {
+  GapiLens.get = (fun x -> x.desktop_entry_exec);
+  GapiLens.set = (fun v x -> { x with desktop_entry_exec = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -364,7 +383,6 @@ let default = {
   stream_large_files = false;
   large_file_threshold_mb = 16;
   large_file_read_only = false;
-  async_upload = true;
   connect_timeout_ms = 5000;
   max_download_speed = 0L;
   max_upload_speed = 0L;
@@ -382,6 +400,10 @@ let default = {
   log_directory = "";
   root_folder = "";
   team_drive_id = "";
+  metadata_memory_cache = true;
+  metadata_memory_cache_saving_interval = 30;
+  acknowledge_abuse = false;
+  desktop_entry_exec = "";
 }
 
 let default_debug = {
@@ -417,7 +439,6 @@ let default_debug = {
   stream_large_files = false;
   large_file_threshold_mb = 1;
   large_file_read_only = false;
-  async_upload = true;
   connect_timeout_ms = 5000;
   max_download_speed = 0L;
   max_upload_speed = 0L;
@@ -435,6 +456,10 @@ let default_debug = {
   log_directory = "";
   root_folder = "";
   team_drive_id = "";
+  metadata_memory_cache = true;
+  metadata_memory_cache_saving_interval = 30;
+  acknowledge_abuse = false;
+  desktop_entry_exec = "";
 }
 
 let of_table table =
@@ -501,8 +526,6 @@ let of_table table =
       large_file_read_only =
         get "large_file_read_only" bool_of_string
           default.large_file_read_only;
-      async_upload =
-        get "async_upload" bool_of_string default.async_upload;
       connect_timeout_ms =
         get "connect_timeout_ms" int_of_string default.connect_timeout_ms;
       max_download_speed =
@@ -547,6 +570,18 @@ let of_table table =
       team_drive_id =
         get "team_drive_id" Std.identity
           default.team_drive_id;
+      metadata_memory_cache =
+        get "metadata_memory_cache" bool_of_string
+          default.metadata_memory_cache;
+      metadata_memory_cache_saving_interval =
+        get "metadata_memory_cache_saving_interval" int_of_string
+          default.metadata_memory_cache_saving_interval;
+      acknowledge_abuse =
+        get "acknowledge_abuse" bool_of_string
+          default.acknowledge_abuse;
+      desktop_entry_exec =
+        get "desktop_entry_exec" Std.identity
+          default.desktop_entry_exec;
     }
 
 let to_table data =
@@ -587,7 +622,6 @@ let to_table data =
       (data.large_file_threshold_mb |> string_of_int);
     add "large_file_read_only"
       (data.large_file_read_only |> string_of_bool);
-    add "async_upload" (data.async_upload |> string_of_bool);
     add "connect_timeout_ms" (data.connect_timeout_ms |> string_of_int);
     add "max_download_speed" (data.max_download_speed |> Int64.to_string);
     add "max_upload_speed" (data.max_upload_speed |> Int64.to_string);
@@ -605,6 +639,11 @@ let to_table data =
     add "log_directory" data.log_directory;
     add "root_folder" data.root_folder;
     add "team_drive_id" data.team_drive_id;
+    add "metadata_memory_cache" (data.metadata_memory_cache |> string_of_bool);
+    add "metadata_memory_cache_saving_interval"
+      (data.metadata_memory_cache_saving_interval |> string_of_int);
+    add "acknowledge_abuse" (data.acknowledge_abuse |> string_of_bool);
+    add "desktop_entry_exec" data.desktop_entry_exec;
     table
 
 let debug_print out_ch start_time curl info_type info =

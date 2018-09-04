@@ -73,6 +73,17 @@ let do_request go =
       GaeProxy.refresh_access_token ();
       (* Retry with refreshed token *)
       try_request (n + 1)
+    | Utils.Temporary_error as e ->
+      if n < !Utils.max_retries then begin
+        let n' = n + 1 in
+        Utils.log_with_header "Retrying (%d/%d)\n%!" n' !Utils.max_retries;
+        GapiUtils.wait_exponential_backoff n;
+        (* Retry on timeout *)
+        try_request n'
+      end else begin
+        Utils.log_with_header "Giving up\n%!";
+        raise e
+      end
     | GapiService.ServiceError (_, e) ->
       Utils.log_with_header "ServiceError\n%!";
       let message =
@@ -87,7 +98,7 @@ let do_request go =
 
 (* Get access token using the installed apps flow or print authorization URL
  * if headleass mode is on *)
-let get_access_token headless =
+let get_access_token headless browser =
   let context = Context.get_ctx () in
   let config_lens = context |. Context.config_lens in
   let client_id = config_lens |. Config.client_id in
@@ -105,7 +116,7 @@ let get_access_token headless =
         Printf.printf
           "Please, open the following URL in a web browser: %s\n%!"
           url;
-      end else Utils.start_browser url;
+      end else Utils.start_browser browser url;
       Printf.printf "Please enter the verification code: %!";
       input_line stdin
     else

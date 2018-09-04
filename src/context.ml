@@ -14,13 +14,13 @@ type t = {
   (* Gapi configuration *)
   gapi_config : GapiConfig.t;
   (* Sqlite3 cache *)
-  cache : Cache.t;
+  cache : CacheData.t;
   (* CURL global state *)
   curl_state : [`Initialized] GapiCurl.t;
   (* Mountpoint current stats *)
   mountpoint_stats : Unix.LargeFile.stats;
   (* Current metadata *)
-  metadata : Cache.Metadata.t option;
+  metadata : CacheData.Metadata.t option;
   (* Metadata lock *)
   metadata_lock : Mutex.t;
   (* Whether permanently delete files *)
@@ -35,6 +35,8 @@ type t = {
   buffer_eviction_thread : Thread.t option;
   (* Root folder ID *)
   root_folder_id : string option;
+  (* Metadata memory cache saving thread *)
+  flush_db_thread : Thread.t option;
 }
 
 let app_dir = {
@@ -97,6 +99,10 @@ let root_folder_id = {
   GapiLens.get = (fun x -> x.root_folder_id);
   GapiLens.set = (fun v x -> { x with root_folder_id = v })
 }
+let flush_db_thread = {
+  GapiLens.get = (fun x -> x.flush_db_thread);
+  GapiLens.set = (fun v x -> { x with flush_db_thread = v })
+}
 
 let config_lens =
   config_store |-- ConfigFileStore.data
@@ -117,7 +123,7 @@ let metadata_lens =
   metadata |-- GapiLens.option_get
 
 let metadata_last_update_lens =
-  metadata_lens |-- Cache.Metadata.last_update
+  metadata_lens |-- CacheData.Metadata.last_update
 
 module ConcurrentContext =
   ConcurrentGlobal.Make(struct type u = t let label = "context" end)

@@ -455,14 +455,17 @@ struct
       )
 
   let evict_cache buffers =
+    let check () =
+      Utils.with_lock buffers.mutex
+        (fun () -> if buffers.stop_eviction_thread then raise Exit) in
     try
       while true do
-        Utils.log_with_header "evict_cache loop\n%!";
+        for _ = 1 to 10 do
+          check ();
+          Thread.delay 1.0;
+        done;
         Utils.with_lock buffers.mutex
           (fun () -> release_lru_buffer_if_request_blocked buffers);
-        Utils.with_lock buffers.mutex
-          (fun () -> if buffers.stop_eviction_thread then raise Exit);
-        Thread.delay 10.0;
       done
     with Exit -> ()
 

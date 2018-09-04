@@ -1,3 +1,8 @@
+0.7.0
+=====
+
+This version introduces a in-memory cache for file metadata that is periodically saved in the sqlite3 db (every 30 seconds by default).
+
 0.6.12
 ======
 
