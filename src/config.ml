@@ -118,6 +118,8 @@ type t = {
   metadata_memory_cache_saving_interval: int;
   (* Specifies to download files that Drive considers abusive (malware, etc.) *)
   acknowledge_abuse: bool;
+  (* Executable used to open desktop entries *)
+  desktop_entry_exec : string;
 }
 
 let metadata_cache_time = {
@@ -328,6 +330,10 @@ let acknowledge_abuse = {
   GapiLens.get = (fun x -> x.acknowledge_abuse);
   GapiLens.set = (fun v x -> { x with acknowledge_abuse = v })
 }
+let desktop_entry_exec = {
+  GapiLens.get = (fun x -> x.desktop_entry_exec);
+  GapiLens.set = (fun v x -> { x with desktop_entry_exec = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -397,6 +403,7 @@ let default = {
   metadata_memory_cache = true;
   metadata_memory_cache_saving_interval = 60;
   acknowledge_abuse = false;
+  desktop_entry_exec = "";
 }
 
 let default_debug = {
@@ -452,6 +459,7 @@ let default_debug = {
   metadata_memory_cache = true;
   metadata_memory_cache_saving_interval = 60;
   acknowledge_abuse = false;
+  desktop_entry_exec = "";
 }
 
 let of_table table =
@@ -571,6 +579,9 @@ let of_table table =
       acknowledge_abuse =
         get "acknowledge_abuse" bool_of_string
           default.acknowledge_abuse;
+      desktop_entry_exec =
+        get "desktop_entry_exec" Std.identity
+          default.desktop_entry_exec;
     }
 
 let to_table data =
@@ -632,6 +643,7 @@ let to_table data =
     add "metadata_memory_cache_saving_interval"
       (data.metadata_memory_cache_saving_interval |> string_of_int);
     add "acknowledge_abuse" (data.acknowledge_abuse |> string_of_bool);
+    add "desktop_entry_exec" data.desktop_entry_exec;
     table
 
 let debug_print out_ch start_time curl info_type info =

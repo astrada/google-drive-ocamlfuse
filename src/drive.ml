@@ -1271,13 +1271,24 @@ let create_desktop_entry resource content_path config =
         if icon = "" then ""
         else "Icon=" ^ icon ^ "\n"
       in
+      let url = Option.default "" resource.CacheData.Resource.web_view_link in
+      let exec = config.Config.desktop_entry_exec in
+      let entry_type =
+        if exec <> "" then "Type=Application"
+        else "Type=Link" in
+      let exec_or_url_entry =
+        if exec <> "" then Printf.sprintf "Exec=%s \"%s\"" exec url
+        else "URL=" ^ url
+      in
       Printf.fprintf out_ch
         "[Desktop Entry]\n\
-         Type=Link\n\
+         %s\n\
          Name=%s\n\
-         URL=%s\n%s"
+         %s\n\
+         %s"
+        entry_type
         (Option.default "" resource.CacheData.Resource.name)
-        (Option.default "" resource.CacheData.Resource.web_view_link)
+        exec_or_url_entry
         icon_entry)
 
 let download_media media_download fileId =
