@@ -13,7 +13,7 @@ authorization endpoint will connect to the GAE service, providing a
 verification code, that will be exchanged for an access token and a refresh
 token (for offline access). Meanwhile, `google-drive-ocamlfuse` polls the GAE
 service, asking for tokens, until it gets them, or there is an error, or a
-timeout triggers. If anything goes wrong, you can safely restart the
+timeout triggers. You might need to close the browser for the executable to continue its operation. If anything goes wrong, you can safely restart the
 application, and it will try to recover. If it cannot recover, you should
 clean the content of `~/.gdfuse/default` to start from scratch. Otherwise, if
 the application can retrieve the tokens, the program will exit and you may

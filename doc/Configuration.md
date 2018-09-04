@@ -78,7 +78,7 @@ Fusion table export format (the only valid format is `desktop`):
 
 If `fusion_table_format=desktop`, specifies the icon of the desktop link (default is no icon):
 
-    fusion_table_format=
+    fusion_table_icon=
 
 Google Apps Script [[export format|Exportable-formats#valid-formats-for-google-apps-scripts]]:
 
@@ -208,6 +208,22 @@ Path of the directory containing log files (if blank uses the default):
 [Since 0.6.23] Specifies the Team Drive id, if you want to mount a [[Team Drive|Team Drives]]:
 
     team_drive_id=
+
+[Since 0.7.0] Enables in-memory metadata cache:
+
+    metadata_memory_cache=true
+
+[Since 0.7.0] Specifies every how many seconds the metadata cache is saved to sqlite3 db:
+
+    metadata_memory_cache_saving_interval=30
+
+[Since 0.7.0] Permits the download of files marked by Google Drive as abusive:
+
+    acknowledge_abuse=false
+
+[Since 0.7.0] Customize the executable to run when you specify a `desktop` export format:
+
+    desktop_entry_exec=
 
 ### Document export formats
 
