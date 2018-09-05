@@ -8,7 +8,7 @@ Build-Depends:
   ocaml-nox (>= 4.02.3~),
   ocaml-best-compilers,
   ocaml-findlib,
-  jbuilder,
+  dune,
   libgapi-ocaml-dev (>= 0.3.6),
   libfuse-ocaml-dev (>= 2.7.1),
   libsqlite3-ocaml-dev (>= 1.6.1),

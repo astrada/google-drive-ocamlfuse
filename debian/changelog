@@ -1,3 +1,9 @@
+google-drive-ocamlfuse (0.7.0-0ubuntu1) cosmic; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 04 Sep 2018 22:12:53 +0200
+
 google-drive-ocamlfuse (0.6.25-0ubuntu2) cosmic; urgency=low
 
   * No change port to cosmic.

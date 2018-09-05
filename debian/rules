@@ -17,7 +17,7 @@ export OCAMLFIND_LDCONF
 
 .PHONY: override_dh_auto_build
 override_dh_auto_build:
-	jbuilder build @install
+	dune build @install
 
 .PHONY: override_dh_auto_test
 override_dh_auto_test:
@@ -34,7 +34,7 @@ override_dh_install:
 
 .PHONY: override_dh_auto_clean
 override_dh_auto_clean:
-	jbuilder clean
+	rm -rf _build/
 
 debian/google-drive-ocamlfuse.1: debian/google-drive-ocamlfuse.mkd
 	pandoc -s -w man $^ -o $@
