@@ -1,4 +1,0 @@
-A FUSE filesystem over Google Drive
-google-drive-ocamlfuse is a FUSE-based file system for Google
-Drive, written in OCaml.
-
