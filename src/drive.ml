@@ -1958,18 +1958,34 @@ let write path buf offset file_descr =
     Utils.log_with_header
       "BEGIN: Writing local file (path=%s, trashed=%b)\n%!"
       path_in_cache trashed;
-    let bytes =
+    let context = Context.get_ctx () in
+    let config = context |. Context.config_lens in
+    let write_to_memory_buffers () =
+      let memory_buffers = context.Context.memory_buffers in
+      Buffering.MemoryBuffers.write_to_block
+        (resource.CacheData.Resource.remote_id |> Option.get)
+        content_path
+        buf
+        offset
+        memory_buffers
+    in
+    let write_to_file () =
       Utils.with_out_channel content_path
         (fun ch ->
            let file_descr = Unix.descr_of_out_channel ch in
            Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
-           Unix_util.write file_descr buf) in
+           Unix_util.write file_descr buf)
+    in
+    let bytes =
+      if config.Config.write_buffers then
+        write_to_memory_buffers ()
+      else
+        write_to_file () in
     Utils.log_with_header
-      "END: Writing local file (path=%s, trashed=%b)\n%!"
-      path_in_cache trashed;
+      "END: Writing local file (path=%s, trashed=%b, bytes=%d)\n%!"
+      path_in_cache trashed bytes;
     let top_offset = Int64.add offset (Int64.of_int bytes) in
     let file_size = Option.default 0L resource.CacheData.Resource.size in
-    let context = Context.get_ctx () in
     let cache = context.Context.cache in
     if top_offset > file_size then begin
       let updated_resource = resource
@@ -2056,12 +2072,23 @@ let upload resource =
   shrink_cache ();
   SessionM.return ()
 
+let flush_memory_buffers resource =
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  if config.Config.write_buffers then begin
+    let memory_buffers = context.Context.memory_buffers in
+    Buffering.MemoryBuffers.flush_blocks
+      (resource.CacheData.Resource.remote_id |> Option.get)
+      memory_buffers
+  end
+
 let upload_with_retry path =
   let try_upload resource =
     try_with_default (upload resource)
   in
   let (path_in_cache, trashed) = get_path_in_cache path in
   get_resource path_in_cache trashed >>= fun resource ->
+  flush_memory_buffers resource;
   with_retry try_upload resource
 
 let upload_if_dirty path =

@@ -12,6 +12,7 @@ sig
   type t = {
     blocks : (string * int, Block.t) Hashtbl.t;
     files : (string, int list) Hashtbl.t;
+    file_block_indexes : (string, int list) Hashtbl.t;
     block_size : int;
     mutex : Mutex.t;
     condition : Condition.t;
@@ -43,6 +44,17 @@ sig
     t -> unit GapiMonad.SessionM.m list GapiMonad.SessionM.t
 
   val remove_buffers : string -> t -> unit
+
+  val write_to_block:
+    string ->
+    string ->
+    (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout)
+      Bigarray.Array1.t ->
+    int64 ->
+    t ->
+    int
+
+  val flush_blocks: string -> t -> unit
 
   val create_eviction_thread : t -> Thread.t
 
