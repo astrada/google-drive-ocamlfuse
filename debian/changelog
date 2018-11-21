@@ -1,3 +1,15 @@
+google-drive-ocamlfuse (0.7.1-0ubuntu2) cosmic; urgency=low
+
+  * Upgrade dependency (gapi-ocaml)
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Wed, 21 Nov 2018 00:26:04 +0100
+
+google-drive-ocamlfuse (0.7.1-0ubuntu1) cosmic; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 18 Nov 2018 18:54:06 +0100
+
 google-drive-ocamlfuse (0.7.0-0ubuntu1) cosmic; urgency=low
 
   * Bugfix release

@@ -9,7 +9,7 @@ Build-Depends:
   ocaml-best-compilers,
   ocaml-findlib,
   dune,
-  libgapi-ocaml-dev (>= 0.3.6),
+  libgapi-ocaml-dev (>= 0.3.8),
   libfuse-ocaml-dev (>= 2.7.1),
   libsqlite3-ocaml-dev (>= 1.6.1),
   libfuse-dev (>= 2.7)
