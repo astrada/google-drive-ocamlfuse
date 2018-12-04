@@ -17,7 +17,7 @@ export OCAMLFIND_LDCONF
 
 .PHONY: override_dh_auto_build
 override_dh_auto_build:
-	dune build @install
+	dune build -p google-drive-ocamlfuse
 
 .PHONY: override_dh_auto_test
 override_dh_auto_test:
