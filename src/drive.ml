@@ -1043,7 +1043,7 @@ let statfs () =
   let free_bytes =
     Int64.sub limit metadata.CacheData.Metadata.storage_quota_usage in
   let f_bfree = Int64.div free_bytes f_bsize in
-  { Unix_util.f_bsize;
+  { Fuse.Unix_util.f_bsize;
     f_blocks;
     f_bfree;
     f_bavail = f_bfree;
@@ -1944,7 +1944,7 @@ let read path buf offset file_descr =
       (fun ch ->
          let file_descr = Unix.descr_of_in_channel ch in
          Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
-         Unix_util.read file_descr buf)
+         Fuse.Unix_util.read file_descr buf)
   else
     Bigarray.Array1.dim buf
 (* END read *)
@@ -1975,7 +1975,7 @@ let write path buf offset file_descr =
         (fun ch ->
            let file_descr = Unix.descr_of_out_channel ch in
            Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
-           Unix_util.write file_descr buf)
+           Fuse.Unix_util.write file_descr buf)
     in
     let bytes =
       if config.Config.write_buffers then
