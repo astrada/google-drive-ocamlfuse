@@ -747,31 +747,31 @@ let get_metadata () =
 
     let get_ids_to_update change =
       let get_id = Option.map (fun r -> r.CacheData.Resource.id) in
-      let selected_resource =
-        Cache.Resource.select_resource_with_remote_id
+      let selected_resources =
+        Cache.Resource.select_resources_with_remote_id
           cache change.Change.fileId in
       let resources =
-        match selected_resource with
-        | None -> []
-        | Some r ->
-          if change.Change.file.File.version > 0L &&
-             change.Change.file.File.version >
-               Option.default 0L r.CacheData.Resource.version then
-            [selected_resource]
-          else []
+        List.filter
+          (fun r -> change.Change.file.File.version > 0L &&
+                    change.Change.file.File.version >
+                    Option.default 0L r.CacheData.Resource.version)
+          selected_resources |>
+        List.map (fun r -> Some r)
       in
       List.map get_id resources
     in
 
     let get_resource_from_change change =
-      [Cache.Resource.select_resource_with_remote_id cache
-         change.Change.fileId]
+      Cache.Resource.select_resources_with_remote_id cache
+        change.Change.fileId |>
+      List.map
+        (fun r -> Some r)
     in
 
     let get_new_resource_from_change change =
-      match Cache.Resource.select_resource_with_remote_id cache
+      match Cache.Resource.select_resources_with_remote_id cache
               change.Change.fileId with
-      | None ->
+      | [] ->
         let parent_resources =
           let parent_remote_ids =
             match change.Change.file.File.parents with
@@ -779,18 +779,19 @@ let get_metadata () =
             | ids -> ids
           in
           List.map
-            (Cache.Resource.select_resource_with_remote_id cache)
+            (Cache.Resource.select_resources_with_remote_id cache)
             parent_remote_ids |>
+          List.concat |>
           List.filter
-            (function Some r -> r.CacheData.Resource.state =
-                                CacheData.Resource.State.Synchronized
-                    | None -> false)
+            (fun r -> r.CacheData.Resource.state =
+                      CacheData.Resource.State.Synchronized
+            )
         in
         begin match parent_resources with
         | [] -> []
         | prs ->
           let parent_path =
-            List.hd prs |. GapiLens.option_get |. CacheData.Resource.path in 
+            List.hd prs |. CacheData.Resource.path in 
           let (filename_table, _) =
             build_resource_tables parent_path false in
           let filename =
@@ -800,7 +801,7 @@ let get_metadata () =
           let resource = create_resource resource_path in
           [Some (resource, change.Change.file)]
         end
-      | Some _ -> []
+      | _ -> []
     in
 
     let request_remaining_changes start_page_token_db =
@@ -1145,7 +1146,7 @@ and get_resource path trashed =
           get_new_resource cache
       | Some file ->
           let reloaded_resource = Option.map_default
-              (Cache.Resource.select_resource_with_remote_id cache)
+              (Cache.Resource.select_first_resource_with_remote_id cache)
               (Some resource)
               resource.CacheData.Resource.remote_id |> Option.default resource in
           let updated_resource = update_resource_from_file
@@ -1399,7 +1400,7 @@ let download_resource resource =
   in
   let rec check_state n =
     let reloaded_resource = Option.map_default
-      (Cache.Resource.select_resource_with_remote_id cache)
+      (Cache.Resource.select_first_resource_with_remote_id cache)
       (Some resource)
       resource.CacheData.Resource.remote_id
     in
@@ -2059,7 +2060,7 @@ let upload resource =
     content_path
     mime_type;
   let reloaded_resource =
-    Cache.Resource.select_resource_with_remote_id cache file.File.id in
+    Cache.Resource.select_first_resource_with_remote_id cache file.File.id in
   let resource = Option.default resource reloaded_resource in
   let state =
     match resource.CacheData.Resource.state with

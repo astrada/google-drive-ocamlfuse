@@ -117,11 +117,17 @@ struct
     else
       DbCache.Resource.select_resource_with_path cache path trashed
 
-  let select_resource_with_remote_id cache remote_id =
+  let select_first_resource_with_remote_id cache remote_id =
     if cache.CacheData.in_memory then
-      MemoryCache.Resource.select_resource_with_remote_id cache remote_id
+      MemoryCache.Resource.select_first_resource_with_remote_id cache remote_id
     else
-      DbCache.Resource.select_resource_with_remote_id cache remote_id
+      DbCache.Resource.select_first_resource_with_remote_id cache remote_id
+
+  let select_resources_with_remote_id cache remote_id =
+    if cache.CacheData.in_memory then
+      MemoryCache.Resource.select_resources_with_remote_id cache remote_id
+    else
+      DbCache.Resource.select_resources_with_remote_id cache remote_id
 
   let select_resources_with_parent_path cache parent_path trashed =
     if cache.CacheData.in_memory then

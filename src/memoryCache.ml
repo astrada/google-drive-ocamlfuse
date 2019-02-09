@@ -354,7 +354,7 @@ struct
          !result
       )
 
-  let select_resource_with_remote_id cache remote_id =
+  let select_first_resource_with_remote_id cache remote_id =
     ConcurrentMemoryCache.with_lock
       (fun () ->
          let result = ref None in
@@ -370,6 +370,21 @@ struct
                d.resources
            with Exit -> ()
          end;
+         !result
+      )
+
+  let select_resources_with_remote_id cache remote_id =
+    ConcurrentMemoryCache.with_lock
+      (fun () ->
+         let result = ref [] in
+         let d = ConcurrentMemoryCache.get_no_lock () in
+         Hashtbl.iter
+           (fun _ r ->
+              if r.CacheData.Resource.remote_id = Some remote_id then begin
+                result := r :: !result;
+              end
+           )
+           d.resources;
          !result
       )
 

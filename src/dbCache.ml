@@ -782,10 +782,21 @@ struct
          bind_text stmt ":path" (Some path);
          bind_bool stmt ":trashed" (Some trashed))
 
-  let select_resource_with_remote_id cache remote_id =
+  let select_first_resource_with_remote_id cache remote_id =
     select_resource cache
       ResourceStmts.prepare_select_with_remote_id_stmt
       (fun stmt -> bind_text stmt ":remote_id" (Some remote_id))
+
+  let select_resources_with_remote_id cache remote_id =
+    with_transaction cache
+      (fun db ->
+         let stmt = ResourceStmts.prepare_select_with_remote_id_stmt db in
+         let results =
+           select_all_rows stmt
+             (fun stmt -> bind_text stmt ":remote_id" (Some remote_id))
+             row_to_resource in
+         finalize_stmt stmt;
+         results)
 
   let select_resources_with_parent_path cache parent_path trashed =
     with_transaction cache

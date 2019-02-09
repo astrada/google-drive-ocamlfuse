@@ -20,7 +20,9 @@ sig
   val trash_all_with_parent_path : CacheData.t -> string -> unit
   val update_all_timestamps : CacheData.t -> float -> unit
   val select_resource_with_path : CacheData.t -> string -> bool -> CacheData.Resource.t option
-  val select_resource_with_remote_id : CacheData.t -> string -> CacheData.Resource.t option
+  val select_first_resource_with_remote_id : CacheData.t -> string -> CacheData.Resource.t option
+  val select_resources_with_remote_id : CacheData.t -> string -> CacheData.Resource.t list
+  val select_resources_with_parent_path : CacheData.t -> string -> bool -> CacheData.Resource.t list
   val select_resources_with_parent_path : CacheData.t -> string -> bool -> CacheData.Resource.t list
   val select_resources_order_by_last_update : CacheData.t -> CacheData.Resource.t list
 
