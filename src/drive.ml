@@ -470,13 +470,13 @@ let get_well_known_resource path trashed =
                         (string_of_bool trashed))
     in
     Utils.log_with_header
-      "BEGIN: Saving %s resource to db (id=%Ld)\n%!"
-      label well_known_resource.CacheData.Resource.id;
+      "BEGIN: Saving %s resource to db\n%!"
+      label;
     let inserted =
       Cache.Resource.insert_resource cache well_known_resource in
     Utils.log_with_header
       "END: Saving %s resource to db (id=%Ld)\n%!"
-      label well_known_resource.CacheData.Resource.id;
+      label inserted.CacheData.Resource.id;
     inserted
   | Some resource -> resource
 
