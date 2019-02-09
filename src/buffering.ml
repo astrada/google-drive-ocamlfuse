@@ -145,7 +145,7 @@ struct
                 let file_descr = Unix.descr_of_out_channel ch in
                 Unix.LargeFile.lseek
                   file_descr range.offset Unix.SEEK_SET |> ignore;
-                Unix_util.write file_descr buf |> ignore
+                Fuse.Unix_util.write file_descr buf |> ignore
              )
         )
         block.dirty_ranges
