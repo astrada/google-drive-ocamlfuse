@@ -15,7 +15,7 @@ depends: [
   "camlidl" {build}
   "gapi-ocaml" {>= "0.3.6"}
   "dune" {build}
-  "ocamlfuse"
+  "ocamlfuse" {>= "2.7.1-cvs6"}
   "cryptokit"
   "extlib"
   "ounit" {with-test}
