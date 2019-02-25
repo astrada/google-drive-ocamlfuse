@@ -65,3 +65,24 @@ Now log out and back in again and your Google Drive should be mounted on `~/Goog
 By inserting the following line into ~/.profile the shell will test wether something has already been mounted on your target mountpoint, and if not, will execute the mount.
 
     $ mount | grep "${HOME}/GoogleDrive" >/dev/null || /usr/bin/google-drive-ocamlfuse "${HOME}/GoogleDrive"&
+    
+Alternatively, a function can be added to the end of a login script to check if google drive is mounted, and if not, wait for the network to become available before mounting. Be sure to replace the `mountpoint` value with the correct path.
+
+```bash
+#! /bin/bash
+function connect_googledrive {
+   mountpoint="${HOME}/googledrive"
+   if [[ ! "$(ls ${mountpoint})" ]]; then
+      printf "mounting google drive: waiting for network connection"
+      while ! ping -q -c 1 -W 1 8.8.8.8 > /dev/null 2>&1; do
+         printf "..." 
+         sleep 1 
+      done
+      printf "\n"
+      cd "${HOME}"
+      google-drive-ocamlfuse "$mountpoint"
+   fi
+   printf "google drive connected\n"
+}
+connect_googledrive
+```
