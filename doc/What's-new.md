@@ -1,3 +1,8 @@
+0.7.1
+=====
+
+This version introduces an experimental config option (`write_buffers`) to enable memory cache for file writing.
+
 0.7.0
 =====
 

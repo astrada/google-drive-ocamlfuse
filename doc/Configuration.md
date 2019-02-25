@@ -135,7 +135,7 @@ Specifies if large files should be read-only, to avoid accidental uploads of ver
 
     large_file_read_only=false
 
-Specifies whether to upload files in a concurrent thread:
+[Removed in 0.7.0] Specifies whether to upload files in a concurrent thread:
 
     async_upload=true
 
@@ -165,11 +165,11 @@ Specifies the maximum size in bytes of an upload chunk:
     max_upload_chunk_size=1099511627776 (* 1TB for 64-bit machines *)
     max_upload_chunk_size=805306368 (* 768MB for 32-bit machines *)
 
-Specifies the minimum size of download buffers (used only if `stream_large_files=true`):
+Specifies the minimum size of download/write buffers (used only if `stream_large_files=true` or `write_buffers=true`):
 
     memory_buffer_size=1048576 (* 1MB *)
 
-Specifies the maximum memory occupation of read-ahead buffers, before it starts to de-allocate the oldest ones (used only if `stream_large_files=true`):
+Specifies the maximum memory occupation of read-ahead/write buffers, before it starts to de-allocate the oldest ones (used only if `stream_large_files=true` or `write_buffers=true`):
 
     max_memory_cache_size=10485760 (* 10MB *)
 
@@ -224,6 +224,10 @@ Path of the directory containing log files (if blank uses the default):
 [Since 0.7.0] Customize the executable to run when you specify a `desktop` export format:
 
     desktop_entry_exec=
+
+[Since 0.7.1] Enable caching file writes in memory:
+
+    write_buffers=false
 
 ### Document export formats
 

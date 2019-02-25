@@ -44,6 +44,10 @@ This [PPA repository](https://launchpad.net/~alessandro-strada/+archive/ubuntu/g
 4. Then you need to add the key otherwise the command **apt update** will not take the new sourcelist into account
 
     `apt-key adv --keyserver keyserver.ubuntu.com --recv-keys AD5F235DF639B041`  
+
+    If you get a message like this: `gpg: keyserver receive failed: Server indicated a failure` Then do:
+    `apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys AD5F235DF639B041`
+
     `apt update`  
     `apt install google-drive-ocamlfuse`  
 

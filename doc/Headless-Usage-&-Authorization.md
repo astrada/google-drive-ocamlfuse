@@ -5,13 +5,16 @@ Caveat: I do not know whether this is the "optimal" way to do this.  I was in a 
 (I used the "Alternate Authorization Mode"  although the Standard Authorization mode using the GAE (Google App Engine) service may work too.)
 
 1. Install normally as per the [[Installation]] page
-1. In the computer with the web browser, create an OAuth2 application and credentials. These steps are similar to those described in the "Alternate Authorization Mode" section in [[Authorization]]. The following steps are what I did, based on my notes:
+1. On the computer with the web browser, create an OAuth2 application and credentials. These steps are similar to those described in the "Alternate Authorization Mode" section in [[Authorization]]. The following steps are what I did, based on my notes:
     1. Sign in to your Google account and create a project: https://console.cloud.google.com/
-    1. Click "API Manager" then "Library" in the left-hand pane (will take you to https://console.cloud.google.com/apis/library). Click on "Drive API", then "ENABLE API".
-    1. Click "Credentials" in the left hand pane, then click on the button "Create Credentials"
-       (OAuth client ID)
-        1. Choose "Other"
-        1. Choose any product name, e.g "My OCAMLDrive".
+    1. Enable the Google Drive API
+        1. In the left-hand pane (Navigation menu), open "APIs & Services" -> "Library", this will take you to https://console.cloud.google.com/apis/library
+        1. Click on "Google Drive API", this will open https://console.cloud.google.com/apis/library/drive.googleapis.com . Click "ENABLE API".
+    1. Get your client ID and client secret
+        1. Open the Navigation menu (click the hamburger icon at the top left), open "APIs & Services" -> "Credentials", this will open https://console.cloud.google.com/apis/credentials
+        1. Then click on the button "Create Credentials", and choose choose "OAuth client ID", this will take you to https://console.cloud.google.com/apis/credentials/oauthclient .
+            * For Application type, choose "Other"
+            * For Name, input something personal, for example "My OCAMLDrive".
         1. Click "Create". You will get a Client ID, a Client Secret.
 
 1. Authorization: Back in your headless server, run `google-drive-ocamlfuse` for the first time. I used labels (in this document, I use the label "me") because I plan on using multiple accounts. However you can also run it without the `-label` parameter and it will use a default name for the label called "default". You will need the Client ID and secret you got from google above.
