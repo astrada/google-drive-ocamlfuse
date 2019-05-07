@@ -1,63 +1,62 @@
 #!/bin/bash
+# Author: boonedoggle
 
 display_usage() {
     echo "Usage: update_config_all [options]"
     echo "This script will update the parameters in every config file for ocamlfuse"
-    echo "Author: boonedoggle"
-	echo ""
-	echo -e "Program Options:"
-	echo -e "  -h                     Display this help message"
-	echo -e "  -d [gdfuse directory]  Path to .gdfuse (default=$GDFUSEPATH)"
-	echo -e "  -p [parameter]         Parameter to change"
-	echo -e "  -v [value]             Value to set (use \"\" for no setting). If no"
-	echo -e "                         -v paramter is passed, function will display"
-	echo -e "                         the current values. Note: passing no arguments"
-	echo -e "                         at all will display the all settings for all labels"
-	echo -e ""
-	echo "For parameter configuration, see the GitHub page:"
-	echo "    https://github.com/astrada/google-drive-ocamlfuse/wiki/Configuration"
-	}
+    echo ""
+    echo -e "Program Options:"
+    echo -e "  -h                     Display this help message"
+    echo -e "  -d [gdfuse directory]  Path to .gdfuse (default=$GDFUSEPATH)"
+    echo -e "  -p [parameter]         Parameter to change"
+    echo -e "  -v [value]             Value to set (use \"\" for no setting). If no"
+    echo -e "                         -v paramter is passed, function will display"
+    echo -e "                         the current values. Note: passing no arguments"
+    echo -e "                         at all will display the all settings for all labels"
+    echo -e ""
+    echo "For parameter configuration, see the GitHub page:"
+    echo "    https://github.com/astrada/google-drive-ocamlfuse/wiki/Configuration"
+    }
 
 check_current_setting() {
-	if [ ! -f "$1" ]; then
-		tput setaf 1
-		echo "    $1 file not found. Exiting"
-		exit 1
-	fi
-	echo "Found label config file: $1"
-	PARAMETERFOUND=0
-	while read p; do
-		if echo "$p" | grep -q "$2"; then
-			PARAMETERFOUND=1
-	  		echo "    Current setting: $p"
-		fi
-	done <$1
-	if [ $PARAMETERFOUND -eq "0" ]; then
-		tput setaf 1
-		echo "    $2 parameter not found in configuration files. Exiting"
-		exit 1
-	fi
-	}
+    if [ ! -f "$1" ]; then
+        tput setaf 1
+        echo "    $1 file not found. Did you specify the correct .gdfuse directory?"
+        exit 1
+    fi
+    echo "Found label config file: $1"
+    PARAMETERFOUND=0
+    while read p; do
+        if echo "$p" | grep -q "$2"; then
+            PARAMETERFOUND=1
+            echo "    Current setting: $p"
+        fi
+    done <$1
+    if [ $PARAMETERFOUND -eq "0" ]; then
+        tput setaf 1
+        echo "    $2 parameter not found in configuration files. Exiting"
+        exit 1
+    fi
+    }
 
 function set_config_val(){
-	echo $1
+    # Change the value of the parameter using sed
     sed -i "s/^\($2\s*=\s*\).*\$/\1$3/" $1
-	# cat $1
 }
 
 function check_if_to_proceed(){
-	# Make sure you want to proceed
-	echo ""
-	echo "You are about to change the setting in the above configuration file(s) to:"
-	echo "$PARAMETER=$VALUE"
-	echo ""
-	read -p "Do you want to proceed? [n] " yn
-	echo ""
-	yn=${yn:-"n"}
-	case $yn in
-		[Nn]* )
-			exit 1
-	esac
+    # Make sure you want to proceed
+    echo ""
+    echo "You are about to change the setting in the above configuration file(s) to:"
+    echo "$PARAMETER=$VALUE"
+    echo ""
+    read -p "Do you want to proceed? [n] " yn
+    echo ""
+    yn=${yn:-"n"}
+    case $yn in
+        [Nn]* )
+            exit 1
+    esac
 }
 
 #####################################
@@ -71,19 +70,19 @@ while getopts "h:d:p:v:" opt; do
         h|\? )  display_usage
                 exit 0 ;;
         d )     GDFUSEPATH=$OPTARG ;;
-		p ) 	PARAMETER=$OPTARG ;;
-		v )		VALUE=$OPTARG ;;
+        p )     PARAMETER=$OPTARG ;;
+        v )     VALUE=$OPTARG ;;
     esac
 done
 
 # Get current values in all config files and display the values
 for label in $GDFUSEPATH/* ; do
-	CURRENTFILE="$label/config"
+    CURRENTFILE="$label/config"
     check_current_setting $CURRENTFILE $PARAMETER
 done
 
 if [ -z "$VALUE" ]; then
-	exit 1
+    exit 1
 fi
 
 # Let user read what they are about to change
@@ -91,14 +90,11 @@ check_if_to_proceed
 
 # Change current values in all config files
 for label in $GDFUSEPATH/* ; do
-	CURRENTFILE="$label/config"
-	set_config_val $CURRENTFILE $PARAMETER $VALUE
+    CURRENTFILE="$label/config"
+    set_config_val $CURRENTFILE $PARAMETER $VALUE
 done
 
 # Clear cache
 google-drive-ocamlfuse -cc
 
 echo "Parameters successfully changed and cache cleared"
-
-
-
