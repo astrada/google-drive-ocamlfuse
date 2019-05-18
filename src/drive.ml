@@ -1038,8 +1038,11 @@ let init_filesystem () =
 
 let statfs () =
   let metadata = get_metadata () in
+  let config = Context.get_ctx () |. Context.config_lens in
   let limit =
-    if metadata.CacheData.Metadata.storage_quota_limit = 0L then Int64.max_int
+    if metadata.CacheData.Metadata.storage_quota_limit = 0L ||
+       config.Config.team_drive_id <> "" then
+      Int64.max_int
     else metadata.CacheData.Metadata.storage_quota_limit in
   let f_blocks = Int64.div limit f_bsize in
   let free_bytes =
