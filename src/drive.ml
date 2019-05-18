@@ -121,8 +121,8 @@ let disambiguate_filename
     filename
   end
 
-let is_in_trash_directory path =
-  if path = trash_directory then false
+let is_in_trash_directory path config =
+  if path = trash_directory || config.Config.disable_trash then false
   else ExtString.String.starts_with path trash_directory_base_path
 
 let is_lost_and_found_root path trashed config =
@@ -141,12 +141,12 @@ let is_shared_with_me path trashed config =
   if trashed || not config.Config.shared_with_me then false
   else ExtString.String.starts_with path shared_with_me_directory
 
-let get_path_in_cache path =
+let get_path_in_cache path config =
   if path = root_directory then
     (root_directory, false)
-  else if path = trash_directory then
+  else if path = trash_directory && not config.Config.disable_trash then
     (root_directory, true)
-  else if is_in_trash_directory path then
+  else if is_in_trash_directory path config then
     let path_in_cache = Str.string_after path trash_directory_name_length in
     (path_in_cache, true)
   else
@@ -934,10 +934,12 @@ let get_metadata () =
                delete_cached_resources new_metadata cache resources);
           Utils.log_with_header "END: Removing deleted resources\n%!";
           if List.length changes > 0 then begin
-            Utils.log_with_header
-              "BEGIN: Invalidating trash bin resource\n%!";
-            Cache.Resource.invalidate_trash_bin cache;
-            Utils.log_with_header "END: Invalidating trash bin resource\n%!";
+            if not config.Config.disable_trash then begin
+              Utils.log_with_header
+                "BEGIN: Invalidating trash bin resource\n%!";
+              Cache.Resource.invalidate_trash_bin cache;
+              Utils.log_with_header "END: Invalidating trash bin resource\n%!";
+            end;
             if config.Config.lost_and_found then begin
               Utils.log_with_header
                 "BEGIN: Invalidating lost+found resource\n%!";
@@ -1523,7 +1525,7 @@ let is_file_read_only resource =
 let get_attr path =
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
 
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
@@ -1542,7 +1544,7 @@ let get_attr path =
 
   if path = root_directory then
     context.Context.mountpoint_stats
-  else if path = trash_directory ||
+  else if (path = trash_directory && not config.Config.disable_trash) ||
           is_shared_with_me_root path trashed config then
     let stats = context.Context.mountpoint_stats in
     { stats with
@@ -1665,10 +1667,10 @@ let read_dir path =
       loop []
   in
 
-  let (path_in_cache, trashed) = get_path_in_cache path in
   let context = Context.get_ctx () in
-  let cache = context.Context.cache in
   let config = context |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
+  let cache = context.Context.cache in
 
   let request_folder =
     Utils.log_with_header
@@ -1703,7 +1705,8 @@ let read_dir path =
       Utils.log_with_header
         "END: Getting folder content (path=%s, trashed=%b)\n%!"
         path_in_cache trashed;
-      begin if path = trash_directory && trashed then begin
+      begin if path = trash_directory && trashed && not
+                 config.Config.disable_trash then begin
         Utils.log_with_header "BEGIN: Getting explicitly trashed files\n%!";
         let q =
           Printf.sprintf "not '%s' in parents and trashed = true" folder_id in
@@ -1787,7 +1790,7 @@ let read_dir path =
          Filename.basename resource.CacheData.Resource.path)
       resources in
   let filenames =
-    if path = root_directory then
+    if path = root_directory && not config.Config.disable_trash then
       (Filename.basename trash_directory) :: filenames
     else filenames in
   let filenames =
@@ -1803,7 +1806,8 @@ let read_dir path =
 
 (* fopen *)
 let fopen path flags =
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let config = Context.get_ctx () |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
   let is_read_only_request = List.mem Unix.O_RDONLY flags in
 
   let check_editable =
@@ -1824,7 +1828,8 @@ let fopen path flags =
 
 (* opendir *)
 let opendir path flags =
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let config = Context.get_ctx () |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
   do_request (get_resource path_in_cache trashed) |> ignore;
   None
 (* END opendir *)
@@ -1842,7 +1847,8 @@ let update_remote_resource path
       retry_update =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let config = context |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
   let update_file =
     get_resource path_in_cache trashed >>= fun resource ->
     try_with_default (do_remote_update resource) >>= fun file_option ->
@@ -1902,8 +1908,8 @@ let utime path atime mtime =
 
 (* read *)
 let read path buf offset file_descr =
-  let (path_in_cache, trashed) = get_path_in_cache path in
   let config = Context.get_ctx () |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
 
   let request_resource =
     get_resource path_in_cache trashed >>= fun resource ->
@@ -1951,7 +1957,9 @@ let read path buf offset file_descr =
 
 (* write *)
 let write path buf offset file_descr =
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
 
   let write_to_resource =
     get_resource path_in_cache trashed >>= fun resource ->
@@ -1959,8 +1967,6 @@ let write path buf offset file_descr =
     Utils.log_with_header
       "BEGIN: Writing local file (path=%s, trashed=%b)\n%!"
       path_in_cache trashed;
-    let context = Context.get_ctx () in
-    let config = context |. Context.config_lens in
     let write_to_memory_buffers () =
       let memory_buffers = context.Context.memory_buffers in
       Buffering.MemoryBuffers.write_to_block
@@ -2005,7 +2011,8 @@ let write path buf offset file_descr =
 (* END write *)
 
 let start_uploading_if_dirty path =
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let config = Context.get_ctx () |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
   let resource = lookup_resource path_in_cache trashed in
   match resource with
       None ->
@@ -2087,7 +2094,8 @@ let upload_with_retry path =
   let try_upload resource =
     try_with_default (upload resource)
   in
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let config = Context.get_ctx () |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
   get_resource path_in_cache trashed >>= fun resource ->
   flush_memory_buffers resource;
   with_retry try_upload resource
@@ -2111,7 +2119,8 @@ let release path flags hnd =
 
 (* Create resources *)
 let create_remote_resource ?link_target is_folder path mode =
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let config = Context.get_ctx () |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
   if trashed then raise Permission_denied;
 
   let context = Context.get_ctx () in
@@ -2252,7 +2261,7 @@ let trash_resource is_folder trashed path =
         update_cached_resource cache updated_resource;
         Cache.Resource.invalidate_trash_bin cache;
         if is_folder then begin
-          let (path_in_cache, _) = get_path_in_cache path in
+          let (path_in_cache, _) = get_path_in_cache path config in
           Utils.log_with_header
             "BEGIN: Trashing folder old content (path=%s)\n%!"
             path_in_cache;
@@ -2267,7 +2276,8 @@ let trash_resource is_folder trashed path =
 
 (* Permanently delete resources *)
 let delete_resource is_folder path =
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let config = Context.get_ctx () |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
 
   let delete resource =
     let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
@@ -2303,10 +2313,10 @@ let delete_resource is_folder path =
     delete
 
 let delete_remote_resource is_folder path =
-  let (_, trashed) = get_path_in_cache path in
-
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
+  let (_, trashed) = get_path_in_cache path config in
+
   let trash_or_delete_file =
     if context.Context.skip_trash ||
         trashed && config.Config.delete_forever_in_trash_folder then
@@ -2329,11 +2339,11 @@ let rmdir path =
 
 (* rename *)
 let rename path new_path =
-  let (path_in_cache, trashed) = get_path_in_cache path in
-  let (new_path_in_cache, target_trashed) = get_path_in_cache new_path in
+  let config = Context.get_ctx () |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
+  let (new_path_in_cache, target_trashed) = get_path_in_cache new_path config in
   if trashed <> target_trashed then raise Permission_denied;
 
-  let config = Context.get_ctx () |. Context.config_lens in
   if is_lost_and_found_root path trashed config ||
      is_lost_and_found new_path target_trashed config then
     raise Permission_denied;
@@ -2487,13 +2497,14 @@ let rename path new_path =
 
 (* truncate *)
 let truncate path size =
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
   let truncate_resource =
     get_resource path_in_cache trashed >>= fun resource ->
     with_retry download_resource resource >>= fun content_path ->
     let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
     Utils.log_with_header "BEGIN: Truncating file (remote id=%s)\n%!" remote_id;
-    let context = Context.get_ctx () in
     let cache = context.Context.cache in
     let updated_resource = resource
       |> CacheData.Resource.size ^= Some size
@@ -2577,7 +2588,8 @@ let chown path uid gid =
 
 (* getxattr *)
 let get_xattr path name =
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let config = Context.get_ctx () |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
   let fetch_xattr =
     get_resource path_in_cache trashed >>= fun resource ->
     let xattrs = CacheData.Resource.parse_xattrs resource.CacheData.Resource.xattrs in
@@ -2630,7 +2642,8 @@ let set_xattr path name value xflags =
 
 (* listxattr *)
 let list_xattr path =
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let config = Context.get_ctx () |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
   let fetch_xattrs =
     get_resource path_in_cache trashed >>= fun resource ->
     let xattrs = CacheData.Resource.parse_xattrs resource.CacheData.Resource.xattrs in
@@ -2673,7 +2686,8 @@ let remove_xattr path name =
 
 (* readlink *)
 let read_link path =
-  let (path_in_cache, trashed) = get_path_in_cache path in
+  let config = Context.get_ctx () |. Context.config_lens in
+  let (path_in_cache, trashed) = get_path_in_cache path config in
   let fetch_link_target =
     get_resource path_in_cache trashed >>= fun resource ->
     let link_target =

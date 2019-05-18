@@ -122,6 +122,8 @@ type t = {
   desktop_entry_exec : string;
   (* Use memory buffers to cache writes. *)
   write_buffers : bool;
+  (* Disable trash folder. *)
+  disable_trash : bool;
 }
 
 let metadata_cache_time = {
@@ -340,6 +342,10 @@ let write_buffers = {
   GapiLens.get = (fun x -> x.write_buffers);
   GapiLens.set = (fun v x -> { x with write_buffers = v })
 }
+let disable_trash = {
+  GapiLens.get = (fun x -> x.disable_trash);
+  GapiLens.set = (fun v x -> { x with disable_trash = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -411,6 +417,7 @@ let default = {
   acknowledge_abuse = false;
   desktop_entry_exec = "";
   write_buffers = false;
+  disable_trash = false;
 }
 
 let default_debug = {
@@ -468,6 +475,7 @@ let default_debug = {
   acknowledge_abuse = false;
   desktop_entry_exec = "";
   write_buffers = false;
+  disable_trash = false;
 }
 
 let of_table table =
@@ -593,6 +601,9 @@ let of_table table =
       write_buffers =
         get "write_buffers" bool_of_string
           default.write_buffers;
+      disable_trash =
+        get "disable_trash" bool_of_string
+          default.disable_trash;
     }
 
 let to_table data =
@@ -656,6 +667,7 @@ let to_table data =
     add "acknowledge_abuse" (data.acknowledge_abuse |> string_of_bool);
     add "desktop_entry_exec" data.desktop_entry_exec;
     add "write_buffers" (data.write_buffers |> string_of_bool);
+    add "disable_trash" (data.disable_trash |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =
