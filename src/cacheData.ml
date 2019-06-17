@@ -365,6 +365,7 @@ struct
     | "json" -> "application/vnd.google-apps.script+json"
     | "ods" -> "application/x-vnd.oasis.opendocument.spreadsheet"
     | "odt" -> "application/vnd.oasis.opendocument.text"
+    | "odp" -> "application/vnd.oasis.opendocument.presentation"
     | "pdf" -> "application/pdf"
     | "png" -> "image/png"
     | "ppt"
