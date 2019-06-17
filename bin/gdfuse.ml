@@ -96,6 +96,7 @@ type application_params = {
   config_path : string;
   xdg_base_directory : bool;
   browser : string;
+  docs_mode : string;
 }
 
 let setup_application params =
@@ -181,12 +182,51 @@ let setup_application params =
   if current_config.Config.max_memory_cache_size <
      current_config.Config.memory_buffer_size then
     failwith "max_memory_cache_size should be >= memory_buffer_size";
-  let config =
+  let config_without_docs_mode =
     { current_config with
           Config.client_id;
           client_secret;
           sqlite3_busy_timeout;
     } in
+  let config =
+    if params.docs_mode = "libreoffice" then
+      { config_without_docs_mode with
+        Config.download_docs = true;
+        document_format = "odt";
+        drawing_format = "png";
+        form_format = "zip";
+        presentation_format = "odp";
+        spreadsheet_format = "ods";
+        apps_script_format = "json";
+      }
+    else if params.docs_mode = "msoffice" then
+      { config_without_docs_mode with
+        Config.download_docs = true;
+        document_format = "docx";
+        drawing_format = "png";
+        form_format = "zip";
+        presentation_format = "pptx";
+        spreadsheet_format = "xlsx";
+        apps_script_format = "json";
+      }
+    else if params.docs_mode = "desktop" then
+      { config_without_docs_mode with
+        Config.download_docs = true;
+        document_format = "desktop";
+        drawing_format = "desktop";
+        form_format = "desktop";
+        presentation_format = "desktop";
+        spreadsheet_format = "desktop";
+        apps_script_format = "desktop";
+      }
+    else if params.docs_mode = "off" then
+      { config_without_docs_mode with
+        Config.download_docs = false;
+      }
+    else if params.docs_mode <> "" then
+      failwith ("Unsupported docsmode: " ^ params.docs_mode)
+    else config_without_docs_mode
+  in
   let config_store = config_store
     |> Context.ConfigFileStore.data ^= config in
   Context.save_config_store config_store;
@@ -213,7 +253,15 @@ let setup_application params =
   let cache = Cache.create_cache app_dir config in
   let saved_version = state_store |. Context.saved_version_lens in
   Utils.log_message "Current version: %s\n%!" Config.version;
-  if params.clear_cache then begin
+  let clear_cache = if config_without_docs_mode <> config
+    then begin
+      Utils.log_message "Docs mode changed to %s%!\n" params.docs_mode;
+      true
+    end else begin
+      Utils.log_message "Docs mode not changed!\n";
+      params.clear_cache
+    end in
+  if clear_cache then begin
     Printf.printf "Clearing cache...%!";
     Utils.log_message "Cleaning up cache...%!";
     Cache.clean_up_cache cache;
@@ -225,7 +273,7 @@ let setup_application params =
       Utils.log_message
         "Version mismatch (saved=%s, current=%s)%!\n"
         saved_version Config.version;
-      if not params.clear_cache then begin
+      if not clear_cache then begin
         Utils.log_message "Cleaning up cache...%!";
         Cache.clean_up_cache cache;
         Utils.log_message "done%!";
@@ -268,7 +316,7 @@ let setup_application params =
   if not (DbCache.check_clean_shutdown cache) then begin
     Utils.log_with_header
       "google-drive-ocamlfuse didn't shut down correctly.%!\n";
-    if not params.clear_cache then begin
+    if not clear_cache then begin
       Utils.log_message "Cleaning up cache...%!";
       Cache.clean_up_cache cache;
       Utils.log_message "done\nSetting up cache db...%!";
@@ -551,6 +599,7 @@ let () =
   let config_path = ref "" in
   let xdg_base_directory = ref false in
   let browser = ref "" in
+  let docs_mode = ref "" in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -639,6 +688,11 @@ let () =
        Arg.Set_string browser,
        " starts a specific browser to access authorization page. \
         Default is xdg-open, firefox, google-chrome, chromium-browser, open.";
+       "-docsmode",
+       Arg.Set_string docs_mode,
+       " sets the specified mode for Google Docs (implies -cc, if changed). \
+        Supported values are: libreoffice, msoffice, desktop, off. \
+        Default is desktop.";
       ]) in
   let () =
     Arg.parse
@@ -671,6 +725,7 @@ let () =
         config_path = !config_path;
         xdg_base_directory = !xdg_base_directory;
         browser = !browser;
+        docs_mode = !docs_mode;
       } in
       if !mountpoint = "" then begin
         setup_application { params with mountpoint = "." };
