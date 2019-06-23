@@ -326,7 +326,6 @@ let setup_application params =
   end else begin
     DbCache.reset_clean_shutdown cache;
   end;
-  MemoryCache.start_flush_db_thread cache;
   let refresh_token = context |. Context.refresh_token_lens in
   if refresh_token = "" then
     if client_id = "" || client_secret = "" then

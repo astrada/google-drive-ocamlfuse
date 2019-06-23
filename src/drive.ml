@@ -1032,6 +1032,8 @@ let get_metadata () =
 
 let init_filesystem () =
   let context = Context.get_ctx () in
+  let cache = context.Context.cache in
+  MemoryCache.start_flush_db_thread cache;
   let config = context |. Context.config_lens in
   let root_folder_id = do_request (get_root_folder_id config) |> fst in
   Context.update_ctx (Context.root_folder_id ^= Some root_folder_id)
