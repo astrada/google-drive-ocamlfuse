@@ -2,7 +2,7 @@ open GapiUtils.Infix
 open GapiLens.Infix
 
 let application_name = "google-drive-ocamlfuse"
-let version = "0.7.5"
+let version = "0.7.6"
 
 type t = {
   (* Number of seconds metadata should be cached. *)
