@@ -63,6 +63,8 @@ If something still doesn't work, try starting from scratch removing everything
 in `~/.gdfuse/default`. In this case you will need to reauthorize the
 application.
 
+# BUGS
+
 Note that in order to reduce latency, the application will query the server
 and check for changes only every 60 seconds (configurable). So, if you make a
 change to your documents (server side), you won't see it immediately in the
