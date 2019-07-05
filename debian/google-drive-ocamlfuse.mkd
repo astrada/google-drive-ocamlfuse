@@ -1,4 +1,4 @@
-% google-drive-ocamlfuse(1) google-drive-ocamlfuse manpage
+% GOOGLE-DRIVE-OCAMLFUSE(1) google-drive-ocamlfuse manpage
 % Alessandro Strada
 % Sept 7, 2013
 
