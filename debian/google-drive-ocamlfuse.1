@@ -54,14 +54,14 @@ To get a complete list of options, run
 \f[C]google\-drive\-ocamlfuse\ \-help\f[].
 .SH TROUBLESHOOTING
 .PP
-This application is still under testing, so there are probably bugs to
-discover and fix.
-To be extra sure, if you want, you can mount the filesystem in
-read\-only mode, modifying the configuration (see the documentation), to
-avoid any write attempt to the server.
-Anyway, the rm command will simply trash your file, so you should always
-be able to rollback any changes.
-If you have problems, you can turn on debug logging:
+The filesystem can be mounted in read\-only mode for extra protection
+against bugs.
+See the documentation for the configuration file.
+.PP
+An \f[C]rm\f[] will only move your file to the trash, so you can roll
+back any changes.
+.PP
+You can also turn on additional debug logging:
 .IP
 .nf
 \f[C]
@@ -72,8 +72,8 @@ If you have problems, you can turn on debug logging:
 In \f[C]~/.gdfuse/default\f[] you can find \f[C]curl.log\f[] that will
 track every request to the Google Drive API, and \f[C]gdfuse.log\f[]
 that will log FUSE operations and cache management.
-If something goes wrong, you can try clearing the cache, with this
-command:
+.PP
+The cache may be cleared with:
 .IP
 .nf
 \f[C]
