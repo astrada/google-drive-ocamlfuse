@@ -65,12 +65,12 @@ application.
 
 # BUGS
 
-Note that in order to reduce latency, the application will query the server
-and check for changes only every 60 seconds (configurable). So, if you make a
-change to your documents (server side), you won't see it immediately in the
-mounted filesystem.
+The application will query the server for changes every 60
+seconds. This improves performance; however, if you make a server-side
+change to your documents, the filesystem won't see it for 60
+seconds. The number of seconds between refreshes is configurable.
 
-Note also that, at least for now, Google Documents will be exported read-only.
+Google Documents will be exported read-only.
 
 # FILES
 
