@@ -12,23 +12,14 @@ This program is a FUSE filesystem backed by Google Drive, written in
 OCaml.
 It lets you mount your Google Drive on Linux.
 .PP
-The first time, you can run \f[C]google\-drive\-ocamlfuse\f[] without
-parameters:
-.IP
-.nf
-\f[C]
-\ \ \ \ google\-drive\-ocamlfuse
-\f[]
-.fi
-.PP
-This command will create the default application directory
-(\f[C]~/.gdfuse/default\f[]), containing the configuration file config.
-And it will start a web browser to obtain authorization to access your
+When run for the first time without parameters,
+\f[C]google\-drive\-ocamlfuse\f[] will create the default application
+directory (\f[C]~/.gdfuse/default\f[]), including the configuration file
+\f[C]config\f[].
+Then it will start a web browser to obtain authorization to access your
 Google Drive.
-This will let you modify default configuration before mounting the
-filesystem.
 .PP
-Then you can mount the filesystem:
+To mount the filesystem after authorization:
 .IP
 .nf
 \f[C]
@@ -44,7 +35,7 @@ If you have more than one account, you can run:
 \f[]
 .fi
 .PP
-Using \f[C]label\f[] to distinguish different accounts.
+Using \f[I]label\f[] to distinguish different accounts.
 The program will use the directory \f[C]~/.gdfuse/label\f[] to host
 configuration, application state, and file cache.
 No file is shared among different accounts, so you can have a different
