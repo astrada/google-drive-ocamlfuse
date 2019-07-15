@@ -774,5 +774,6 @@ let map_filename_to_mime_type filename =
     | "ice" -> "x-conference/x-cooltalk"
     | "nef" -> "image/x-nikon-nef"
     | "gz" -> "application/x-gzip"
+    | "m4a" -> "audio/mp4"
     | _ -> "application/octet-stream"
 
