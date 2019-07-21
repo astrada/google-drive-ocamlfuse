@@ -1,3 +1,9 @@
+google-drive-ocamlfuse (0.7.8-0ubuntu1) eoan; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 21 Jul 2019 14:02:17 +0200
+
 google-drive-ocamlfuse (0.7.7-0ubuntu1) eoan; urgency=low
 
   * Bugfix release
