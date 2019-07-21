@@ -2421,22 +2421,13 @@ let rename path new_path =
             old_parent_resource.CacheData.Resource.remote_id |> Option.get in
           SessionM.return id
         end >>= fun old_parent_id ->
-        let file_patch =
-          { File.empty with
-                (* This is to avoid sending an empty file patch, that
-                 * raises an error in gapi-ocaml. *)
-                File.mimeType =
-                  Option.default
-                    "application/octet-stream"
-                    resource.CacheData.Resource.mime_type;
-          } in
         FilesResource.update
           ~supportsTeamDrives:true
           ~std_params:file_std_params
           ~addParents:new_parent_id
           ~fileId:remote_id
           ~removeParents:old_parent_id
-          file_patch >>= fun patched_file ->
+          File.empty >>= fun patched_file ->
         Utils.log_with_header "END: Moving file (remote id=%s) from %s to %s\n%!"
           remote_id old_parent_path new_parent_path;
         SessionM.return (Some patched_file)
