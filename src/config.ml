@@ -124,6 +124,8 @@ type t = {
   write_buffers : bool;
   (* Disable trash folder. *)
   disable_trash : bool;
+  (* Let Google Drive autodetect MIME types. *)
+  autodetect_mime : bool;
 }
 
 let metadata_cache_time = {
@@ -346,6 +348,10 @@ let disable_trash = {
   GapiLens.get = (fun x -> x.disable_trash);
   GapiLens.set = (fun v x -> { x with disable_trash = v })
 }
+let autodetect_mime = {
+  GapiLens.get = (fun x -> x.autodetect_mime);
+  GapiLens.set = (fun v x -> { x with autodetect_mime = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -418,6 +424,7 @@ let default = {
   desktop_entry_exec = "";
   write_buffers = false;
   disable_trash = false;
+  autodetect_mime = true;
 }
 
 let default_debug = {
@@ -476,6 +483,7 @@ let default_debug = {
   desktop_entry_exec = "";
   write_buffers = false;
   disable_trash = false;
+  autodetect_mime = true;
 }
 
 let of_table table =
@@ -604,6 +612,9 @@ let of_table table =
       disable_trash =
         get "disable_trash" bool_of_string
           default.disable_trash;
+      autodetect_mime =
+        get "autodetect_mime" bool_of_string
+          default.autodetect_mime;
     }
 
 let to_table data =
@@ -668,6 +679,7 @@ let to_table data =
     add "desktop_entry_exec" data.desktop_entry_exec;
     add "write_buffers" (data.write_buffers |> string_of_bool);
     add "disable_trash" (data.disable_trash |> string_of_bool);
+    add "autodetect_mime" (data.autodetect_mime |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =
