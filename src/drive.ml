@@ -2034,21 +2034,27 @@ let upload resource =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
   let content_path = Cache.get_content_path cache resource in
+  let config = context |. Context.config_lens in
+  let content_type =
+    if config.Config.autodetect_mime then ""
+    else
+      let file_source =
+        GapiMediaResource.create_file_resource content_path in
+      let resource_mime_type =
+        resource |. CacheData.Resource.mime_type |> Option.get in
+      let content_type = file_source |. GapiMediaResource.content_type in
+      (* Workaround to set the correct MIME type *)
+      if resource_mime_type <> "" then resource_mime_type
+      else content_type
+  in
   let file_source =
-    GapiMediaResource.create_file_resource content_path in
+    GapiMediaResource.create_file_resource
+      ~content_type
+      content_path in
   let size = file_source.GapiMediaResource.content_length in
   update_cached_resource_state_and_size cache
     CacheData.Resource.State.Uploading size resource.CacheData.Resource.id;
   let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
-  let resource_mime_type =
-    resource |. CacheData.Resource.mime_type |> Option.get in
-  let content_type = file_source |. GapiMediaResource.content_type in
-  (* Workaround to set the correct MIME type *)
-  let mime_type =
-    if resource_mime_type <> "" then resource_mime_type
-    else content_type in
-  let file_source = file_source
-    |> GapiMediaResource.content_type ^= mime_type in
   let media_source =
     if file_source.GapiMediaResource.content_length = 0L then None
     else Some file_source in
@@ -2056,7 +2062,9 @@ let upload resource =
     "BEGIN: Uploading file (id=%Ld, path=%s, cache path=%s, \
      content type=%s, content_length=%Ld).\n%!"
     resource.CacheData.Resource.id resource.CacheData.Resource.path
-    content_path mime_type size;
+    content_path
+    (if content_type = "" then "autodetect" else content_type)
+    size;
   let file_patch = File.empty |> File.modifiedTime ^= GapiDate.now () in
   FilesResource.update
     ~supportsTeamDrives:true
@@ -2070,7 +2078,7 @@ let upload resource =
     resource.CacheData.Resource.id
     resource.CacheData.Resource.path
     content_path
-    mime_type;
+    file.File.mimeType;
   let reloaded_resource =
     Cache.Resource.select_first_resource_with_remote_id cache file.File.id in
   let resource = Option.default resource reloaded_resource in
@@ -2145,7 +2153,9 @@ let create_remote_resource ?link_target is_folder path mode =
     let mimeType =
       if is_folder
       then folder_mime_type
-      else Mime.map_filename_to_mime_type name in
+      else if config.Config.autodetect_mime then ""
+      else Mime.map_filename_to_mime_type name
+    in
     let appProperties = [CacheData.Resource.mode_to_app_property mode] in
     let appProperties = match link_target with
         None -> appProperties
