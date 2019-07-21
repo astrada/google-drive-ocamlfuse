@@ -24,34 +24,22 @@ This [PPA repository](https://launchpad.net/~alessandro-strada/+archive/ubuntu/g
 
 ## Debian Stretch
 
-1. Run following commands
+1. Run `sudo apt install software-properties-common dirmngr`
 
-    `apt install software-properties-common dirmngr`  
-    `add-apt-repository ppa:alessandro-strada/ppa`  
-    `nano /etc/apt/sources.list.d/alessandro-strada-ubuntu-ppa-bionic.list`  
-
-2. Edit the file
-
-    a. replace **bionic** at the end of both lines with **xenial**, otherwise you will get stuck with version 0.6.21,  
-    where team drive does not work properly  
-    b. uncomment the second line  
-
-3. So it looks like this:
+2. As root, create the file `/etc/apt/sources.list.d/alessandro-strada-ubuntu-ppa-bionic.list` and write the following lines:
 
     `deb http://ppa.launchpad.net/alessandro-strada/ppa/ubuntu xenial main`  
     `deb-src http://ppa.launchpad.net/alessandro-strada/ppa/ubuntu xenial main`  
 
-4. Then you need to add the key otherwise the command **apt update** will not take the new sourcelist into account
+3. Then you need to add the key otherwise the command **apt update** will not take the new sourcelist into account
 
-    `apt-key adv --keyserver keyserver.ubuntu.com --recv-keys AD5F235DF639B041`  
+    `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys AD5F235DF639B041`  
 
     If you get a message like this: `gpg: keyserver receive failed: Server indicated a failure` Then do:
-    `apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys AD5F235DF639B041`
+    `sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys AD5F235DF639B041`
 
-    `apt update`  
-    `apt install google-drive-ocamlfuse`  
-
-5. You are done
+4. Run `sudo apt update`
+5. Run `sudo apt install google-drive-ocamlfuse`
 
 ## Installing from source
 

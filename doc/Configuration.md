@@ -26,7 +26,7 @@ Specifies whether to download Google Docs (these files are read-only, even if `r
 
 Text document [[export format|Exportable-formats#valid-download-formats-for-text-documents]]:
 
-    document_format=odt
+    document_format=desktop
 
 If `document_format=desktop`, specifies the icon of the desktop link (default is no icon):
 
@@ -34,7 +34,7 @@ If `document_format=desktop`, specifies the icon of the desktop link (default is
 
 Drawings [[export format|Exportable-formats#valid-download-formats-for-drawings]]:
 
-    drawing_format=png
+    drawing_format=desktop
 
 If `drawing_format=desktop`, specifies the icon of the desktop link (default is no icon):
 
@@ -42,7 +42,7 @@ If `drawing_format=desktop`, specifies the icon of the desktop link (default is 
 
 Forms [[export format|Exportable-formats#valid-formats-for-spreadsheets]]:
 
-    form_format=ods
+    form_format=desktop
 
 If `form_format=desktop`, specifies the icon of the desktop link (default is no icon):
 
@@ -50,7 +50,7 @@ If `form_format=desktop`, specifies the icon of the desktop link (default is no 
 
 Presentations [[export format|Exportable-formats#valid-formats-for-presentations]]:
 
-    presentation_format=pdf
+    presentation_format=desktop
 
 If `presentation_format=desktop`, specifies the icon of the desktop link (default is no icon):
 
@@ -58,7 +58,7 @@ If `presentation_format=desktop`, specifies the icon of the desktop link (defaul
 
 Spreadsheets [[export format|Exportable-formats#valid-formats-for-spreadsheets]]:
 
-    spreadsheet_format=ods
+    spreadsheet_format=desktop
 
 If `spreadsheet_format=desktop`, specifies the icon of the desktop link (default is no icon):
 
@@ -82,7 +82,7 @@ If `fusion_table_format=desktop`, specifies the icon of the desktop link (defaul
 
 Google Apps Script [[export format|Exportable-formats#valid-formats-for-google-apps-scripts]]:
 
-    apps_script_format=json
+    apps_script_format=desktop
 
 If `apps_script_format=desktop`, specifies the icon of the desktop link (default is no icon):
 
@@ -228,6 +228,14 @@ Path of the directory containing log files (if blank uses the default):
 [Since 0.7.1] Enable caching file writes in memory:
 
     write_buffers=false
+
+[Since 0.7.4] Disable trash bin access:
+
+    disable_trash=false
+
+[Since 0.7.8] Let Google Drive autodetect MIME types:
+
+    autodetect_mime=true
 
 ### Document export formats
 

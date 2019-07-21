@@ -1,3 +1,18 @@
+0.7.8
+=====
+
+This version introduces a new config option (`autodetect_mime`). If this option is set to `true` (the default value), the MIME type of uploaded resources is left blank, so Google Drive can detect it. If `false` the old behavior is used.
+
+0.7.5
+=====
+
+This version introduces a new command line option (`-docsmode`), that can be can be used to quickly set Google Docs config options. See [[Usage]].
+
+0.7.4
+=====
+
+This version introduces a new config option (`disable_trash`), that can be set to `true`, if you don't want to fetch the trash bin content in `.Trash`.
+
 0.7.1
 =====
 
