@@ -618,7 +618,7 @@ let map_filename_to_mime_type filename =
     | "aac" -> "audio/x-aac"
     | "aif" | "aiff" | "aifc" -> "audio/x-aiff"
     | "caf" -> "audio/x-caf"
-    | "flac" -> "audio/x-flac"
+    | "flac" -> "audio/flac"
     | "mka" -> "audio/x-matroska"
     | "m3u" -> "audio/x-mpegurl"
     | "wax" -> "audio/x-ms-wax"
