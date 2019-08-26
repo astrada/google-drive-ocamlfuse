@@ -138,6 +138,11 @@ struct
         (fun range ->
            let block_offset =
              Int64.sub range.offset block.start_pos |> Int64.to_int in
+           Utils.log_with_header
+             "BEGIN: Flushing range (content path=%s, start_pos=%Ld, \
+              range.offset=%Ld, range.length=%d, block_offset=%d)\n%!"
+             block.content_path block.start_pos range.offset
+             range.length block_offset;
            let buf =
              Bigarray.Array1.sub block.sub_array block_offset range.length in
            Utils.with_out_channel block.content_path
@@ -146,7 +151,10 @@ struct
                 Unix.LargeFile.lseek
                   file_descr range.offset Unix.SEEK_SET |> ignore;
                 Fuse.Unix_util.write file_descr buf |> ignore
-             )
+             );
+           Utils.log_with_header
+             "END: Flushing range (content path=%s, start_pos=%Ld)\n%!"
+             block.content_path block.start_pos;
         )
         block.dirty_ranges
     end
@@ -391,8 +399,9 @@ struct
       release_lru_buffer_if_no_free_buffer_left buffers;
       flush_lru_buffer_if_no_free_buffer_left buffers;
       Utils.log_with_header
-        "BEGIN: Acquiring memory buffer (remote id=%s, index=%d)\n%!"
-        remote_id block_index;
+        "BEGIN: Acquiring memory buffer (remote id=%s, index=%d, \
+         resource_size=%Ld, start_pos=%Ld)\n%!"
+        remote_id block_index resource_size start_pos;
       let b =
         let size =
           (Int64.to_int
@@ -657,8 +666,11 @@ struct
 
   let write_to_block remote_id content_path src_arr offset buffers =
     let block_size = Int64.of_int buffers.block_size in
+    let total_written_bytes =
+      Int64.add offset (Int64.of_int (Bigarray.Array1.dim src_arr)) in
     let resource_size =
-      Int64.mul block_size (Int64.succ (Int64.div offset block_size)) in
+      Int64.mul block_size
+        (Int64.succ (Int64.div total_written_bytes block_size)) in
     let write block_index dest_offset src_arr =
       let block =
         get_block block_index remote_id resource_size buffers in
@@ -669,7 +681,7 @@ struct
            let bytes =
              Block.blit_from_arr src_arr dest_offset block in
            let range = {
-             Block.offset = offset;
+             Block.offset = dest_offset;
              length = bytes;
            } in
            block.Block.state <- Block.Dirty;
