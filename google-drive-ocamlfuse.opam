@@ -13,7 +13,7 @@ depends: [
   "ocaml" {>= "4.02.3"}
   "base-threads" {build}
   "camlidl" {build}
-  "gapi-ocaml" {>= "0.3.13"}
+  "gapi-ocaml" {>= "0.3.14"}
   "dune"
   "ocamlfuse" {>= "2.7.1-cvs6"}
   "cryptokit"

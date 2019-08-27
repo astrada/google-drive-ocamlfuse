@@ -605,10 +605,10 @@ let get_file_from_server parent_folder_id name trashed =
     Printf.sprintf "name='%s' and '%s' in parents and trashed=%b"
       (escape_apostrophe name) parent_folder_id trashed in
   FilesResource.list
-    ~supportsTeamDrives:true
-    ~teamDriveId:config.Config.team_drive_id
-    ~includeTeamDriveItems:(config.Config.team_drive_id <> "")
-    ~corpora:(if config.Config.team_drive_id <> "" then "teamDrive" else "user")
+    ~supportsAllDrives:true
+    ~driveId:config.Config.team_drive_id
+    ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
+    ~corpora:(if config.Config.team_drive_id <> "" then "drive" else "user")
     ~std_params:file_list_std_params
     ~q
     ~pageSize:1 >>= fun file_list ->
@@ -625,7 +625,7 @@ let get_file_from_server parent_folder_id name trashed =
 let get_root_folder_id_from_server () =
   Utils.log_with_header "BEGIN: Getting root resource from server\n%!";
   FilesResource.get
-    ~supportsTeamDrives:true
+    ~supportsAllDrives:true
     ~std_params:file_std_params
     ~fileId:default_root_folder_id >>= fun file ->
   Utils.log_with_header "END: Getting root resource from server\n%!";
@@ -681,8 +681,8 @@ let get_metadata () =
               "startPageToken"
       } in
     ChangesResource.getStartPageToken
-      ~supportsTeamDrives:true
-      ~teamDriveId:config.Config.team_drive_id
+      ~supportsAllDrives:true
+      ~driveId:config.Config.team_drive_id
       ~std_params >>= fun startPageToken ->
     SessionM.return startPageToken.StartPageToken.startPageToken
   in
@@ -723,9 +723,9 @@ let get_metadata () =
     let get_all_changes =
       let rec loop pageToken accu =
         ChangesResource.list
-          ~supportsTeamDrives:true
-          ~teamDriveId:config.Config.team_drive_id
-          ~includeTeamDriveItems:(config.Config.team_drive_id <> "")
+          ~supportsAllDrives:true
+          ~driveId:config.Config.team_drive_id
+          ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
           ~std_params:changes_std_params
           ~includeRemoved:true
           ~pageToken >>= fun change_list ->
@@ -813,9 +813,9 @@ let get_metadata () =
                 GapiService.StandardParameters.fields = "newStartPageToken"
           } in
         ChangesResource.list
-          ~supportsTeamDrives:true
-          ~teamDriveId:config.Config.team_drive_id
-          ~includeTeamDriveItems:(config.Config.team_drive_id <> "")
+          ~supportsAllDrives:true
+          ~driveId:config.Config.team_drive_id
+          ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
           ~std_params
           ~includeRemoved:true
           ~pageSize:change_limit
@@ -1137,7 +1137,7 @@ and get_resource path trashed =
         "BEGIN: Getting file from server (remote id=%s)\n%!"
         remote_id;
       FilesResource.get
-        ~supportsTeamDrives:true
+        ~supportsAllDrives:true
         ~std_params:file_std_params
         ~fileId:remote_id >>= fun file ->
       Utils.log_with_header
@@ -1242,7 +1242,7 @@ let with_retry f resource =
                GapiUtils.wait_exponential_backoff n;
                let fileId = res.CacheData.Resource.remote_id |> Option.get in
                FilesResource.get
-                 ~supportsTeamDrives:true
+                 ~supportsAllDrives:true
                  ~std_params:file_std_params
                  ~fileId >>= fun file ->
                let (state, verb) =
@@ -1302,7 +1302,7 @@ let create_desktop_entry resource content_path config =
 let download_media media_download fileId =
   Utils.try_with_m
     (FilesResource.get
-       ~supportsTeamDrives:true
+       ~supportsAllDrives:true
        ~std_params:file_download_std_params
        ~media_download
        ~fileId)
@@ -1314,7 +1314,7 @@ let download_media media_download fileId =
            "Warning: abusive file detected, but downloading anyway (fileId=%s)\n%!"
            fileId;
          FilesResource.get
-           ~supportsTeamDrives:true
+           ~supportsAllDrives:true
            ~acknowledgeAbuse:true
            ~std_params:file_download_std_params
            ~media_download
@@ -1655,10 +1655,10 @@ let read_dir path =
   let get_all_files q =
     let rec loop ?pageToken accu =
       FilesResource.list
-        ~supportsTeamDrives:true
-        ~teamDriveId:config.Config.team_drive_id
-        ~includeTeamDriveItems:(config.Config.team_drive_id <> "")
-        ~corpora:(if config.Config.team_drive_id <> "" then "teamDrive"
+        ~supportsAllDrives:true
+        ~driveId:config.Config.team_drive_id
+        ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
+        ~corpora:(if config.Config.team_drive_id <> "" then "drive"
                   else "user")
         ~std_params:file_list_std_params
         ~q
@@ -1892,7 +1892,7 @@ let utime path atime mtime =
       let file_patch = File.empty
             |> File.modifiedTime ^= Netdate.create mtime in
       FilesResource.update
-        ~supportsTeamDrives:true
+        ~supportsAllDrives:true
         ~std_params:file_std_params
         ~fileId:remote_id
         file_patch >>= fun patched_file ->
@@ -2067,7 +2067,7 @@ let upload resource =
     size;
   let file_patch = File.empty |> File.modifiedTime ^= GapiDate.now () in
   FilesResource.update
-    ~supportsTeamDrives:true
+    ~supportsAllDrives:true
     ~std_params:file_std_params
     ?media_source
     ~fileId:remote_id
@@ -2175,7 +2175,7 @@ let create_remote_resource ?link_target is_folder path mode =
       "BEGIN: Creating %s (path=%s, trashed=%b) on server\n%!"
       (if is_folder then "folder" else "file") path_in_cache trashed;
     FilesResource.create
-      ~supportsTeamDrives:true
+      ~supportsAllDrives:true
       ~std_params:file_std_params
       file >>= fun created_file ->
     Utils.log_with_header
@@ -2223,10 +2223,10 @@ let check_if_empty remote_id is_folder trashed =
       }
     in
     FilesResource.list
-      ~supportsTeamDrives:true
-      ~teamDriveId:config.Config.team_drive_id
-      ~includeTeamDriveItems:(config.Config.team_drive_id <> "")
-      ~corpora:(if config.Config.team_drive_id <> "" then "teamDrive"
+      ~supportsAllDrives:true
+      ~driveId:config.Config.team_drive_id
+      ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
+      ~corpora:(if config.Config.team_drive_id <> "" then "drive"
                 else "user")
       ~std_params
       ~pageSize:1
@@ -2261,7 +2261,7 @@ let trash_resource is_folder trashed path =
       }
     in
     FilesResource.update
-      ~supportsTeamDrives:true
+      ~supportsAllDrives:true
       ~std_params:file_std_params
       ~fileId:remote_id
       file_patch >>= fun trashed_file ->
@@ -2301,7 +2301,7 @@ let delete_resource is_folder path =
       "BEGIN: Permanently deleting file (remote id=%s)\n%!"
       remote_id;
     FilesResource.delete
-      ~supportsTeamDrives:true
+      ~supportsAllDrives:true
       ~std_params:file_std_params
       ~fileId:remote_id >>= fun () ->
     Utils.log_with_header
@@ -2403,7 +2403,7 @@ let rename path new_path =
               File.name = new_name;
         } in
       FilesResource.update
-        ~supportsTeamDrives:true
+        ~supportsAllDrives:true
         ~std_params:file_std_params
         ~fileId:remote_id
         file_patch >>= fun patched_file ->
@@ -2429,7 +2429,7 @@ let rename path new_path =
                   Option.default "" resource.CacheData.Resource.mime_type;
           } in
         FilesResource.update
-          ~supportsTeamDrives:true
+          ~supportsAllDrives:true
           ~std_params:file_std_params
           ~fileId:target_remote_id
           file_patch >>= fun patched_file ->
@@ -2493,7 +2493,7 @@ let rename path new_path =
         SessionM.return id
       end >>= fun old_parent_id ->
       FilesResource.update
-        ~supportsTeamDrives:true
+        ~supportsAllDrives:true
         ~std_params:file_std_params
         ~addParents:new_parent_id
         ~fileId:remote_id
@@ -2622,7 +2622,7 @@ let chmod path mode =
       let file_patch = File.empty
         |> File.appProperties ^= [CacheData.Resource.mode_to_app_property mode] in
       FilesResource.update
-        ~supportsTeamDrives:true
+        ~supportsAllDrives:true
         ~std_params:file_std_params
         ~fileId:remote_id
         file_patch >>= fun patched_file ->
@@ -2662,7 +2662,7 @@ let chown path uid gid =
       let file_patch = File.empty
          |> File.appProperties ^= app_properties in
       FilesResource.update
-        ~supportsTeamDrives:true
+        ~supportsAllDrives:true
         ~std_params:file_std_params
         ~fileId:remote_id
         file_patch >>= fun patched_file ->
@@ -2716,7 +2716,7 @@ let set_xattr path name value xflags =
              CacheData.Resource.xattr_to_app_property name value;
            ] in
       FilesResource.update
-        ~supportsTeamDrives:true
+        ~supportsAllDrives:true
         ~std_params:file_std_params
         ~fileId:remote_id
         file_patch >>= fun patched_file ->
@@ -2760,7 +2760,7 @@ let remove_xattr path name =
              CacheData.Resource.xattr_no_value_to_app_property name;
            ] in
       FilesResource.update
-        ~supportsTeamDrives:true
+        ~supportsAllDrives:true
         ~std_params:file_std_params
         ~fileId:remote_id
         file_patch >>= fun patched_file ->
