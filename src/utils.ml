@@ -234,3 +234,23 @@ let safe_makedir dir =
     [""]
     ds |> ignore
 
+let file_copy source_path target_path =
+  let copy_buffer_size = 8192 in
+  let copy_buffer = Bytes.create copy_buffer_size in
+  with_in_channel source_path
+    (fun source_ch -> 
+       with_out_channel ~mode:[Open_creat; Open_trunc; Open_wronly] target_path
+         (fun target_ch ->
+            let rec copy_loop () =
+              match input source_ch copy_buffer 0 copy_buffer_size with
+              | 0 -> ()
+              | r ->
+                begin
+                  ignore (output target_ch copy_buffer 0 r);
+                  copy_loop ();
+                end
+            in
+            copy_loop ();
+         )
+    )
+
