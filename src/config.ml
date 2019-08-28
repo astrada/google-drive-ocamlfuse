@@ -129,6 +129,8 @@ type t = {
   (* Make mv overwrite destination file keeping version history (if false, the
    * target will be trashed). *)
   mv_keep_target : bool;
+  (* Enable asynchronous uploading. *)
+  async_upload_queue : bool;
 }
 
 let metadata_cache_time = {
@@ -359,6 +361,10 @@ let mv_keep_target = {
   GapiLens.get = (fun x -> x.mv_keep_target);
   GapiLens.set = (fun v x -> { x with mv_keep_target = v })
 }
+let async_upload_queue = {
+  GapiLens.get = (fun x -> x.async_upload_queue);
+  GapiLens.set = (fun v x -> { x with async_upload_queue = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -433,6 +439,7 @@ let default = {
   disable_trash = false;
   autodetect_mime = true;
   mv_keep_target = false;
+  async_upload_queue = false;
 }
 
 let default_debug = {
@@ -493,6 +500,7 @@ let default_debug = {
   disable_trash = false;
   autodetect_mime = true;
   mv_keep_target = false;
+  async_upload_queue = false;
 }
 
 let of_table table =
@@ -627,6 +635,9 @@ let of_table table =
       mv_keep_target =
         get "mv_keep_target" bool_of_string
           default.mv_keep_target;
+      async_upload_queue =
+        get "async_upload_queue" bool_of_string
+          default.async_upload_queue;
     }
 
 let to_table data =
@@ -693,6 +704,7 @@ let to_table data =
     add "disable_trash" (data.disable_trash |> string_of_bool);
     add "autodetect_mime" (data.autodetect_mime |> string_of_bool);
     add "mv_keep_target" (data.mv_keep_target |> string_of_bool);
+    add "async_upload_queue" (data.async_upload_queue |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =
