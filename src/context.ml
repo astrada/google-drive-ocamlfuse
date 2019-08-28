@@ -37,6 +37,8 @@ type t = {
   root_folder_id : string option;
   (* Metadata memory cache saving thread *)
   flush_db_thread : Thread.t option;
+  (* Async upload thread *)
+  async_upload_thread : Thread.t option;
 }
 
 let app_dir = {
@@ -102,6 +104,10 @@ let root_folder_id = {
 let flush_db_thread = {
   GapiLens.get = (fun x -> x.flush_db_thread);
   GapiLens.set = (fun v x -> { x with flush_db_thread = v })
+}
+let async_upload_thread = {
+  GapiLens.get = (fun x -> x.async_upload_thread);
+  GapiLens.set = (fun v x -> { x with async_upload_thread = v })
 }
 
 let config_lens =

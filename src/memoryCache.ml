@@ -5,7 +5,7 @@ type t = {
   resources : (int64, CacheData.Resource.t) Hashtbl.t;
   last_id : int64;
   dirty : bool;
-  stop_flush_db_tread : bool;
+  stop_flush_db : bool;
 }
 
 let metadata = {
@@ -24,9 +24,9 @@ let dirty = {
   GapiLens.get = (fun x -> x.dirty);
   GapiLens.set = (fun v x -> { x with dirty = v })
 }
-let stop_flush_db_tread = {
-  GapiLens.get = (fun x -> x.stop_flush_db_tread);
-  GapiLens.set = (fun v x -> { x with stop_flush_db_tread = v })
+let stop_flush_db = {
+  GapiLens.get = (fun x -> x.stop_flush_db);
+  GapiLens.set = (fun v x -> { x with stop_flush_db = v })
 }
 
 module ConcurrentMemoryCache =
@@ -482,7 +482,7 @@ let setup cache =
     resources;
     last_id = !last_id;
     dirty = false;
-    stop_flush_db_tread = false;
+    stop_flush_db = false;
   } in
   ConcurrentMemoryCache.set data
 
@@ -510,7 +510,7 @@ let flush_db cache =
 let flush_db_thread cache =
   let check () =
     let d = ConcurrentMemoryCache.get () in
-    if d.stop_flush_db_tread then raise Exit in
+    if d.stop_flush_db then raise Exit in
   try
     while true do
       for _ = 1 to cache.CacheData.autosaving_interval do
@@ -538,6 +538,6 @@ let start_flush_db_thread cache =
 let stop_flush_db_thread () =
   ConcurrentMemoryCache.update
     (fun d ->
-       d |> stop_flush_db_tread ^= true
+       d |> stop_flush_db ^= true
     )
 

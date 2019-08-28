@@ -311,6 +311,7 @@ let setup_application params =
     buffer_eviction_thread = None;
     root_folder_id = None;
     flush_db_thread = None;
+    async_upload_thread = None;
   } in
   Context.set_ctx context;
   if not (DbCache.check_clean_shutdown cache) then begin
@@ -757,6 +758,16 @@ let () =
                      (Thread.id flush_db_thread);
                    MemoryCache.stop_flush_db_thread ();
                    Thread.join flush_db_thread;
+                 end
+             end;
+             begin match context.Context.async_upload_thread with
+               | None -> ()
+               | Some async_upload_thread -> begin
+                   Utils.log_message
+                     "done\nStopping async upload thread (TID=%d)...%!"
+                     (Thread.id async_upload_thread);
+                   MemoryCache.stop_flush_db_thread ();
+                   Thread.join async_upload_thread;
                  end
              end;
              Utils.log_message "done\nFlushing cache...\n%!";
