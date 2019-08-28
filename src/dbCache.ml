@@ -483,6 +483,47 @@ struct
     Sqlite3.prepare db sql
 
 end
+
+module UploadQueueStmt =
+struct
+  let fields_without_id = "resource_id, state, last_update"
+  let fields = "id, " ^ fields_without_id
+
+  let prepare_insert_stmt db =
+    let sql =
+      "INSERT OR REPLACE INTO upload_queue (" ^ fields_without_id ^ ") \
+       VALUES ( \
+         :resource_id, \
+         :state, \
+         :last_update \
+       );"
+    in
+    Sqlite3.prepare db sql
+
+  let prepare_select_next_resource_stmt db =
+    let sql =
+      "SELECT " ^ fields ^ " \
+       FROM upload_queue \
+       WHERE state = 'ToUpload';"
+    in
+    Sqlite3.prepare db sql
+
+  let prepare_select_with_resource_id db =
+    let sql =
+      "SELECT " ^ fields ^ " \
+       FROM upload_queue \
+       WHERE resource_id = :resource_id and state = 'ToUpload';"
+    in
+    Sqlite3.prepare db sql
+
+  let prepare_select_all_entries db =
+    let sql =
+      "SELECT " ^ fields ^ " \
+       FROM upload_queue;"
+    in
+    Sqlite3.prepare db sql
+
+end
 (* END Prepare SQL *)
 
 (* Open/close db *)
@@ -895,6 +936,65 @@ struct
 
 end
 
+module UploadQueue =
+struct
+  (* Queries *)
+  let save_upload_entry db stmt upload_entry =
+    let open CacheData.UploadEntry in
+    bind_int stmt ":resource_id" (Some upload_entry.resource_id);
+    bind_text stmt ":state" (Some upload_entry.state);
+    bind_float stmt ":last_update" (Some upload_entry.last_update);
+    final_step stmt;
+    upload_entry |> CacheData.UploadEntry.id ^= Sqlite3.last_insert_rowid db
+
+  let row_to_upload_entry row_data =
+    { CacheData.UploadEntry.id = row_data.(0) |> data_to_int64 |> Option.get;
+      resource_id = row_data.(1) |> data_to_int64 |> Option.get;
+      state = row_data.(2) |> data_to_string |> Option.get;
+      last_update = row_data.(3) |> data_to_float |> Option.get;
+    }
+
+  let insert_upload_entry cache upload_entry =
+    with_transaction cache
+      (fun db ->
+         let stmt = UploadQueueStmt.prepare_insert_stmt db in
+         let result = save_upload_entry db stmt upload_entry in
+         finalize_stmt stmt;
+         result)
+
+  let select_next_resource cache =
+    with_transaction cache
+      (fun db ->
+         let stmt = UploadQueueStmt.prepare_select_next_resource_stmt db in
+         let result =
+           select_first_row stmt (fun _ -> ()) row_to_upload_entry in
+         finalize_stmt stmt;
+         result)
+
+  let select_with_resource_id cache resource_id =
+    with_transaction cache
+      (fun db ->
+         let stmt = UploadQueueStmt.prepare_select_with_resource_id db in
+         bind_int stmt ":resource_id" (Some resource_id);
+         let result =
+           select_first_row stmt (fun _ -> ()) row_to_upload_entry in
+         finalize_stmt stmt;
+         result)
+
+  let select_all_entries cache =
+    with_transaction cache
+      (fun db ->
+         let stmt = UploadQueueStmt.prepare_select_all_entries db in
+         let results =
+           select_all_rows stmt
+             (fun _ -> ())
+             row_to_upload_entry in
+         finalize_stmt stmt;
+         results)
+  (* END Queries *)
+
+end
+
 (* Setup *)
 let setup_db cache =
   with_db cache
@@ -948,6 +1048,7 @@ let setup_db cache =
             last_update REAL NOT NULL \
          ); \
          CREATE INDEX IF NOT EXISTS resource_id_index ON upload_queue (resource_id); \
+         CREATE INDEX IF NOT EXISTS state_index ON upload_queue (state); \
          UPDATE resource \
          SET state = 'ToDownload' \
          WHERE state = 'Downloading'; \

@@ -168,6 +168,28 @@ struct
 
 end
 
+module UploadQueue =
+struct
+  let insert_upload_entry cache upload_entry =
+    if cache.CacheData.in_memory then
+      MemoryCache.UploadQueue.insert_upload_entry cache upload_entry
+    else
+      DbCache.UploadQueue.insert_upload_entry cache upload_entry
+
+  let select_next_resource cache =
+    if cache.CacheData.in_memory then
+      MemoryCache.UploadQueue.select_next_resource cache
+    else
+      DbCache.UploadQueue.select_next_resource cache
+
+  let select_with_resource_id cache resource_id =
+    if cache.CacheData.in_memory then
+      MemoryCache.UploadQueue.select_with_resource_id cache resource_id
+    else
+      DbCache.UploadQueue.select_with_resource_id cache resource_id
+
+end
+
 (* Resource content *)
 let get_content_path cache resource =
   Filename.concat cache.CacheData.cache_dir

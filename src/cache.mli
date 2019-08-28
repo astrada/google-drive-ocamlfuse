@@ -35,6 +35,15 @@ sig
   val update_cache_size : CacheData.t -> int64 -> unit
 end
 
+module UploadQueue :
+sig
+  val insert_upload_entry :
+    CacheData.t -> CacheData.UploadEntry.t -> CacheData.UploadEntry.t
+  val select_next_resource : CacheData.t -> CacheData.UploadEntry.t option
+  val select_with_resource_id :
+    CacheData.t -> int64 -> CacheData.UploadEntry.t option
+end
+
 val get_content_path : CacheData.t -> CacheData.Resource.t -> string
 val delete_files_from_cache : CacheData.t -> CacheData.Resource.t list -> int64
 val setup_db : CacheData.t -> unit

@@ -3,7 +3,9 @@ open GapiLens.Infix
 type t = {
   metadata : CacheData.Metadata.t option;
   resources : (int64, CacheData.Resource.t) Hashtbl.t;
-  last_id : int64;
+  last_resource_id : int64;
+  upload_queue : (int64, CacheData.UploadEntry.t) Hashtbl.t;
+  last_upload_entry_id : int64;
   dirty : bool;
   stop_flush_db : bool;
 }
@@ -16,9 +18,17 @@ let resources = {
   GapiLens.get = (fun x -> x.resources);
   GapiLens.set = (fun v x -> { x with resources = v })
 }
-let last_id = {
-  GapiLens.get = (fun x -> x.last_id);
-  GapiLens.set = (fun v x -> { x with last_id = v })
+let last_resource_id = {
+  GapiLens.get = (fun x -> x.last_resource_id);
+  GapiLens.set = (fun v x -> { x with last_resource_id = v })
+}
+let upload_queue = {
+  GapiLens.get = (fun x -> x.upload_queue);
+  GapiLens.set = (fun v x -> { x with upload_queue = v })
+}
+let last_upload_entry_id = {
+  GapiLens.get = (fun x -> x.last_upload_entry_id);
+  GapiLens.set = (fun v x -> { x with last_upload_entry_id = v })
 }
 let dirty = {
   GapiLens.get = (fun x -> x.dirty);
@@ -60,11 +70,11 @@ struct
          delete_all_with_path d
            resource.CacheData.Resource.path
            resource.CacheData.Resource.trashed;
-         let new_id = Int64.succ d.last_id in
+         let new_id = Int64.succ d.last_resource_id in
          let r = resource |> CacheData.Resource.id ^= new_id in
          Hashtbl.replace d.resources new_id r;
          result := r;
-         d |> last_id ^= new_id
+         d |> last_resource_id ^= new_id
            |> dirty ^= true
       );
       !result
@@ -165,19 +175,19 @@ struct
          delete_resources_with_parent_path d parent_path trashed;
          let (rs, lid) =
            List.fold_left
-             (fun (rs, last_id) r ->
-                let new_id = Int64.succ last_id in
+             (fun (rs, last_resource_id) r ->
+                let new_id = Int64.succ last_resource_id in
                 let r = r |> CacheData.Resource.id ^= new_id in
                 Hashtbl.replace d.resources new_id r;
                 (r :: rs, new_id)
              )
-             ([], d.last_id)
+             ([], d.last_resource_id)
              resources in
          result := rs;
-         d |> last_id ^= lid
+         d |> last_resource_id ^= lid
            |> dirty ^= true
       );
-      !result
+    !result
 
   let is_invalidable r =
     match r.CacheData.Resource.state with
@@ -465,22 +475,92 @@ struct
 
 end
 
+module UploadQueue =
+struct
+  let insert_upload_entry cache upload_entry =
+    let result = ref upload_entry in
+    ConcurrentMemoryCache.update
+      (fun d ->
+         let new_id = Int64.succ d.last_upload_entry_id in
+         let e = upload_entry |> CacheData.UploadEntry.id ^= new_id in
+         Hashtbl.replace d.upload_queue new_id e;
+         result := e;
+         d |> last_upload_entry_id ^= new_id
+           |> dirty ^= true
+      );
+    !result
+
+  let select_next_resource cache =
+    ConcurrentMemoryCache.with_lock
+      (fun () ->
+         let to_upload =
+           CacheData.UploadEntry.State.to_string
+             CacheData.UploadEntry.State.ToUpload in
+         let result = ref None in
+         let d = ConcurrentMemoryCache.get_no_lock () in
+         begin try
+             Hashtbl.iter
+               (fun _ e ->
+                  if e.CacheData.UploadEntry.state = to_upload then begin
+                    result := Some e;
+                    raise Exit
+                  end
+               )
+               d.upload_queue
+           with Exit -> ()
+         end;
+         !result
+      )
+
+  let select_with_resource_id cache resource_id =
+    ConcurrentMemoryCache.with_lock
+      (fun () ->
+         let result = ref None in
+         let d = ConcurrentMemoryCache.get_no_lock () in
+         begin try
+             Hashtbl.iter
+               (fun _ e ->
+                  if e.CacheData.UploadEntry.resource_id = resource_id then begin
+                    result := Some e;
+                    raise Exit
+                  end
+               )
+               d.upload_queue
+           with Exit -> ()
+         end;
+         !result
+      )
+
+end
+
 let setup cache =
   let metadata = DbCache.Metadata.select_metadata cache in
   let resources = Hashtbl.create 1024 in
   let all_resources = DbCache.Resource.select_all_resources cache in
-  let last_id = ref 0L in
+  let last_resource_id = ref 0L in
   List.iter
     (fun r ->
-       if r.CacheData.Resource.id > !last_id then begin
-         last_id := r.CacheData.Resource.id
+       if r.CacheData.Resource.id > !last_resource_id then begin
+         last_resource_id := r.CacheData.Resource.id
        end;
        Hashtbl.replace resources r.CacheData.Resource.id r)
     all_resources;
+  let upload_queue = Hashtbl.create 1024 in
+  let all_upload_entries = DbCache.UploadQueue.select_all_entries cache in
+  let last_upload_entry_id = ref 0L in
+  List.iter
+    (fun e ->
+       if e.CacheData.UploadEntry.id > !last_upload_entry_id then begin
+         last_upload_entry_id := e.CacheData.UploadEntry.id
+       end;
+       Hashtbl.replace upload_queue e.CacheData.UploadEntry.id e)
+    all_upload_entries;
   let data = {
     metadata;
     resources;
-    last_id = !last_id;
+    last_resource_id = !last_resource_id;
+    upload_queue;
+    last_upload_entry_id = !last_upload_entry_id;
     dirty = false;
     stop_flush_db = false;
   } in
