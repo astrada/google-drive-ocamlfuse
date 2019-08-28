@@ -132,3 +132,30 @@ sig
   val is_valid : int -> t -> bool
 end
 
+module UploadEntry :
+sig
+  module State :
+  sig
+    type t =
+      | ToUpload
+      | Uploading
+      | Synchronized
+
+    val to_string : t -> string
+    val of_string : string -> t
+  end
+
+  type t = {
+    id : int64;
+    resource_id : int64;
+    state : string;
+    last_update : float;
+  }
+
+  val id : (t, int64) GapiLens.t
+  val resource_id : (t, int64) GapiLens.t
+  val state : (t, string) GapiLens.t
+  val last_update : (t, float) GapiLens.t
+
+end
+

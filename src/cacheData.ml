@@ -430,3 +430,51 @@ struct
 
 end
 
+module UploadEntry =
+struct
+  module State =
+  struct
+    type t =
+      | ToUpload
+      | Uploading
+      | Synchronized
+
+    let to_string = function
+      | ToUpload -> "ToUpload"
+      | Uploading -> "Uploading"
+      | Synchronized -> "Synchronized"
+
+    let of_string = function
+      | "ToUpload" -> ToUpload
+      | "Uploading" -> Uploading
+      | "Synchronized" -> Synchronized
+      | s -> failwith ("Upload entry state unexpected: " ^ s)
+
+  end
+
+  type t = {
+    (* rowid *)
+    id : int64;
+    resource_id : int64;
+    state : string;
+    last_update : float;
+  }
+
+  let id = {
+    GapiLens.get = (fun x -> x.id);
+    GapiLens.set = (fun v x -> { x with id = v })
+  }
+  let resource_id = {
+    GapiLens.get = (fun x -> x.resource_id);
+    GapiLens.set = (fun v x -> { x with resource_id = v })
+  }
+  let state = {
+    GapiLens.get = (fun x -> x.state);
+    GapiLens.set = (fun v x -> { x with state = v })
+  }
+  let last_update = {
+    GapiLens.get = (fun x -> x.last_update);
+    GapiLens.set = (fun v x -> { x with last_update = v })
+  }
+
+end
