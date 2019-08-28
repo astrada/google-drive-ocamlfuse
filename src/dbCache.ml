@@ -941,6 +941,13 @@ let setup_db cache =
             last_update REAL NOT NULL, \
             clean_shutdown INTEGER NULL \
          ); \
+         CREATE TABLE IF NOT EXISTS upload_queue ( \
+            id INTEGER PRIMARY KEY, \
+            resource_id INTEGER NOT NULL, \
+            state TEXT NOT NULL, \
+            last_update REAL NOT NULL \
+         ); \
+         CREATE INDEX IF NOT EXISTS resource_id_index ON upload_queue (resource_id); \
          UPDATE resource \
          SET state = 'ToDownload' \
          WHERE state = 'Downloading'; \
