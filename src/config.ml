@@ -131,6 +131,8 @@ type t = {
   mv_keep_target : bool;
   (* Enable asynchronous uploading. *)
   async_upload_queue : bool;
+  (* Async upload queue thread pool size. *)
+  async_upload_threads : int;
 }
 
 let metadata_cache_time = {
@@ -365,6 +367,10 @@ let async_upload_queue = {
   GapiLens.get = (fun x -> x.async_upload_queue);
   GapiLens.set = (fun v x -> { x with async_upload_queue = v })
 }
+let async_upload_threads = {
+  GapiLens.get = (fun x -> x.async_upload_threads);
+  GapiLens.set = (fun v x -> { x with async_upload_threads = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -440,6 +446,7 @@ let default = {
   autodetect_mime = true;
   mv_keep_target = false;
   async_upload_queue = false;
+  async_upload_threads = 10;
 }
 
 let default_debug = {
@@ -501,6 +508,7 @@ let default_debug = {
   autodetect_mime = true;
   mv_keep_target = false;
   async_upload_queue = false;
+  async_upload_threads = 10;
 }
 
 let of_table table =
@@ -638,6 +646,9 @@ let of_table table =
       async_upload_queue =
         get "async_upload_queue" bool_of_string
           default.async_upload_queue;
+      async_upload_threads =
+        get "async_upload_threads" int_of_string
+          default.async_upload_threads;
     }
 
 let to_table data =
@@ -705,6 +716,7 @@ let to_table data =
     add "autodetect_mime" (data.autodetect_mime |> string_of_bool);
     add "mv_keep_target" (data.mv_keep_target |> string_of_bool);
     add "async_upload_queue" (data.async_upload_queue |> string_of_bool);
+    add "async_upload_threads" (data.async_upload_threads |> string_of_int);
     table
 
 let debug_print out_ch start_time curl info_type info =

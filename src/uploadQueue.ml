@@ -2,7 +2,8 @@ open GapiLens.Infix
 
 type t = {
   stop_async_upload : bool;
-  upload_resource_by_id : int64 -> unit
+  upload_resource_by_id : int64 -> unit;
+  thread_pool : ThreadPool.t;
 }
 let stop_async_upload = {
   GapiLens.get = (fun x -> x.stop_async_upload);
@@ -12,6 +13,10 @@ let upload_resource_by_id = {
   GapiLens.get = (fun x -> x.upload_resource_by_id);
   GapiLens.set = (fun v x -> { x with upload_resource_by_id = v })
 }
+let thread_pool = {
+  GapiLens.get = (fun x -> x.thread_pool);
+  GapiLens.set = (fun v x -> { x with thread_pool = v })
+}
 
 module ConcurrentUploadQueue =
   ConcurrentGlobal.Make(struct type u = t let label = "upload-queue" end)
@@ -20,8 +25,7 @@ let upload_resource cache =
   let d = ConcurrentUploadQueue.get () in
   let upload = d.upload_resource_by_id in
   let upload_entry = Cache.UploadQueue.select_next_resource cache in
-  match upload_entry with
-  | Some e ->
+  let do_work e =
     let entry_id = e.CacheData.UploadEntry.id in
     let resource_id = e.CacheData.UploadEntry.resource_id in
     Utils.log_with_header
@@ -44,24 +48,39 @@ let upload_resource cache =
       "Removing queued entry (id=%Ld).\n%!"
       entry_id;
     Cache.UploadQueue.delete_upload_entry cache e
+  in
+  match upload_entry with
+  | Some e ->
+    ThreadPool.add_work do_work e d.thread_pool;
   | None -> ()
 
 let poll_upload_queue cache =
   let check () =
     let d = ConcurrentUploadQueue.get () in
-    if d.stop_async_upload then raise Exit in
+    if d.stop_async_upload then begin
+      let entries = Cache.UploadQueue.count_entries cache in
+      if entries = 0 then raise Exit
+    end
+  in
   try
     while true do
       check ();
       Thread.delay 1.0;
       upload_resource cache;
     done
-  with Exit -> ()
+  with Exit ->
+    let d = ConcurrentUploadQueue.get () in
+    Utils.log_with_header
+      "Waiting for pending upload threads (%d)...%!"
+      (ThreadPool.pending_threads d.thread_pool);
+    ThreadPool.shutdown d.thread_pool;
+    Utils.log_message "done\n%!"
 
-let start_async_upload_thread cache upload_resource =
+let start_async_upload_thread cache upload_threads upload_resource =
   let data = {
     stop_async_upload = false;
     upload_resource_by_id = upload_resource;
+    thread_pool = ThreadPool.create ~max_threads:upload_threads ();
   } in
   ConcurrentUploadQueue.set data;
   let thread =

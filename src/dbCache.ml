@@ -560,6 +560,13 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_count_all_stmt db =
+    let sql =
+      "SELECT COUNT(*) \
+       FROM upload_queue;"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_delete_all_stmt db =
     let sql =
       "DELETE \
@@ -1061,6 +1068,16 @@ struct
          bind_int stmt ":id" (Some id);
          final_step stmt;
          finalize_stmt stmt)
+
+  let count_entries cache =
+    with_transaction cache
+      (fun db ->
+         let stmt = UploadQueueStmt.prepare_count_all_stmt db in
+         let result =
+           select_first_row stmt
+             (fun _ -> ()) (fun r -> r.(0) |> data_to_int64 |> Option.get) in
+         finalize_stmt stmt;
+         result |> Option.get |> Int64.to_int)
 
   let flush_upload_queue cache upload_queue =
     with_transaction cache

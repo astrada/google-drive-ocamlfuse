@@ -43,6 +43,8 @@ sig
   val delete_upload_entry : CacheData.t -> CacheData.UploadEntry.t -> unit
   val update_entry_state :
     CacheData.t -> CacheData.UploadEntry.State.t -> int64 -> unit
+  val count_entries : CacheData.t -> int
+
 end
 
 val setup : CacheData.t -> unit

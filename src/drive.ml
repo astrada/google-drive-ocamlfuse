@@ -2117,7 +2117,8 @@ let init_filesystem () =
   MemoryCache.start_flush_db_thread cache;
   let config = context |. Context.config_lens in
   if config.Config.async_upload_queue then begin
-    UploadQueue.start_async_upload_thread cache upload_resource_by_id;
+    UploadQueue.start_async_upload_thread
+      cache config.Config.async_upload_threads upload_resource_by_id;
   end;
   let root_folder_id = do_request (get_root_folder_id config) |> fst in
   Context.update_ctx (Context.root_folder_id ^= Some root_folder_id)
@@ -2127,6 +2128,7 @@ let queue_upload resource =
   let config = context |. Context.config_lens in
   if config.Config.async_upload_queue then begin
     let cache = context.Context.cache in
+    flush_memory_buffers resource;
     UploadQueue.queue_resource cache resource;
     SessionM.return ()
   end else

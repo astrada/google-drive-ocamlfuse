@@ -29,8 +29,6 @@ type t = {
   memory_buffers : Buffering.MemoryBuffers.t;
   (* File locks *)
   file_locks : (string, Mutex.t) Hashtbl.t;
-  (* Thread pool *)
-  thread_pool : ThreadPool.t;
   (* Memory buffer eviction thread *)
   buffer_eviction_thread : Thread.t option;
   (* Root folder ID *)
@@ -88,10 +86,6 @@ let memory_buffers = {
 let file_locks = {
   GapiLens.get = (fun x -> x.file_locks);
   GapiLens.set = (fun v x -> { x with file_locks = v })
-}
-let thread_pool = {
-  GapiLens.get = (fun x -> x.thread_pool);
-  GapiLens.set = (fun v x -> { x with thread_pool = v })
 }
 let buffer_eviction_thread = {
   GapiLens.get = (fun x -> x.buffer_eviction_thread);

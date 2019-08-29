@@ -307,7 +307,6 @@ let setup_application params =
     skip_trash = params.skip_trash;
     memory_buffers;
     file_locks = Hashtbl.create Utils.hashtable_initial_size;
-    thread_pool = ThreadPool.create ();
     buffer_eviction_thread = None;
     root_folder_id = None;
     flush_db_thread = None;
@@ -735,42 +734,40 @@ let () =
           (fun () ->
              Utils.log_with_header "Exiting.\n%!";
              let context = Context.get_ctx () in
-             Utils.log_message
-               "Waiting for pending upload threads (%d)...%!"
-               (ThreadPool.pending_threads context.Context.thread_pool);
-             ThreadPool.shutdown context.Context.thread_pool;
              begin match context.Context.buffer_eviction_thread with
                | None -> ()
                | Some buffer_eviction_thread -> begin
                    Utils.log_message
-                     "done\nStopping buffer eviction thread (TID=%d)...%!"
+                     "Stopping buffer eviction thread (TID=%d)...%!"
                      (Thread.id buffer_eviction_thread);
                    Buffering.MemoryBuffers.stop_eviction_thread
                      context.Context.memory_buffers;
                    Thread.join buffer_eviction_thread;
+                   Utils.log_message "done\n%!";
                  end
              end;
              begin match context.Context.flush_db_thread with
                | None -> ()
                | Some flush_db_thread -> begin
                    Utils.log_message
-                     "done\nStopping flush DB thread (TID=%d)...%!"
+                     "Stopping flush DB thread (TID=%d)...%!"
                      (Thread.id flush_db_thread);
                    MemoryCache.stop_flush_db_thread ();
                    Thread.join flush_db_thread;
+                   Utils.log_message "done\n%!";
                  end
              end;
              begin match context.Context.async_upload_thread with
                | None -> ()
                | Some async_upload_thread -> begin
                    Utils.log_message
-                     "done\nStopping async upload thread (TID=%d)...%!"
+                     "Stopping async upload thread (TID=%d)\n%!"
                      (Thread.id async_upload_thread);
                    UploadQueue.stop_async_upload_thread ();
                    Thread.join async_upload_thread;
                  end
              end;
-             Utils.log_message "done\nFlushing cache...\n%!";
+             Utils.log_message "Flushing cache...\n%!";
              Cache.flush context.Context.cache;
              Utils.log_message "Storing clean shutdown flag...%!";
              DbCache.set_clean_shutdown context.Context.cache;

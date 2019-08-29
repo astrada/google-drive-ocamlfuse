@@ -46,7 +46,9 @@ sig
   val delete_upload_entry : CacheData.t -> CacheData.UploadEntry.t -> unit
   val update_entry_state :
     CacheData.t -> CacheData.UploadEntry.State.t -> int64 -> unit
+  val count_entries : CacheData.t -> int
   val flush_upload_queue : CacheData.t -> CacheData.UploadEntry.t list -> unit
+
 end
 
 val setup_db : CacheData.t -> unit

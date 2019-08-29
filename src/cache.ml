@@ -206,6 +206,12 @@ struct
     else
       DbCache.UploadQueue.update_entry_state cache state id
 
+  let count_entries cache =
+    if cache.CacheData.in_memory then
+      MemoryCache.UploadQueue.count_entries cache
+    else
+      DbCache.UploadQueue.count_entries cache
+
 end
 
 (* Resource content *)

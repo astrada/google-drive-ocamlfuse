@@ -563,6 +563,13 @@ struct
          d |> dirty ^= true
       )
 
+  let count_entries cache =
+    ConcurrentMemoryCache.with_lock
+      (fun () ->
+         let d = ConcurrentMemoryCache.get_no_lock () in
+         Hashtbl.length d.upload_queue
+      )
+
 end
 
 let setup cache =
