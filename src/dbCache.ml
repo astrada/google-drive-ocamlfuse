@@ -423,6 +423,14 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_select_with_id_stmt db =
+    let sql =
+      "SELECT " ^ fields ^ " \
+       FROM resource \
+       WHERE id = :id;"
+    in
+      Sqlite3.prepare db sql
+
 end
 
 module MetadataStmts =
@@ -500,6 +508,18 @@ struct
     in
     Sqlite3.prepare db sql
 
+  let prepare_insert_with_id_stmt db =
+    let sql =
+      "INSERT INTO upload_queue (" ^ fields ^ ") \
+       VALUES ( \
+         :id, \
+         :resource_id, \
+         :state, \
+         :last_update \
+       );"
+    in
+      Sqlite3.prepare db sql
+
   let prepare_select_next_resource_stmt db =
     let sql =
       "SELECT " ^ fields ^ " \
@@ -522,6 +542,30 @@ struct
        FROM upload_queue;"
     in
     Sqlite3.prepare db sql
+
+  let prepare_delete_stmt db =
+    let sql =
+      "DELETE \
+       FROM upload_queue \
+       WHERE id = :id;"
+    in
+      Sqlite3.prepare db sql
+
+  let prepare_update_state_stmt db =
+    let sql =
+      "UPDATE upload_queue \
+       SET \
+         state = :state \
+       WHERE id = :id;"
+    in
+      Sqlite3.prepare db sql
+
+  let prepare_delete_all_stmt db =
+    let sql =
+      "DELETE \
+       FROM upload_queue;"
+    in
+      Sqlite3.prepare db sql
 
 end
 (* END Prepare SQL *)
@@ -873,6 +917,11 @@ struct
              row_to_resource in
          finalize_stmt stmt;
          results)
+
+  let select_resource_with_id cache id =
+    select_resource cache
+      ResourceStmts.prepare_select_with_id_stmt
+      (fun stmt -> bind_int stmt ":id" (Some id))
   (* END Queries *)
 
 end
@@ -939,11 +988,14 @@ end
 module UploadQueue =
 struct
   (* Queries *)
-  let save_upload_entry db stmt upload_entry =
+  let bind_upload_entry_parameters stmt upload_entry =
     let open CacheData.UploadEntry in
     bind_int stmt ":resource_id" (Some upload_entry.resource_id);
     bind_text stmt ":state" (Some upload_entry.state);
-    bind_float stmt ":last_update" (Some upload_entry.last_update);
+    bind_float stmt ":last_update" (Some upload_entry.last_update)
+
+  let save_upload_entry db stmt upload_entry =
+    bind_upload_entry_parameters stmt upload_entry;
     final_step stmt;
     upload_entry |> CacheData.UploadEntry.id ^= Sqlite3.last_insert_rowid db
 
@@ -991,6 +1043,40 @@ struct
              row_to_upload_entry in
          finalize_stmt stmt;
          results)
+
+  let delete_upload_entry cache upload_entry =
+    with_transaction cache
+      (fun db ->
+         let stmt = UploadQueueStmt.prepare_delete_stmt db in
+         reset_stmt stmt;
+         bind_int stmt ":id" (Some upload_entry.CacheData.UploadEntry.id);
+         final_step stmt;
+         finalize_stmt stmt)
+
+  let update_entry_state cache state id =
+    with_transaction cache
+      (fun db ->
+         let stmt = UploadQueueStmt.prepare_update_state_stmt db in
+         bind_text stmt ":state" (Some (CacheData.UploadEntry.State.to_string state));
+         bind_int stmt ":id" (Some id);
+         final_step stmt;
+         finalize_stmt stmt)
+
+  let flush_upload_queue cache upload_queue =
+    with_transaction cache
+      (fun db ->
+         let delete_stmt = UploadQueueStmt.prepare_delete_all_stmt db in
+         final_step delete_stmt;
+         finalize_stmt delete_stmt;
+         let insert_stmt = UploadQueueStmt.prepare_insert_with_id_stmt db in
+         List.iter
+           (fun e -> 
+              reset_stmt insert_stmt;
+              bind_int insert_stmt ":id" (Some e.CacheData.UploadEntry.id);
+              bind_upload_entry_parameters insert_stmt e;
+              final_step insert_stmt)
+           upload_queue;
+         finalize_stmt insert_stmt)
   (* END Queries *)
 
 end

@@ -140,6 +140,12 @@ struct
       MemoryCache.Resource.select_resources_order_by_last_update cache
     else
       DbCache.Resource.select_resources_order_by_last_update cache
+
+  let select_resource_with_id cache id =
+    if cache.CacheData.in_memory then
+      MemoryCache.Resource.select_resource_with_id cache id
+    else
+      DbCache.Resource.select_resource_with_id cache id
   (* END Queries *)
 
 end
@@ -187,6 +193,18 @@ struct
       MemoryCache.UploadQueue.select_with_resource_id cache resource_id
     else
       DbCache.UploadQueue.select_with_resource_id cache resource_id
+
+  let delete_upload_entry cache upload_entry =
+    if cache.CacheData.in_memory then
+      MemoryCache.UploadQueue.delete_upload_entry cache upload_entry
+    else
+      DbCache.UploadQueue.delete_upload_entry cache upload_entry
+
+  let update_entry_state cache state id =
+    if cache.CacheData.in_memory then
+      MemoryCache.UploadQueue.update_entry_state cache state id
+    else
+      DbCache.UploadQueue.update_entry_state cache state id
 
 end
 

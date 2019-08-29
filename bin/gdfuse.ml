@@ -766,7 +766,7 @@ let () =
                    Utils.log_message
                      "done\nStopping async upload thread (TID=%d)...%!"
                      (Thread.id async_upload_thread);
-                   MemoryCache.stop_flush_db_thread ();
+                   UploadQueue.stop_async_upload_thread ();
                    Thread.join async_upload_thread;
                  end
              end;

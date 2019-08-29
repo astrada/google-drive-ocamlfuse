@@ -24,6 +24,7 @@ sig
   val select_resources_with_parent_path : CacheData.t -> string -> bool -> CacheData.Resource.t list
   val select_resources_order_by_last_update : CacheData.t -> CacheData.Resource.t list
   val select_all_resources : CacheData.t -> CacheData.Resource.t list
+  val select_resource_with_id : CacheData.t -> int64 -> CacheData.Resource.t option
 
 end
 
@@ -42,6 +43,10 @@ sig
   val select_with_resource_id :
     CacheData.t -> int64 -> CacheData.UploadEntry.t option
   val select_all_entries : CacheData.t -> CacheData.UploadEntry.t list
+  val delete_upload_entry : CacheData.t -> CacheData.UploadEntry.t -> unit
+  val update_entry_state :
+    CacheData.t -> CacheData.UploadEntry.State.t -> int64 -> unit
+  val flush_upload_queue : CacheData.t -> CacheData.UploadEntry.t list -> unit
 end
 
 val setup_db : CacheData.t -> unit

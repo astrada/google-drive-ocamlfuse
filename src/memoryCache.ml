@@ -443,6 +443,13 @@ struct
            resources
       )
 
+  let select_resource_with_id cache id =
+    ConcurrentMemoryCache.with_lock
+      (fun () ->
+         let d = ConcurrentMemoryCache.get_no_lock () in
+         Utils.safe_find d.resources id
+      )
+
 end
 
 module Metadata =
@@ -531,6 +538,31 @@ struct
          !result
       )
 
+  let delete_upload_entry cache upload_entry =
+    ConcurrentMemoryCache.update
+      (fun d ->
+         Hashtbl.remove d.upload_queue upload_entry.CacheData.UploadEntry.id;
+         d |> dirty ^= true
+      )
+
+  let update_entry_state cache state id =
+    ConcurrentMemoryCache.update
+      (fun d ->
+         let upload_entry = Utils.safe_find d.upload_queue id in
+         begin match upload_entry with
+         | Some e ->
+           let updated_entry =
+             e |> CacheData.UploadEntry.state ^=
+                  (CacheData.UploadEntry.State.to_string state) in
+           Hashtbl.replace d.upload_queue id updated_entry
+         | None ->
+           Utils.log_with_header
+             "Cannot find upload entry with id=%Ld.\n%!"
+             id
+         end;
+         d |> dirty ^= true
+      )
+
 end
 
 let setup cache =
@@ -584,6 +616,12 @@ let flush_db cache =
         d.resources
         [] in
     DbCache.Resource.flush_resources cache resources;
+    let upload_queue =
+      Hashtbl.fold
+        (fun _ e es -> e :: es)
+        d.upload_queue
+        [] in
+    DbCache.UploadQueue.flush_upload_queue cache upload_queue;
     Utils.log_message "done\n%!"
   end else ()
 

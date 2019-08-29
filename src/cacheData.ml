@@ -437,17 +437,14 @@ struct
     type t =
       | ToUpload
       | Uploading
-      | Synchronized
 
     let to_string = function
       | ToUpload -> "ToUpload"
       | Uploading -> "Uploading"
-      | Synchronized -> "Synchronized"
 
     let of_string = function
       | "ToUpload" -> ToUpload
       | "Uploading" -> Uploading
-      | "Synchronized" -> Synchronized
       | s -> failwith ("Upload entry state unexpected: " ^ s)
 
   end

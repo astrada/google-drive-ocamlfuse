@@ -1030,17 +1030,6 @@ let get_metadata () =
            end
     )
 
-let init_filesystem () =
-  let context = Context.get_ctx () in
-  let cache = context.Context.cache in
-  MemoryCache.start_flush_db_thread cache;
-  let config = context |. Context.config_lens in
-  if config.Config.async_upload_queue then begin
-    UploadQueue.start_async_upload_thread cache;
-  end;
-  let root_folder_id = do_request (get_root_folder_id config) |> fst in
-  Context.update_ctx (Context.root_folder_id ^= Some root_folder_id)
-
 let statfs () =
   let metadata = get_metadata () in
   let config = Context.get_ctx () |. Context.config_lens in
@@ -2106,15 +2095,48 @@ let flush_memory_buffers resource =
       memory_buffers
   end
 
+let upload_resource_with_retry resource =
+  flush_memory_buffers resource;
+  with_retry (try_with_default upload) resource
+
+let upload_resource_by_id resource_id =
+  let context = Context.get_ctx () in
+  let cache = context.Context.cache in
+  let resource = Cache.Resource.select_resource_with_id cache resource_id in
+  match resource with
+  | Some r ->
+    do_request (upload_resource_with_retry r) |> ignore;
+  | None ->
+    Utils.log_with_header
+      "Cannot find queued resource to upload with resource_id=%Ld.\n%!"
+      resource_id
+
+let init_filesystem () =
+  let context = Context.get_ctx () in
+  let cache = context.Context.cache in
+  MemoryCache.start_flush_db_thread cache;
+  let config = context |. Context.config_lens in
+  if config.Config.async_upload_queue then begin
+    UploadQueue.start_async_upload_thread cache upload_resource_by_id;
+  end;
+  let root_folder_id = do_request (get_root_folder_id config) |> fst in
+  Context.update_ctx (Context.root_folder_id ^= Some root_folder_id)
+
+let queue_upload resource =
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  if config.Config.async_upload_queue then begin
+    let cache = context.Context.cache in
+    UploadQueue.queue_resource cache resource;
+    SessionM.return ()
+  end else
+    upload_resource_with_retry resource
+
 let upload_with_retry path =
-  let try_upload resource =
-    try_with_default (upload resource)
-  in
   let config = Context.get_ctx () |. Context.config_lens in
   let (path_in_cache, trashed) = get_path_in_cache path config in
   get_resource path_in_cache trashed >>= fun resource ->
-  flush_memory_buffers resource;
-  with_retry try_upload resource
+  queue_upload resource
 
 let upload_if_dirty path =
   if start_uploading_if_dirty path then begin
@@ -2444,10 +2466,17 @@ let rename path new_path =
            path = %s)\n%!"
           content_path target_content_path;
         Utils.file_copy content_path target_content_path;
+        let stats = Unix.LargeFile.stat target_content_path in
+        let file_size = stats.Unix.LargeFile.st_size in
+        let metadata = context |. Context.metadata_lens in
+        Utils.with_lock context.Context.metadata_lock
+          (fun () ->
+             update_cache_size file_size metadata cache;
+          );
         update_cached_resource_state cache
           CacheData.Resource.State.ToUpload
           target_resource.CacheData.Resource.id;
-        upload target_resource >>= fun () ->
+        queue_upload target_resource >>= fun () ->
         delete_source_path >>= fun () ->
         Utils.log_with_header
           "END: Replacing content of file %s (remote id=%s) with content \
