@@ -182,6 +182,7 @@ let setup_application params =
   if current_config.Config.max_memory_cache_size <
      current_config.Config.memory_buffer_size then
     failwith "max_memory_cache_size should be >= memory_buffer_size";
+  Utils.debug_buffers := current_config.Config.debug_buffers;
   let config_without_docs_mode =
     { current_config with
           Config.client_id;
@@ -425,15 +426,30 @@ let fopen path flags =
   with e -> handle_exception e "fopen" path
 
 let read path buf offset file_descr =
+  let buf_len = Bigarray.Array1.dim buf in
   Utils.log_with_header "read %s [%d bytes] %Ld %d\n%!"
-    path (Bigarray.Array1.dim buf) offset file_descr;
+    path buf_len offset file_descr;
   try
-    Drive.read path buf offset file_descr
+    let result = Drive.read path buf offset file_descr in
+    if !Utils.debug_buffers then begin
+      Utils.log_buffer
+        (Printf.sprintf "read %s [%d bytes] %Ld %d"
+           path buf_len offset file_descr)
+        buf result;
+    end;
+    result
   with e -> handle_exception e "read" path
 
 let write path buf offset file_descr =
+  let buf_len = Bigarray.Array1.dim buf in
   Utils.log_with_header "write %s [%d bytes] %Ld %d\n%!"
-    path (Bigarray.Array1.dim buf) offset file_descr;
+    path buf_len offset file_descr;
+  if !Utils.debug_buffers then begin
+    Utils.log_buffer
+      (Printf.sprintf "write %s [%d bytes] %Ld %d"
+         path buf_len offset file_descr)
+      buf buf_len;
+  end;
   try
     Drive.write path buf offset file_descr
   with e -> handle_exception e "write" path

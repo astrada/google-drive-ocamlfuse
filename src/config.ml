@@ -133,6 +133,8 @@ type t = {
   async_upload_queue : bool;
   (* Async upload queue thread pool size. *)
   async_upload_threads : int;
+  (* Log buffer contents to ease debugging. *)
+  debug_buffers : bool;
 }
 
 let metadata_cache_time = {
@@ -371,6 +373,10 @@ let async_upload_threads = {
   GapiLens.get = (fun x -> x.async_upload_threads);
   GapiLens.set = (fun v x -> { x with async_upload_threads = v })
 }
+let debug_buffers = {
+  GapiLens.get = (fun x -> x.debug_buffers);
+  GapiLens.set = (fun v x -> { x with debug_buffers = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -447,6 +453,7 @@ let default = {
   mv_keep_target = false;
   async_upload_queue = false;
   async_upload_threads = 10;
+  debug_buffers = false;
 }
 
 let default_debug = {
@@ -509,6 +516,7 @@ let default_debug = {
   mv_keep_target = false;
   async_upload_queue = false;
   async_upload_threads = 10;
+  debug_buffers = false;
 }
 
 let of_table table =
@@ -649,6 +657,9 @@ let of_table table =
       async_upload_threads =
         get "async_upload_threads" int_of_string
           default.async_upload_threads;
+      debug_buffers =
+        get "debug_buffers" bool_of_string
+          default.debug_buffers;
     }
 
 let to_table data =
@@ -717,6 +728,7 @@ let to_table data =
     add "mv_keep_target" (data.mv_keep_target |> string_of_bool);
     add "async_upload_queue" (data.async_upload_queue |> string_of_bool);
     add "async_upload_threads" (data.async_upload_threads |> string_of_int);
+    add "debug_buffers" (data.debug_buffers |> string_of_bool);
     table
 
 let debug_print out_ch start_time curl info_type info =

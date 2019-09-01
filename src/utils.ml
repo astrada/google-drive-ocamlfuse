@@ -7,7 +7,9 @@ exception Temporary_error
 (* Globals *)
 let start_time = Unix.gettimeofday ()
 let verbose = ref false
+let debug_buffers = ref false
 let log_channel = ref stdout
+let log_mutex = Mutex.create ()
 let max_retries = ref 10
 let mb = 1048576L
 let hashtable_initial_size = 64
@@ -51,17 +53,23 @@ let with_out_channel ?(mode = [Open_creat; Open_wronly]) path f =
 
 (* Logging *)
 let log_message format =
-  if !verbose then
-    Printf.fprintf !log_channel format
-  else
+  if !verbose then begin
+    if !debug_buffers then Mutex.lock log_mutex;
+    let result = Printf.fprintf !log_channel format in
+    if !debug_buffers then Mutex.unlock log_mutex;
+    result
+  end else
     Printf.ifprintf !log_channel format
 
 let log_with_header format =
   if !verbose then begin
+    if !debug_buffers then Mutex.lock log_mutex;
     let elapsed = Unix.gettimeofday () -. start_time in
     let thread_id = get_thread_id () in
     Printf.fprintf !log_channel "[%f] TID=%d: " elapsed thread_id;
-    Printf.fprintf !log_channel format
+    let result = Printf.fprintf !log_channel format in
+    if !debug_buffers then Mutex.unlock log_mutex;
+    result
   end else
     Printf.ifprintf !log_channel format
 
@@ -70,6 +78,15 @@ let log_exception e =
   let backtrace = Printexc.get_backtrace () in
   log_with_header "Exception:%s\n" message;
   log_message "Backtrace:%s\n%!" backtrace
+
+let log_buffer message buffer length =
+  let b = Buffer.create (length * 2) in
+  let bytes =
+    Netsys_mem.bytes_of_memory (Bigarray.Array1.sub buffer 0 length) in
+  Bytes.iter
+    (fun c -> Buffer.add_string b (Printf.sprintf "%2.2x" (Char.code c)))
+    bytes;
+  log_with_header "%s: buffer content=%s\n%!" message (Buffer.contents b)
 
 (* Locks *)
 let with_lock m f =
