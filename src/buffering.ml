@@ -299,19 +299,16 @@ struct
 
   let flush_block key buffers =
     let block_opt =
-      Utils.with_lock buffers.mutex
-        (fun () ->
-           Utils.safe_find buffers.blocks key
-        ) in
+      Utils.safe_find buffers.blocks key in
     flush key block_opt buffers
 
   let flush_blocks remote_id buffers =
     Utils.log_with_header
       "BEGIN: Flushing memory buffers (remote id=%s)\n%!"
       remote_id;
-    let blocks =
-      Utils.with_lock buffers.mutex
-        (fun () ->
+    Utils.with_lock buffers.mutex
+      (fun () ->
+         let blocks =
            match Utils.safe_find buffers.file_block_indexes remote_id with
            | None -> []
            | Some is ->
@@ -320,12 +317,13 @@ struct
                   (i, Utils.safe_find buffers.blocks (remote_id, i))
                )
                is
-        ) in
-    List.iter
-      (fun (block_index, block_opt) ->
-         flush (remote_id, block_index) block_opt buffers
-      )
-      blocks;
+         in
+         List.iter
+           (fun (block_index, block_opt) ->
+              flush (remote_id, block_index) block_opt buffers
+           )
+           blocks
+      );
     Utils.log_with_header
       "END: Flushing memory buffers (remote id=%s)\n%!"
       remote_id
@@ -672,9 +670,7 @@ struct
       Int64.mul block_size
         (Int64.succ (Int64.div total_written_bytes block_size)) in
     let write block_index dest_offset src_arr =
-      let block =
-        get_block block_index remote_id resource_size buffers in
-      Utils.with_lock block.Block.buffer.BufferPool.Buffer.mutex
+      Utils.with_lock buffers.mutex
         (fun () ->
            let block =
              get_block block_index remote_id resource_size buffers in

@@ -1315,6 +1315,16 @@ let download_media media_download fileId =
        end else
          handle_default_exceptions e)
 
+let flush_memory_buffers resource =
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  if config.Config.write_buffers then begin
+    let memory_buffers = context.Context.memory_buffers in
+    Buffering.MemoryBuffers.flush_blocks
+      (resource.CacheData.Resource.remote_id |> Option.get)
+      memory_buffers
+  end
+
 let download_resource resource =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
@@ -1417,12 +1427,12 @@ let download_resource resource =
         do_download_with_lock ()
     in
     begin match reloaded_state with
-        CacheData.Resource.State.Synchronized
+      | CacheData.Resource.State.Synchronized
       | CacheData.Resource.State.ToUpload
       | CacheData.Resource.State.Uploading ->
-          if Sys.file_exists content_path then
+          if Sys.file_exists content_path then begin
             SessionM.return ()
-          else
+          end else
             do_download_with_lock ()
       | CacheData.Resource.State.ToDownload ->
           download_if_not_updated ()
@@ -1529,14 +1539,15 @@ let get_attr path =
     begin if CacheData.Resource.is_document resource &&
              config.Config.download_docs then
       Utils.try_with_m
-        (with_retry download_resource resource)
+        (flush_memory_buffers resource;
+         with_retry download_resource resource)
         (function
              File_not_found -> SessionM.return ""
            | e -> Utils.raise_m e)
     else
       SessionM.return ""
     end >>= fun content_path ->
-    SessionM.return (resource, content_path)
+      SessionM.return (resource, content_path)
   in
 
   if path = root_directory then
@@ -1920,8 +1931,10 @@ let read path buf offset file_descr =
       else
         with_retry (stream_resource offset buf) resource >>= fun () ->
         SessionM.return ""
-    else
+    else begin
+      flush_memory_buffers resource;
       with_retry download_resource resource
+    end
   in
 
   let build_read_ahead_requests =
@@ -2084,16 +2097,6 @@ let upload resource =
   update_cached_resource cache updated_resource;
   shrink_cache ();
   SessionM.return ()
-
-let flush_memory_buffers resource =
-  let context = Context.get_ctx () in
-  let config = context |. Context.config_lens in
-  if config.Config.write_buffers then begin
-    let memory_buffers = context.Context.memory_buffers in
-    Buffering.MemoryBuffers.flush_blocks
-      (resource.CacheData.Resource.remote_id |> Option.get)
-      memory_buffers
-  end
 
 let upload_resource_with_retry resource =
   flush_memory_buffers resource;
@@ -2449,6 +2452,7 @@ let rename path new_path =
           "BEGIN: Replacing content of file %s (remote id=%s) with content \
            of file %s (remote id=%s)\n%!"
           new_name target_remote_id old_name remote_id;
+        flush_memory_buffers resource;
         with_retry download_resource resource >>= fun content_path ->
         let file_patch =
           { File.empty with
@@ -2628,6 +2632,7 @@ let truncate path size =
   let (path_in_cache, trashed) = get_path_in_cache path config in
   let truncate_resource =
     get_resource path_in_cache trashed >>= fun resource ->
+    flush_memory_buffers resource;
     with_retry download_resource resource >>= fun content_path ->
     let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
     Utils.log_with_header "BEGIN: Truncating file (remote id=%s)\n%!" remote_id;
