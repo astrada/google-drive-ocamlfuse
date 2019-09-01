@@ -59,6 +59,9 @@ let poll_upload_queue cache =
     let d = ConcurrentUploadQueue.get () in
     if d.stop_async_upload then begin
       let entries = Cache.UploadQueue.count_entries cache in
+      Utils.log_with_header
+        "Waiting for pending uploads (%d)\n%!"
+        entries;
       if entries = 0 then raise Exit
     end
   in
