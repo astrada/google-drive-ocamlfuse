@@ -18,3 +18,5 @@ Then, mount the drive with:
     google-drive-ocamlfuse -label myTeamDrive /mountPoint
 
 The team drive will be mounted there (instead of the usual *My Drive*).
+
+Note: if you want to access the backups produced by [Backup & sync](https://www.google.com/drive/download/backup-and-sync/) that you can find under `Computers`, you should put the folder id of the computer you want to access in `root_folder` and leave `team_drive_id` blank.

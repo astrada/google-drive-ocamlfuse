@@ -1,3 +1,18 @@
+0.7.11
+======
+
+This version introduces [service account support](https://github.com/astrada/google-drive-ocamlfuse/wiki/Service-Accounts).
+
+0.7.10
+======
+
+This version introduces an *experimental* config option (`async_upload_queue`) to enable async uploads, implemented using an upload queue. `async_upload_threads` specifies the size of the thread pool dedicated to async uploading.
+
+0.7.9
+=====
+
+This version introduces a new config option (`mv_keep_target`). If this option is set to `true`, `mv` will keep the history (and metadata) of the target file. If `false` (the default value) the target will be removed before renaming/moving.
+
 0.7.8
 =====
 

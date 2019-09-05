@@ -237,6 +237,30 @@ Path of the directory containing log files (if blank uses the default):
 
     autodetect_mime=true
 
+[Since 0.7.9] Keep target history/metadata when moving/renaming files:
+
+    mv_keep_target=false
+
+[Since 0.7.10] Enable async upload queue:
+
+    async_upload_queue=false
+
+[Since 0.7.10] Size of the async upload thread pool (how many concurrent uploads can start):
+
+    async_upload_threads=10
+
+[Since 0.7.10] Logs buffer contents for reads/writes (for debug purposes):
+
+    debug_buffers=false
+
+[Since 0.7.11] Path of the JSON file that contains service account credentials (downloaded during account [creation](https://developers.google.com/identity/protocols/OAuth2ServiceAccount#creatinganaccount)):
+
+    service_account_credentials_path=
+
+[Since 0.7.11] Email of the user for which the application is requesting delegated access. Works only for G Suite domains. It is ignored if service_account_credentials_path is not specified:
+
+    service_account_user_to_impersonate
+
 ### Document export formats
 
 `desktop` format creates a shortcut to the document that will be opened in the web browser for edit.
