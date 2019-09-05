@@ -52,7 +52,7 @@ struct
     let table = Hashtbl.create 16 in
     while (not (Scanf.Scanning.end_of_input sb)) do
       let (key, value) = Scanf.bscanf sb "%s@=%s@\n" (fun k v -> (k, v)) in
-        Hashtbl.add table key value
+        Hashtbl.add table (String.trim key) (String.trim value)
     done;
     { path = filename;
       data = D.of_table table;

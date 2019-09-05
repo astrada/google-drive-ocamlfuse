@@ -97,6 +97,8 @@ type application_params = {
   xdg_base_directory : bool;
   browser : string;
   docs_mode : string;
+  service_account_credentials_path : string;
+  service_account_user_to_impersonate : string;
 }
 
 let setup_application params =
@@ -166,6 +168,14 @@ let setup_application params =
     if params.client_secret = ""
     then current_config |. Config.client_secret
     else params.client_secret in
+  let service_account_credentials_path =
+    if params.service_account_credentials_path = ""
+    then current_config |. Config.service_account_credentials_path
+    else params.service_account_credentials_path in
+  let service_account_user_to_impersonate =
+    if params.service_account_user_to_impersonate = ""
+    then current_config |. Config.service_account_user_to_impersonate
+    else params.service_account_user_to_impersonate in
   let headless = params.headless in
   let sqlite3_busy_timeout =
     (* Previously default timeout was 500ms that's too low for multi-threading.
@@ -188,6 +198,8 @@ let setup_application params =
           Config.client_id;
           client_secret;
           sqlite3_busy_timeout;
+          service_account_credentials_path;
+          service_account_user_to_impersonate;
     } in
   let config =
     if params.docs_mode = "libreoffice" then
@@ -236,18 +248,19 @@ let setup_application params =
     let gapi_config =
       Config.create_gapi_config config params.debug
         app_dir.AppDir.curl_log_path in
-    if client_id = "" || client_secret = "" then
+    if service_account_credentials_path = "" &&
+       (client_id = "" || client_secret = "") then
       let oauth2_config =
         match gapi_config |. GapiConfig.auth with
-            GapiConfig.OAuth2 oauth2 ->
-              oauth2 |> GapiConfig.refresh_access_token ^= Some (
-                fun () ->
-                  GaeProxy.refresh_access_token ();
-                  Context.get_ctx ()
-                    |. Context.state_lens
-                    |. State.last_access_token
-              )
-          | _ -> assert false in
+        | GapiConfig.OAuth2 oauth2 ->
+            oauth2 |> GapiConfig.refresh_access_token ^= Some (
+              fun () ->
+                GaeProxy.refresh_access_token ();
+                Context.get_ctx ()
+                  |. Context.state_lens
+                  |. State.last_access_token
+            )
+        | _ -> assert false in
       gapi_config |> GapiConfig.auth ^= GapiConfig.OAuth2 oauth2_config
     else gapi_config in
   let state_store = get_state_store app_dir in
@@ -327,18 +340,26 @@ let setup_application params =
   end else begin
     DbCache.reset_clean_shutdown cache;
   end;
-  let refresh_token = context |. Context.refresh_token_lens in
-  if refresh_token = "" then
-    if client_id = "" || client_secret = "" then
-      if headless then
-        failwith ("In headless mode, you should specify a client id and a \
-                   client secret")
+  if config.Config.service_account_credentials_path = "" then begin
+    let refresh_token = context |. Context.refresh_token_lens in
+    if refresh_token = "" then
+      if client_id = "" || client_secret = "" then
+        if headless then
+          failwith ("In headless mode, you should specify a client id and a \
+                     client secret")
+        else
+          get_auth_tokens_from_server ()
       else
-        get_auth_tokens_from_server ()
+        Oauth2.get_access_token headless params.browser
     else
-      Oauth2.get_access_token headless params.browser
-  else
-    Utils.log_message "Refresh token already present.\n%!"
+      Utils.log_message "Refresh token already present.\n%!"
+  end else begin
+    Utils.log_message "Service account credentials JSON path: %s.\n%!"
+      config.Config.service_account_credentials_path;
+    if config.Config.service_account_user_to_impersonate <> "" then
+      Utils.log_message "Impersonating user: %s.\n%!"
+        config.Config.service_account_user_to_impersonate;
+  end
 (* END setup *)
 
 (* FUSE bindings *)
@@ -615,6 +636,8 @@ let () =
   let xdg_base_directory = ref false in
   let browser = ref "" in
   let docs_mode = ref "" in
+  let service_account_credentials_path = ref "" in
+  let service_account_user_to_impersonate = ref "" in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -708,6 +731,13 @@ let () =
        " sets the specified mode for Google Docs (implies -cc, if changed). \
         Supported values are: libreoffice, msoffice, desktop, off. \
         Default is desktop.";
+       "-serviceaccountpath",
+       Arg.Set_string service_account_credentials_path,
+       " sets the path of the JSON file that contains service account \
+        credentials.";
+       "-serviceaccountuser",
+       Arg.Set_string service_account_user_to_impersonate,
+       " sets the email of the G Suite user to impersonate.";
       ]) in
   let () =
     Arg.parse
@@ -741,6 +771,9 @@ let () =
         xdg_base_directory = !xdg_base_directory;
         browser = !browser;
         docs_mode = !docs_mode;
+        service_account_credentials_path = !service_account_credentials_path;
+        service_account_user_to_impersonate =
+          !service_account_user_to_impersonate;
       } in
       if !mountpoint = "" then begin
         setup_application { params with mountpoint = "." };

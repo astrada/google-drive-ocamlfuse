@@ -135,6 +135,12 @@ type t = {
   async_upload_threads : int;
   (* Log buffer contents to ease debugging. *)
   debug_buffers : bool;
+  (* Path of the JSON file that contains service account credentials. *)
+  service_account_credentials_path : string;
+  (* Email of the user for which the application is requesting delegated
+   * access. Valid only for G Suite domains. Considered only if
+   * service_account_credentials_path is specified. *)
+  service_account_user_to_impersonate : string;
 }
 
 let metadata_cache_time = {
@@ -377,6 +383,14 @@ let debug_buffers = {
   GapiLens.get = (fun x -> x.debug_buffers);
   GapiLens.set = (fun v x -> { x with debug_buffers = v })
 }
+let service_account_credentials_path = {
+  GapiLens.get = (fun x -> x.service_account_credentials_path);
+  GapiLens.set = (fun v x -> { x with service_account_credentials_path = v })
+}
+let service_account_user_to_impersonate = {
+  GapiLens.get = (fun x -> x.service_account_user_to_impersonate);
+  GapiLens.set = (fun v x -> { x with service_account_user_to_impersonate = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -454,6 +468,8 @@ let default = {
   async_upload_queue = false;
   async_upload_threads = 10;
   debug_buffers = false;
+  service_account_credentials_path = "";
+  service_account_user_to_impersonate = "";
 }
 
 let default_debug = {
@@ -517,219 +533,231 @@ let default_debug = {
   async_upload_queue = false;
   async_upload_threads = 10;
   debug_buffers = false;
+  service_account_credentials_path = "";
+  service_account_user_to_impersonate = "";
 }
 
 let of_table table =
   let get k = Utils.get_from_string_table table k in
-    { metadata_cache_time =
-        get "metadata_cache_time" int_of_string default.metadata_cache_time;
-      read_only = get "read_only" bool_of_string default.read_only;
-      umask = get "umask" int_of_string default.umask;
-      sqlite3_busy_timeout =
-        get "sqlite3_busy_timeout" int_of_string default.sqlite3_busy_timeout;
-      download_docs =
-        get "download_docs" bool_of_string default.download_docs;
-      document_format =
-        get "document_format" Std.identity default.document_format;
-      document_icon =
-        get "document_icon" Std.identity default.document_icon;
-      drawing_format =
-        get "drawing_format" Std.identity default.drawing_format;
-      drawing_icon =
-        get "drawing_icon" Std.identity default.drawing_icon;
-      form_format =
-        get "form_format" Std.identity default.form_format;
-      form_icon =
-        get "form_icon" Std.identity default.form_icon;
-      presentation_format =
-        get "presentation_format" Std.identity default.presentation_format;
-      presentation_icon =
-        get "presentation_icon" Std.identity default.presentation_icon;
-      spreadsheet_format =
-        get "spreadsheet_format" Std.identity default.spreadsheet_format;
-      spreadsheet_icon =
-        get "spreadsheet_icon" Std.identity default.spreadsheet_icon;
-      map_format = get "map_format" Std.identity default.map_format;
-      map_icon = get "map_icon" Std.identity default.map_icon;
-      fusion_table_format =
-        get "fusion_table_format" Std.identity default.fusion_table_format;
-      fusion_table_icon =
-        get "fusion_table_icon" Std.identity default.fusion_table_icon;
-      apps_script_format =
-        get "apps_script_format" Std.identity default.apps_script_format;
-      apps_script_icon =
-        get "apps_script_icon" Std.identity default.apps_script_icon;
-      client_id = get "client_id" Std.identity default.client_id;
-      client_secret = get "client_secret" Std.identity default.client_secret;
-      verification_code =
-        get "verification_code" Std.identity default.verification_code;
-      keep_duplicates =
-        get "keep_duplicates" bool_of_string default.keep_duplicates;
-      docs_file_extension =
-        get "docs_file_extension" bool_of_string default.docs_file_extension;
-      max_cache_size_mb =
-        get "max_cache_size_mb" int_of_string default.max_cache_size_mb;
-      curl_debug_off =
-        get "curl_debug_off" bool_of_string default.curl_debug_off;
-      delete_forever_in_trash_folder =
-        get "delete_forever_in_trash_folder" bool_of_string
-          default.delete_forever_in_trash_folder;
-      stream_large_files =
-        get "stream_large_files" bool_of_string
-          default.stream_large_files;
-      large_file_threshold_mb =
-        get "large_file_threshold_mb" int_of_string
-          default.large_file_threshold_mb;
-      large_file_read_only =
-        get "large_file_read_only" bool_of_string
-          default.large_file_read_only;
-      connect_timeout_ms =
-        get "connect_timeout_ms" int_of_string default.connect_timeout_ms;
-      max_download_speed =
-        get "max_download_speed" Int64.of_string default.max_download_speed;
-      max_upload_speed =
-        get "max_upload_speed" Int64.of_string default.max_upload_speed;
-      low_speed_limit =
-        get "low_speed_limit" int_of_string default.low_speed_limit;
-      low_speed_time =
-        get "low_speed_time" int_of_string default.low_speed_time;
-      max_retries = get "max_retries" int_of_string default.max_retries;
-      max_upload_chunk_size =
-        get "max_upload_chunk_size" int_of_string
-          default.max_upload_chunk_size;
-      memory_buffer_size =
-        get "memory_buffer_size" int_of_string
-          default.memory_buffer_size;
-      max_memory_cache_size =
-        get "max_memory_cache_size" int_of_string
-          default.max_memory_cache_size;
-      read_ahead_buffers =
-        get "read_ahead_buffers" int_of_string
-          default.read_ahead_buffers;
-      lost_and_found =
-        get "lost_and_found" bool_of_string
-          default.lost_and_found;
-      shared_with_me =
-        get "shared_with_me" bool_of_string
-          default.shared_with_me;
-      data_directory =
-        get "data_directory" Std.identity
-          default.data_directory;
-      cache_directory =
-        get "cache_directory" Std.identity
-          default.cache_directory;
-      log_directory =
-        get "log_directory" Std.identity
-          default.log_directory;
-      root_folder =
-        get "root_folder" Std.identity
-          default.root_folder;
-      team_drive_id =
-        get "team_drive_id" Std.identity
-          default.team_drive_id;
-      metadata_memory_cache =
-        get "metadata_memory_cache" bool_of_string
-          default.metadata_memory_cache;
-      metadata_memory_cache_saving_interval =
-        get "metadata_memory_cache_saving_interval" int_of_string
-          default.metadata_memory_cache_saving_interval;
-      acknowledge_abuse =
-        get "acknowledge_abuse" bool_of_string
-          default.acknowledge_abuse;
-      desktop_entry_exec =
-        get "desktop_entry_exec" Std.identity
-          default.desktop_entry_exec;
-      write_buffers =
-        get "write_buffers" bool_of_string
-          default.write_buffers;
-      disable_trash =
-        get "disable_trash" bool_of_string
-          default.disable_trash;
-      autodetect_mime =
-        get "autodetect_mime" bool_of_string
-          default.autodetect_mime;
-      mv_keep_target =
-        get "mv_keep_target" bool_of_string
-          default.mv_keep_target;
-      async_upload_queue =
-        get "async_upload_queue" bool_of_string
-          default.async_upload_queue;
-      async_upload_threads =
-        get "async_upload_threads" int_of_string
-          default.async_upload_threads;
-      debug_buffers =
-        get "debug_buffers" bool_of_string
-          default.debug_buffers;
-    }
+  { metadata_cache_time =
+      get "metadata_cache_time" int_of_string default.metadata_cache_time;
+    read_only = get "read_only" bool_of_string default.read_only;
+    umask = get "umask" int_of_string default.umask;
+    sqlite3_busy_timeout =
+      get "sqlite3_busy_timeout" int_of_string default.sqlite3_busy_timeout;
+    download_docs =
+      get "download_docs" bool_of_string default.download_docs;
+    document_format =
+      get "document_format" Std.identity default.document_format;
+    document_icon =
+      get "document_icon" Std.identity default.document_icon;
+    drawing_format =
+      get "drawing_format" Std.identity default.drawing_format;
+    drawing_icon =
+      get "drawing_icon" Std.identity default.drawing_icon;
+    form_format =
+      get "form_format" Std.identity default.form_format;
+    form_icon =
+      get "form_icon" Std.identity default.form_icon;
+    presentation_format =
+      get "presentation_format" Std.identity default.presentation_format;
+    presentation_icon =
+      get "presentation_icon" Std.identity default.presentation_icon;
+    spreadsheet_format =
+      get "spreadsheet_format" Std.identity default.spreadsheet_format;
+    spreadsheet_icon =
+      get "spreadsheet_icon" Std.identity default.spreadsheet_icon;
+    map_format = get "map_format" Std.identity default.map_format;
+    map_icon = get "map_icon" Std.identity default.map_icon;
+    fusion_table_format =
+      get "fusion_table_format" Std.identity default.fusion_table_format;
+    fusion_table_icon =
+      get "fusion_table_icon" Std.identity default.fusion_table_icon;
+    apps_script_format =
+      get "apps_script_format" Std.identity default.apps_script_format;
+    apps_script_icon =
+      get "apps_script_icon" Std.identity default.apps_script_icon;
+    client_id = get "client_id" Std.identity default.client_id;
+    client_secret = get "client_secret" Std.identity default.client_secret;
+    verification_code =
+      get "verification_code" Std.identity default.verification_code;
+    keep_duplicates =
+      get "keep_duplicates" bool_of_string default.keep_duplicates;
+    docs_file_extension =
+      get "docs_file_extension" bool_of_string default.docs_file_extension;
+    max_cache_size_mb =
+      get "max_cache_size_mb" int_of_string default.max_cache_size_mb;
+    curl_debug_off =
+      get "curl_debug_off" bool_of_string default.curl_debug_off;
+    delete_forever_in_trash_folder =
+      get "delete_forever_in_trash_folder" bool_of_string
+        default.delete_forever_in_trash_folder;
+    stream_large_files =
+      get "stream_large_files" bool_of_string
+        default.stream_large_files;
+    large_file_threshold_mb =
+      get "large_file_threshold_mb" int_of_string
+        default.large_file_threshold_mb;
+    large_file_read_only =
+      get "large_file_read_only" bool_of_string
+        default.large_file_read_only;
+    connect_timeout_ms =
+      get "connect_timeout_ms" int_of_string default.connect_timeout_ms;
+    max_download_speed =
+      get "max_download_speed" Int64.of_string default.max_download_speed;
+    max_upload_speed =
+      get "max_upload_speed" Int64.of_string default.max_upload_speed;
+    low_speed_limit =
+      get "low_speed_limit" int_of_string default.low_speed_limit;
+    low_speed_time =
+      get "low_speed_time" int_of_string default.low_speed_time;
+    max_retries = get "max_retries" int_of_string default.max_retries;
+    max_upload_chunk_size =
+      get "max_upload_chunk_size" int_of_string
+        default.max_upload_chunk_size;
+    memory_buffer_size =
+      get "memory_buffer_size" int_of_string
+        default.memory_buffer_size;
+    max_memory_cache_size =
+      get "max_memory_cache_size" int_of_string
+        default.max_memory_cache_size;
+    read_ahead_buffers =
+      get "read_ahead_buffers" int_of_string
+        default.read_ahead_buffers;
+    lost_and_found =
+      get "lost_and_found" bool_of_string
+        default.lost_and_found;
+    shared_with_me =
+      get "shared_with_me" bool_of_string
+        default.shared_with_me;
+    data_directory =
+      get "data_directory" Std.identity
+        default.data_directory;
+    cache_directory =
+      get "cache_directory" Std.identity
+        default.cache_directory;
+    log_directory =
+      get "log_directory" Std.identity
+        default.log_directory;
+    root_folder =
+      get "root_folder" Std.identity
+        default.root_folder;
+    team_drive_id =
+      get "team_drive_id" Std.identity
+        default.team_drive_id;
+    metadata_memory_cache =
+      get "metadata_memory_cache" bool_of_string
+        default.metadata_memory_cache;
+    metadata_memory_cache_saving_interval =
+      get "metadata_memory_cache_saving_interval" int_of_string
+        default.metadata_memory_cache_saving_interval;
+    acknowledge_abuse =
+      get "acknowledge_abuse" bool_of_string
+        default.acknowledge_abuse;
+    desktop_entry_exec =
+      get "desktop_entry_exec" Std.identity
+        default.desktop_entry_exec;
+    write_buffers =
+      get "write_buffers" bool_of_string
+        default.write_buffers;
+    disable_trash =
+      get "disable_trash" bool_of_string
+        default.disable_trash;
+    autodetect_mime =
+      get "autodetect_mime" bool_of_string
+        default.autodetect_mime;
+    mv_keep_target =
+      get "mv_keep_target" bool_of_string
+        default.mv_keep_target;
+    async_upload_queue =
+      get "async_upload_queue" bool_of_string
+        default.async_upload_queue;
+    async_upload_threads =
+      get "async_upload_threads" int_of_string
+        default.async_upload_threads;
+    debug_buffers =
+      get "debug_buffers" bool_of_string
+        default.debug_buffers;
+    service_account_credentials_path =
+      get "service_account_credentials_path" Std.identity
+        default.service_account_credentials_path;
+    service_account_user_to_impersonate =
+      get "service_account_user_to_impersonate" Std.identity
+        default.service_account_user_to_impersonate;
+  }
 
 let to_table data =
   let table = Hashtbl.create 16 in
   let add = Hashtbl.add table in
-    add "metadata_cache_time" (data.metadata_cache_time |> string_of_int);
-    add "read_only" (data.read_only |> string_of_bool);
-    add "umask" (data.umask |> Printf.sprintf "0o%03o");
-    add "sqlite3_busy_timeout" (data.sqlite3_busy_timeout |> string_of_int);
-    add "download_docs" (data.download_docs |> string_of_bool);
-    add "document_format" data.document_format;
-    add "document_icon" data.document_icon;
-    add "drawing_format" data.drawing_format;
-    add "drawing_icon" data.drawing_icon;
-    add "form_format" data.form_format;
-    add "form_icon" data.form_icon;
-    add "presentation_format" data.presentation_format;
-    add "presentation_icon" data.presentation_icon;
-    add "spreadsheet_format" data.spreadsheet_format;
-    add "spreadsheet_icon" data.spreadsheet_icon;
-    add "map_format" data.map_format;
-    add "map_icon" data.map_icon;
-    add "fusion_table_format" data.fusion_table_format;
-    add "fusion_table_icon" data.fusion_table_icon;
-    add "apps_script_format" data.apps_script_format;
-    add "apps_script_icon" data.apps_script_icon;
-    add "client_id" data.client_id;
-    add "client_secret" data.client_secret;
-    add "verification_code" data.verification_code;
-    add "keep_duplicates" (data.keep_duplicates |> string_of_bool);
-    add "docs_file_extension" (data.docs_file_extension |> string_of_bool);
-    add "max_cache_size_mb" (data.max_cache_size_mb |> string_of_int);
-    add "curl_debug_off" (data.curl_debug_off |> string_of_bool);
-    add "delete_forever_in_trash_folder"
-      (data.delete_forever_in_trash_folder |> string_of_bool);
-    add "stream_large_files" (data.stream_large_files |> string_of_bool);
-    add "large_file_threshold_mb"
-      (data.large_file_threshold_mb |> string_of_int);
-    add "large_file_read_only"
-      (data.large_file_read_only |> string_of_bool);
-    add "connect_timeout_ms" (data.connect_timeout_ms |> string_of_int);
-    add "max_download_speed" (data.max_download_speed |> Int64.to_string);
-    add "max_upload_speed" (data.max_upload_speed |> Int64.to_string);
-    add "low_speed_limit" (data.low_speed_limit |> string_of_int);
-    add "low_speed_time" (data.low_speed_time |> string_of_int);
-    add "max_retries" (data.max_retries |> string_of_int);
-    add "max_upload_chunk_size" (data.max_upload_chunk_size |> string_of_int);
-    add "memory_buffer_size" (data.memory_buffer_size |> string_of_int);
-    add "max_memory_cache_size" (data.max_memory_cache_size |> string_of_int);
-    add "read_ahead_buffers" (data.read_ahead_buffers |> string_of_int);
-    add "lost_and_found" (data.lost_and_found |> string_of_bool);
-    add "shared_with_me" (data.shared_with_me |> string_of_bool);
-    add "data_directory" data.data_directory;
-    add "cache_directory" data.cache_directory;
-    add "log_directory" data.log_directory;
-    add "root_folder" data.root_folder;
-    add "team_drive_id" data.team_drive_id;
-    add "metadata_memory_cache" (data.metadata_memory_cache |> string_of_bool);
-    add "metadata_memory_cache_saving_interval"
-      (data.metadata_memory_cache_saving_interval |> string_of_int);
-    add "acknowledge_abuse" (data.acknowledge_abuse |> string_of_bool);
-    add "desktop_entry_exec" data.desktop_entry_exec;
-    add "write_buffers" (data.write_buffers |> string_of_bool);
-    add "disable_trash" (data.disable_trash |> string_of_bool);
-    add "autodetect_mime" (data.autodetect_mime |> string_of_bool);
-    add "mv_keep_target" (data.mv_keep_target |> string_of_bool);
-    add "async_upload_queue" (data.async_upload_queue |> string_of_bool);
-    add "async_upload_threads" (data.async_upload_threads |> string_of_int);
-    add "debug_buffers" (data.debug_buffers |> string_of_bool);
-    table
+  add "metadata_cache_time" (data.metadata_cache_time |> string_of_int);
+  add "read_only" (data.read_only |> string_of_bool);
+  add "umask" (data.umask |> Printf.sprintf "0o%03o");
+  add "sqlite3_busy_timeout" (data.sqlite3_busy_timeout |> string_of_int);
+  add "download_docs" (data.download_docs |> string_of_bool);
+  add "document_format" data.document_format;
+  add "document_icon" data.document_icon;
+  add "drawing_format" data.drawing_format;
+  add "drawing_icon" data.drawing_icon;
+  add "form_format" data.form_format;
+  add "form_icon" data.form_icon;
+  add "presentation_format" data.presentation_format;
+  add "presentation_icon" data.presentation_icon;
+  add "spreadsheet_format" data.spreadsheet_format;
+  add "spreadsheet_icon" data.spreadsheet_icon;
+  add "map_format" data.map_format;
+  add "map_icon" data.map_icon;
+  add "fusion_table_format" data.fusion_table_format;
+  add "fusion_table_icon" data.fusion_table_icon;
+  add "apps_script_format" data.apps_script_format;
+  add "apps_script_icon" data.apps_script_icon;
+  add "client_id" data.client_id;
+  add "client_secret" data.client_secret;
+  add "verification_code" data.verification_code;
+  add "keep_duplicates" (data.keep_duplicates |> string_of_bool);
+  add "docs_file_extension" (data.docs_file_extension |> string_of_bool);
+  add "max_cache_size_mb" (data.max_cache_size_mb |> string_of_int);
+  add "curl_debug_off" (data.curl_debug_off |> string_of_bool);
+  add "delete_forever_in_trash_folder"
+    (data.delete_forever_in_trash_folder |> string_of_bool);
+  add "stream_large_files" (data.stream_large_files |> string_of_bool);
+  add "large_file_threshold_mb"
+    (data.large_file_threshold_mb |> string_of_int);
+  add "large_file_read_only"
+    (data.large_file_read_only |> string_of_bool);
+  add "connect_timeout_ms" (data.connect_timeout_ms |> string_of_int);
+  add "max_download_speed" (data.max_download_speed |> Int64.to_string);
+  add "max_upload_speed" (data.max_upload_speed |> Int64.to_string);
+  add "low_speed_limit" (data.low_speed_limit |> string_of_int);
+  add "low_speed_time" (data.low_speed_time |> string_of_int);
+  add "max_retries" (data.max_retries |> string_of_int);
+  add "max_upload_chunk_size" (data.max_upload_chunk_size |> string_of_int);
+  add "memory_buffer_size" (data.memory_buffer_size |> string_of_int);
+  add "max_memory_cache_size" (data.max_memory_cache_size |> string_of_int);
+  add "read_ahead_buffers" (data.read_ahead_buffers |> string_of_int);
+  add "lost_and_found" (data.lost_and_found |> string_of_bool);
+  add "shared_with_me" (data.shared_with_me |> string_of_bool);
+  add "data_directory" data.data_directory;
+  add "cache_directory" data.cache_directory;
+  add "log_directory" data.log_directory;
+  add "root_folder" data.root_folder;
+  add "team_drive_id" data.team_drive_id;
+  add "metadata_memory_cache" (data.metadata_memory_cache |> string_of_bool);
+  add "metadata_memory_cache_saving_interval"
+    (data.metadata_memory_cache_saving_interval |> string_of_int);
+  add "acknowledge_abuse" (data.acknowledge_abuse |> string_of_bool);
+  add "desktop_entry_exec" data.desktop_entry_exec;
+  add "write_buffers" (data.write_buffers |> string_of_bool);
+  add "disable_trash" (data.disable_trash |> string_of_bool);
+  add "autodetect_mime" (data.autodetect_mime |> string_of_bool);
+  add "mv_keep_target" (data.mv_keep_target |> string_of_bool);
+  add "async_upload_queue" (data.async_upload_queue |> string_of_bool);
+  add "async_upload_threads" (data.async_upload_threads |> string_of_int);
+  add "debug_buffers" (data.debug_buffers |> string_of_bool);
+  add "service_account_credentials_path"
+    data.service_account_credentials_path;
+  add "service_account_user_to_impersonate"
+    data.service_account_user_to_impersonate;
+  table
 
 let debug_print out_ch start_time curl info_type info =
   let time = Unix.gettimeofday () in
@@ -739,34 +767,64 @@ let debug_print out_ch start_time curl info_type info =
        info.[String.length info - 1] = '\n' then ""
     else "\n"
   in
-    Printf.fprintf out_ch "[%f] curl: %s: %s%s%!"
-      timestamp
-      (GapiCurl.string_of_curl_info_type info_type)
-      info
-      nl
+  Printf.fprintf out_ch "[%f] curl: %s: %s%s%!"
+    timestamp
+    (GapiCurl.string_of_curl_info_type info_type)
+    info
+    nl
 
 let create_gapi_config config debug curl_log_path =
   let gapi_config =
     if debug && (not config.curl_debug_off) then
       let out_ch = open_out curl_log_path in
       let debug_function = debug_print out_ch (Unix.gettimeofday ()) in
-        GapiConfig.default_debug
-          |> GapiConfig.debug ^= Some (GapiConfig.Custom debug_function)
+      GapiConfig.default_debug
+        |> GapiConfig.debug ^= Some (GapiConfig.Custom debug_function)
     else
       GapiConfig.default
   in
-    gapi_config
-      |> GapiConfig.application_name ^= application_name ^ " (" ^ version ^ ")"
-      |> GapiConfig.connect_timeout ^= Some config.connect_timeout_ms
-      |> GapiConfig.max_recv_speed ^= config.max_download_speed
-      |> GapiConfig.max_send_speed ^= config.max_upload_speed
-      |> GapiConfig.low_speed_limit ^= config.low_speed_limit
-      |> GapiConfig.low_speed_time ^= config.low_speed_time
-      |> GapiConfig.upload_chunk_size ^= config.max_upload_chunk_size
-      (* If client_id and client_secret are not set, the authorization will
-       * be handled by the GAE proxy *)
-      |> GapiConfig.auth ^= GapiConfig.OAuth2
-                              { GapiConfig.client_id = config.client_id;
-                                client_secret = config.client_secret;
-                                refresh_access_token = None }
+  let gapi_auth =
+    if config.service_account_credentials_path = "" then
+      GapiConfig.OAuth2 {
+        GapiConfig.client_id = config.client_id;
+        client_secret = config.client_secret;
+        refresh_access_token = None;
+      }
+    else
+      let service_account_credentials_json =
+        Utils.with_in_channel
+          config.service_account_credentials_path
+          (fun ch ->
+             let b = Buffer.create 512 in
+             begin try
+                 while true do
+                   Buffer.add_string b (input_line ch)
+                 done;
+               with End_of_file -> ()
+             end;
+             Buffer.contents b
+          )
+      in
+      let user_to_impersonate =
+        match config.service_account_user_to_impersonate with
+        | "" -> None
+        | u -> Some u in
+      GapiConfig.OAuth2ServiceAccount {
+        GapiConfig.service_account_credentials_json;
+        scopes = [GapiDriveV2Service.Scope.drive];
+        user_to_impersonate;
+        refresh_service_account_access_token = None;
+      }
+  in
+  gapi_config
+    |> GapiConfig.application_name ^= application_name ^ " (" ^ version ^ ")"
+    |> GapiConfig.connect_timeout ^= Some config.connect_timeout_ms
+    |> GapiConfig.max_recv_speed ^= config.max_download_speed
+    |> GapiConfig.max_send_speed ^= config.max_upload_speed
+    |> GapiConfig.low_speed_limit ^= config.low_speed_limit
+    |> GapiConfig.low_speed_time ^= config.low_speed_time
+    |> GapiConfig.upload_chunk_size ^= config.max_upload_chunk_size
+    (* If client_id and client_secret are not set, the authorization will
+     * be handled by the GAE proxy *)
+    |> GapiConfig.auth ^= gapi_auth
 
