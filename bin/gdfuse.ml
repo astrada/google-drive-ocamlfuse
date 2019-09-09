@@ -100,6 +100,7 @@ type application_params = {
   service_account_credentials_path : string;
   service_account_user_to_impersonate : string;
   log_to : string;
+  scope : string;
 }
 
 let setup_application params =
@@ -185,6 +186,10 @@ let setup_application params =
     if params.service_account_user_to_impersonate = ""
     then current_config |. Config.service_account_user_to_impersonate
     else params.service_account_user_to_impersonate in
+  let scope =
+    if params.scope = ""
+    then current_config |. Config.scope
+    else params.scope in
   let headless = params.headless in
   let sqlite3_busy_timeout =
     (* Previously default timeout was 500ms that's too low for multi-threading.
@@ -210,6 +215,7 @@ let setup_application params =
           service_account_credentials_path;
           service_account_user_to_impersonate;
           log_to;
+          scope;
     } in
   let config =
     if params.docs_mode = "libreoffice" then
@@ -649,6 +655,7 @@ let () =
   let service_account_credentials_path = ref "" in
   let service_account_user_to_impersonate = ref "" in
   let log_to = ref "" in
+  let scope = ref "" in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -752,6 +759,9 @@ let () =
        "-log_to",
        Arg.Set_string log_to,
        " logs to 'stdout' ('-'), 'stderr', or an absolute path.";
+       "-scope",
+       Arg.Set_string scope,
+       " sets a custom Drive API scope.";
       ]) in
   let () =
     Arg.parse
@@ -789,6 +799,7 @@ let () =
         service_account_user_to_impersonate =
           !service_account_user_to_impersonate;
         log_to = !log_to;
+        scope = !scope;
       } in
       if !mountpoint = "" then begin
         setup_application { params with mountpoint = "." };

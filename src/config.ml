@@ -143,6 +143,8 @@ type t = {
    * access. Valid only for G Suite domains. Considered only if
    * service_account_credentials_path is specified. *)
   service_account_user_to_impersonate : string;
+  (* Specifies a custom Drive API scope. *)
+  scope : string;
 }
 
 let metadata_cache_time = {
@@ -397,6 +399,10 @@ let service_account_user_to_impersonate = {
   GapiLens.get = (fun x -> x.service_account_user_to_impersonate);
   GapiLens.set = (fun v x -> { x with service_account_user_to_impersonate = v })
 }
+let scope = {
+  GapiLens.get = (fun x -> x.scope);
+  GapiLens.set = (fun v x -> { x with scope = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -477,6 +483,7 @@ let default = {
   debug_buffers = false;
   service_account_credentials_path = "";
   service_account_user_to_impersonate = "";
+  scope = "";
 }
 
 let default_debug = {
@@ -543,6 +550,7 @@ let default_debug = {
   debug_buffers = false;
   service_account_credentials_path = "";
   service_account_user_to_impersonate = "";
+  scope = "";
 }
 
 let of_table table =
@@ -695,6 +703,9 @@ let of_table table =
     service_account_user_to_impersonate =
       get "service_account_user_to_impersonate" Std.identity
         default.service_account_user_to_impersonate;
+    scope =
+      get "scope" Std.identity
+        default.scope;
   }
 
 let to_table data =
@@ -769,6 +780,7 @@ let to_table data =
     data.service_account_credentials_path;
   add "service_account_user_to_impersonate"
     data.service_account_user_to_impersonate;
+  add "scope" data.scope;
   table
 
 let debug_print out_ch start_time curl info_type info =
@@ -821,9 +833,13 @@ let create_gapi_config config debug curl_log_path log_to =
         match config.service_account_user_to_impersonate with
         | "" -> None
         | u -> Some u in
+      let scopes =
+        match config.scope with
+        | "" -> [GapiDriveV2Service.Scope.drive]
+        | s -> [s] in
       GapiConfig.OAuth2ServiceAccount {
         GapiConfig.service_account_credentials_json;
-        scopes = [GapiDriveV2Service.Scope.drive];
+        scopes;
         user_to_impersonate;
         refresh_service_account_access_token = None;
       }

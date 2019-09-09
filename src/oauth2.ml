@@ -105,6 +105,10 @@ let get_access_token headless browser =
   let client_secret = config_lens |. Config.client_secret in
   let verification_code = config_lens |. Config.verification_code in
   let redirect_uri = "urn:ietf:wg:oauth:2.0:oob" in
+  let scope =
+    match config_lens |. Config.scope with
+    | "" -> scope
+    | s -> [s] in
   let code = 
     if verification_code = "" then
       let url = GapiOAuth2.authorization_code_url

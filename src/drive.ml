@@ -179,7 +179,8 @@ let handle_default_exceptions =
           | "rateLimitExceeded"
           | "backendError"
           | "downloadQuotaExceeded" -> Utils.raise_m Utils.Temporary_error
-          | "insufficientFilePermissions" -> Utils.raise_m Permission_denied
+          | "insufficientFilePermissions"
+          | "insufficientPermissions" -> Utils.raise_m Permission_denied
           | _ -> Utils.raise_m IO_error
         end
     end
