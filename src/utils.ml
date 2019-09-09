@@ -52,6 +52,16 @@ let with_out_channel ?(mode = [Open_creat; Open_wronly]) path f =
     (fun () -> close_out ch)
 
 (* Logging *)
+let open_log_out_ch log_to path =
+  match log_to with
+  | "-"
+  | "stdout" -> stdout
+  | "stderr" -> stderr
+  | "" -> open_out path
+  | p when String.index p '/' = 0 ->  open_out p
+  | l -> failwith ("Invalid log_to value: " ^ l ^
+                   " should be 'stdout', 'stderr', or an absolute path")
+
 let log_message format =
   if !verbose then begin
     if !debug_buffers then Mutex.lock log_mutex;

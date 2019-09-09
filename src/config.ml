@@ -107,6 +107,8 @@ type t = {
   cache_directory : string;
   (* Path of the directory containing log files *)
   log_directory : string;
+  (* Specifies the file descriptor to log to (stdout/stderr). *)
+  log_to : string;
   (* Folder id or remote path of the root folder *)
   root_folder : string;
   (* Team drive id *)
@@ -331,6 +333,10 @@ let log_directory = {
   GapiLens.get = (fun x -> x.log_directory);
   GapiLens.set = (fun v x -> { x with log_directory = v })
 }
+let log_to = {
+  GapiLens.get = (fun x -> x.log_to);
+  GapiLens.set = (fun v x -> { x with log_to = v })
+}
 let root_folder = {
   GapiLens.get = (fun x -> x.root_folder);
   GapiLens.set = (fun v x -> { x with root_folder = v })
@@ -455,6 +461,7 @@ let default = {
   data_directory = "";
   cache_directory = "";
   log_directory = "";
+  log_to = "";
   root_folder = "";
   team_drive_id = "";
   metadata_memory_cache = true;
@@ -520,6 +527,7 @@ let default_debug = {
   data_directory = "";
   cache_directory = "";
   log_directory = "";
+  log_to = "";
   root_folder = "";
   team_drive_id = "";
   metadata_memory_cache = true;
@@ -639,6 +647,9 @@ let of_table table =
     log_directory =
       get "log_directory" Std.identity
         default.log_directory;
+    log_to =
+      get "log_to" Std.identity
+        default.log_to;
     root_folder =
       get "root_folder" Std.identity
         default.root_folder;
@@ -739,6 +750,7 @@ let to_table data =
   add "data_directory" data.data_directory;
   add "cache_directory" data.cache_directory;
   add "log_directory" data.log_directory;
+  add "log_to" data.log_to;
   add "root_folder" data.root_folder;
   add "team_drive_id" data.team_drive_id;
   add "metadata_memory_cache" (data.metadata_memory_cache |> string_of_bool);
@@ -773,10 +785,10 @@ let debug_print out_ch start_time curl info_type info =
     info
     nl
 
-let create_gapi_config config debug curl_log_path =
+let create_gapi_config config debug curl_log_path log_to =
   let gapi_config =
     if debug && (not config.curl_debug_off) then
-      let out_ch = open_out curl_log_path in
+      let out_ch = Utils.open_log_out_ch log_to curl_log_path in
       let debug_function = debug_print out_ch (Unix.gettimeofday ()) in
       GapiConfig.default_debug
         |> GapiConfig.debug ^= Some (GapiConfig.Custom debug_function)

@@ -99,6 +99,7 @@ type application_params = {
   docs_mode : string;
   service_account_credentials_path : string;
   service_account_user_to_impersonate : string;
+  log_to : string;
 }
 
 let setup_application params =
@@ -155,8 +156,16 @@ let setup_application params =
       xdg_base_directory in
   let () = AppDir.create_directories app_dir in
   let app_log_path = app_dir.AppDir.app_log_path in
-  Utils.log_message "Opening log file: %s\n%!" app_log_path;
-  let log_channel = open_out app_log_path in
+  let log_to =
+    if params.log_to = ""
+    then current_config |. Config.log_to
+    else params.log_to in
+  begin if log_to = "" then
+    Utils.log_message "Opening log file: %s\n%!" app_log_path
+  else
+    Utils.log_message "Opening log file: %s\n%!" log_to
+  end;
+  let log_channel = Utils.open_log_out_ch log_to app_log_path in
   Utils.log_channel := log_channel;
   Utils.log_with_header "Setting up %s filesystem...\n%!"
     params.filesystem_label;
@@ -200,6 +209,7 @@ let setup_application params =
           sqlite3_busy_timeout;
           service_account_credentials_path;
           service_account_user_to_impersonate;
+          log_to;
     } in
   let config =
     if params.docs_mode = "libreoffice" then
@@ -247,7 +257,7 @@ let setup_application params =
   let gapi_config =
     let gapi_config =
       Config.create_gapi_config config params.debug
-        app_dir.AppDir.curl_log_path in
+        app_dir.AppDir.curl_log_path log_to in
     if service_account_credentials_path = "" &&
        (client_id = "" || client_secret = "") then
       let oauth2_config =
@@ -638,6 +648,7 @@ let () =
   let docs_mode = ref "" in
   let service_account_credentials_path = ref "" in
   let service_account_user_to_impersonate = ref "" in
+  let log_to = ref "" in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -738,6 +749,9 @@ let () =
        "-serviceaccountuser",
        Arg.Set_string service_account_user_to_impersonate,
        " sets the email of the G Suite user to impersonate.";
+       "-log_to",
+       Arg.Set_string log_to,
+       " logs to 'stdout' ('-'), 'stderr', or an absolute path.";
       ]) in
   let () =
     Arg.parse
@@ -774,6 +788,7 @@ let () =
         service_account_credentials_path = !service_account_credentials_path;
         service_account_user_to_impersonate =
           !service_account_user_to_impersonate;
+        log_to = !log_to;
       } in
       if !mountpoint = "" then begin
         setup_application { params with mountpoint = "." };
