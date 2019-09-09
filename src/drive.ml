@@ -2100,7 +2100,7 @@ let upload resource =
 
 let upload_resource_with_retry resource =
   flush_memory_buffers resource;
-  with_retry (try_with_default upload) resource
+  with_retry (fun r -> try_with_default (upload r)) resource
 
 let upload_resource_by_id resource_id =
   let context = Context.get_ctx () in
