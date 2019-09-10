@@ -54,6 +54,7 @@ struct
     can_edit : bool option;
     trashed : bool option;
     web_view_link : string option;
+    export_links : string option;
     version : int64 option;
     (* app data stored in Drive *)
     file_mode_bits : int64 option;
@@ -123,6 +124,10 @@ struct
   let web_view_link = {
     GapiLens.get = (fun x -> x.web_view_link);
     GapiLens.set = (fun v x -> { x with web_view_link = v })
+  }
+  let export_links = {
+    GapiLens.get = (fun x -> x.export_links);
+    GapiLens.set = (fun v x -> { x with export_links = v })
   }
   let version = {
     GapiLens.get = (fun x -> x.version);
@@ -381,6 +386,39 @@ struct
     | "zip" -> "application/zip"
     | _ -> failwith ("Unsupported format: " ^ fmt)
 
+  (* Export links *)
+  let serialize_export_links export_links =
+    let b = Buffer.create 512 in
+    List.iter
+      (fun (k, v) ->
+         Buffer.add_string b k;
+         Buffer.add_string b "|";
+         Buffer.add_string b v;
+         Buffer.add_string b ";";
+      )
+      export_links;
+    Buffer.contents b
+
+  let parse_export_links serialize_export_links =
+    let parse_export_link serialized_export_link =
+      let pipe_index = String.index serialized_export_link '|' in
+      let k = String.sub serialized_export_link 0 pipe_index in
+      let v =
+        String.sub serialized_export_link (pipe_index + 1)
+          (String.length serialized_export_link - pipe_index - 1) in
+      (k, v)
+    in
+    let rec loop accu s =
+      try
+        let semicolon_index = String.index s ';' in
+        let kv = String.sub s 0 semicolon_index in
+        let rest = String.sub s (semicolon_index + 1)
+            (String.length s - semicolon_index - 1) in
+        loop (parse_export_link kv :: accu) rest
+      with Not_found -> accu
+    in
+    loop [] serialize_export_links |> List.rev
+    
 end
 
 module Metadata =

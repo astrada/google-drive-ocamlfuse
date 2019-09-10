@@ -37,6 +37,7 @@ sig
     can_edit : bool option;
     trashed : bool option;
     web_view_link : string option;
+    export_links : string option;
     version : int64 option;
     file_mode_bits : int64 option;
     uid : int64 option;
@@ -63,6 +64,7 @@ sig
   val can_edit : (t, bool option) GapiLens.t
   val trashed : (t, bool option) GapiLens.t
   val web_view_link : (t, string option) GapiLens.t
+  val export_links : (t, string option) GapiLens.t
   val version : (t, int64 option) GapiLens.t
   val file_mode_bits : (t, int64 option) GapiLens.t
   val uid : (t, int64 option) GapiLens.t
@@ -106,6 +108,9 @@ sig
   val get_icon_from_mime_type : string -> Config.t -> string
   val get_icon : t -> Config.t -> string
   val mime_type_of_format : string -> string
+
+  val serialize_export_links : (string * string) list -> string
+  val parse_export_links : string -> (string * string) list
 
 end
 

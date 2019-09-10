@@ -17,7 +17,7 @@ let folder_mime_type = "application/vnd.google-apps.folder"
 let file_fields =
   "appProperties,capabilities(canEdit),createdTime,explicitlyTrashed,\
    fileExtension,fullFileExtension,id,md5Checksum,mimeType,modifiedTime,\
-   name,parents,size,trashed,version,viewedByMeTime,webViewLink"
+   name,parents,size,trashed,version,viewedByMeTime,webViewLink,exportLinks"
 let file_std_params =
   { GapiService.StandardParameters.default with
         GapiService.StandardParameters.fields = file_fields
@@ -274,6 +274,7 @@ let create_resource path =
     can_edit = None;
     trashed = None;
     web_view_link = None;
+    export_links = None;
     version = None;
     file_mode_bits = None;
     uid = None;
@@ -383,6 +384,9 @@ let update_resource_from_file ?state resource file =
         can_edit = Some file.File.capabilities.File.Capabilities.canEdit;
         trashed = Some file.File.trashed;
         web_view_link = Some file.File.webViewLink;
+        export_links =
+          Some (CacheData.Resource.serialize_export_links
+                  file.File.exportLinks);
         version = Some file.File.version;
         file_mode_bits = CacheData.Resource.get_file_mode_bits
             file.File.appProperties;
@@ -1345,12 +1349,22 @@ let download_resource resource =
     if CacheData.Resource.is_document resource then begin
       let fmt = CacheData.Resource.get_format resource config in
       let mimeType = CacheData.Resource.mime_type_of_format fmt in
-      FilesResource.export
-        ~media_download
-        ~fileId
-        ~mimeType >>= fun () ->
-      SessionM.return ()
-    end else if Option.default 0L resource.CacheData.Resource.size > 0L then begin
+      let export_links =
+        CacheData.Resource.parse_export_links
+          (Option.default "" resource.CacheData.Resource.export_links) in
+      begin try
+        let export_link = List.assoc mimeType export_links in
+        GapiService.get ~media_download export_link
+          GapiRequest.parse_empty_response
+      with Not_found ->
+        FilesResource.export
+          ~media_download
+          ~fileId
+          ~mimeType >>= fun () ->
+        SessionM.return ()
+      end
+    end else if Option.default 0L
+        resource.CacheData.Resource.size > 0L then begin
       download_media media_download fileId >>= fun _ ->
       SessionM.return ()
     end else begin

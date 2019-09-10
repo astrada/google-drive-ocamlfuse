@@ -124,6 +124,7 @@ struct
      can_edit, \
      trashed, \
      web_view_link, \
+     export_links, \
      version, "
   let app_properties_fields =
     "file_mode_bits, \
@@ -159,6 +160,7 @@ struct
          :can_edit, \
          :trashed, \
          :web_view_link, \
+         :export_links, \
          :version, \
          :file_mode_bits, \
          :uid, \
@@ -191,6 +193,7 @@ struct
          :can_edit, \
          :trashed, \
          :web_view_link, \
+         :export_links, \
          :version, \
          :file_mode_bits, \
          :uid, \
@@ -222,6 +225,7 @@ struct
          can_edit = :can_edit, \
          trashed = :trashed, \
          web_view_link = :web_view_link, \
+         export_links = :export_links, \
          version = :version, \
          file_mode_bits = :file_mode_bits, \
          uid = :uid, \
@@ -626,6 +630,7 @@ struct
     bind_bool stmt ":can_edit" resource.can_edit;
     bind_bool stmt ":trashed" resource.trashed;
     bind_text stmt ":web_view_link" resource.web_view_link;
+    bind_text stmt ":export_links" resource.export_links;
     bind_int stmt ":version" resource.version;
     bind_int stmt ":file_mode_bits" resource.file_mode_bits;
     bind_int stmt ":uid" resource.uid;
@@ -845,17 +850,18 @@ struct
       can_edit = row_data.(11) |> data_to_bool;
       trashed = row_data.(12) |> data_to_bool;
       web_view_link = row_data.(13) |> data_to_string;
-      version = row_data.(14) |> data_to_int64;
-      file_mode_bits = row_data.(15) |> data_to_int64;
-      uid = row_data.(16) |> data_to_int64;
-      gid = row_data.(17) |> data_to_int64;
-      link_target = row_data.(18) |> data_to_string;
-      xattrs = row_data.(19) |> data_to_string |> Option.get;
-      parent_path = row_data.(20) |> data_to_string |> Option.get;
-      path = row_data.(21) |> data_to_string |> Option.get;
-      state = row_data.(22) |> data_to_string |> Option.get |>
+      export_links = row_data.(14) |> data_to_string;
+      version = row_data.(15) |> data_to_int64;
+      file_mode_bits = row_data.(16) |> data_to_int64;
+      uid = row_data.(17) |> data_to_int64;
+      gid = row_data.(18) |> data_to_int64;
+      link_target = row_data.(19) |> data_to_string;
+      xattrs = row_data.(20) |> data_to_string |> Option.get;
+      parent_path = row_data.(21) |> data_to_string |> Option.get;
+      path = row_data.(22) |> data_to_string |> Option.get;
+      state = row_data.(23) |> data_to_string |> Option.get |>
               CacheData.Resource.State.of_string;
-      last_update = row_data.(23) |> data_to_float |> Option.get;
+      last_update = row_data.(24) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -1119,6 +1125,7 @@ let setup_db cache =
             can_edit INTEGER NULL, \
             trashed INTEGER NULL, \
             web_view_link TEXT NULL, \
+            export_links TEXT NULL, \
             version INTEGER NULL, \
             file_mode_bits INTEGER NULL, \
             uid INTEGER NULL, \
