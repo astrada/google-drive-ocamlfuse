@@ -92,13 +92,13 @@ let disambiguate_filename
     let new_candidate =
       let fingerprint = get_remote_id_fingerprint counter remote_id in
       match full_file_extension with
-          "" ->
-            Printf.sprintf "%s (%s)" filename fingerprint
-        | extension ->
-            let base_name =
-              String.sub filename 0 (String.length filename -
-                                     String.length extension - 1) in
-            Printf.sprintf "%s (%s).%s" base_name fingerprint extension
+      | "" ->
+        Printf.sprintf "%s (%s)" filename fingerprint
+      | extension ->
+        let base_name =
+          String.sub filename 0 (String.length filename -
+                                 String.length extension - 1) in
+        Printf.sprintf "%s (%s).%s" base_name fingerprint extension
     in
     if not (Hashtbl.mem filename_table new_candidate) then begin
       Utils.log_with_header "Checking: %s: OK\n%!" new_candidate;
@@ -222,9 +222,17 @@ let get_filename name is_document get_document_format =
   if is_document &&
       config.Config.docs_file_extension &&
       document_format <> "" then
-    clean_name ^ "." ^ document_format
-  else
-    clean_name
+    let current_extension =
+      try
+        let dot_index = String.index clean_name '.' in
+        String.sub clean_name (dot_index + 1)
+          (String.length clean_name - dot_index - 1)
+      with Not_found -> ""
+    in
+    if current_extension <> document_format then
+      clean_name ^ "." ^ document_format
+    else clean_name
+  else clean_name
 
 let build_resource_tables parent_path trashed =
   let context = Context.get_ctx () in
