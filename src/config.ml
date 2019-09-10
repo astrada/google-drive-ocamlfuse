@@ -145,6 +145,8 @@ type t = {
   service_account_user_to_impersonate : string;
   (* Specifies a custom Drive API scope. *)
   scope : string;
+  (* Specifies a custom Drive API redirect URI. *)
+  redirect_uri : string;
 }
 
 let metadata_cache_time = {
@@ -403,6 +405,10 @@ let scope = {
   GapiLens.get = (fun x -> x.scope);
   GapiLens.set = (fun v x -> { x with scope = v })
 }
+let redirect_uri = {
+  GapiLens.get = (fun x -> x.redirect_uri);
+  GapiLens.set = (fun v x -> { x with redirect_uri = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -484,6 +490,7 @@ let default = {
   service_account_credentials_path = "";
   service_account_user_to_impersonate = "";
   scope = "";
+  redirect_uri = "";
 }
 
 let default_debug = {
@@ -551,6 +558,7 @@ let default_debug = {
   service_account_credentials_path = "";
   service_account_user_to_impersonate = "";
   scope = "";
+  redirect_uri = "";
 }
 
 let of_table table =
@@ -706,6 +714,9 @@ let of_table table =
     scope =
       get "scope" Std.identity
         default.scope;
+    redirect_uri =
+      get "redirect_uri" Std.identity
+        default.redirect_uri;
   }
 
 let to_table data =
@@ -781,6 +792,7 @@ let to_table data =
   add "service_account_user_to_impersonate"
     data.service_account_user_to_impersonate;
   add "scope" data.scope;
+  add "redirect_uri" data.redirect_uri;
   table
 
 let debug_print out_ch start_time curl info_type info =

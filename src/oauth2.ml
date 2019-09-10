@@ -104,7 +104,10 @@ let get_access_token headless browser =
   let client_id = config_lens |. Config.client_id in
   let client_secret = config_lens |. Config.client_secret in
   let verification_code = config_lens |. Config.verification_code in
-  let redirect_uri = "urn:ietf:wg:oauth:2.0:oob" in
+  let redirect_uri =
+    match config_lens |. Config.redirect_uri with
+    | "" -> "urn:ietf:wg:oauth:2.0:oob"
+    | uri -> uri in
   let scope =
     match config_lens |. Config.scope with
     | "" -> scope

@@ -101,6 +101,7 @@ type application_params = {
   service_account_user_to_impersonate : string;
   log_to : string;
   scope : string;
+  redirect_uri : string;
 }
 
 let setup_application params =
@@ -190,6 +191,10 @@ let setup_application params =
     if params.scope = ""
     then current_config |. Config.scope
     else params.scope in
+  let redirect_uri =
+    if params.redirect_uri = ""
+    then current_config |. Config.redirect_uri
+    else params.redirect_uri in
   let headless = params.headless in
   let sqlite3_busy_timeout =
     (* Previously default timeout was 500ms that's too low for multi-threading.
@@ -216,6 +221,7 @@ let setup_application params =
           service_account_user_to_impersonate;
           log_to;
           scope;
+          redirect_uri;
     } in
   let config =
     if params.docs_mode = "libreoffice" then
@@ -656,6 +662,7 @@ let () =
   let service_account_user_to_impersonate = ref "" in
   let log_to = ref "" in
   let scope = ref "" in
+  let redirect_uri = ref "" in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -762,6 +769,9 @@ let () =
        "-scope",
        Arg.Set_string scope,
        " sets a custom Drive API scope.";
+       "-redirect_uri",
+       Arg.Set_string redirect_uri,
+       " sets a custom Drive API redirect URI.";
       ]) in
   let () =
     Arg.parse
@@ -800,6 +810,7 @@ let () =
           !service_account_user_to_impersonate;
         log_to = !log_to;
         scope = !scope;
+        redirect_uri = !redirect_uri;
       } in
       if !mountpoint = "" then begin
         setup_application { params with mountpoint = "." };
