@@ -758,20 +758,17 @@ let get_metadata () =
       SessionM.return (changes, new_start_page_token)
     in
 
-    let get_ids_to_update change =
-      let get_id = Option.map (fun r -> r.CacheData.Resource.id) in
+    let get_resources_and_files_to_update change =
       let selected_resources =
         Cache.Resource.select_resources_with_remote_id
-          cache change.Change.fileId in
-      let resources =
-        List.filter
-          (fun r -> change.Change.file.File.version > 0L &&
-                    change.Change.file.File.version >
-                    Option.default 0L r.CacheData.Resource.version)
-          selected_resources |>
-        List.map (fun r -> Some r)
+          cache change.Change.fileId
       in
-      List.map get_id resources
+      List.filter
+        (fun r -> change.Change.file.File.version > 0L &&
+                  change.Change.file.File.version >
+                  Option.default 0L r.CacheData.Resource.version)
+        selected_resources |>
+      List.map (fun r -> Some (r, change.Change.file))
     in
 
     let get_resource_from_change change =
@@ -788,7 +785,7 @@ let get_metadata () =
         let parent_resources =
           let parent_remote_ids =
             match change.Change.file.File.parents with
-              [] -> []
+            | [] -> []
             | ids -> ids
           in
           List.map
@@ -884,11 +881,11 @@ let get_metadata () =
                    List.fold_left
                      (fun xs' c ->
                         match c with
-                            None -> xs'
-                          | Some x ->
-                              if not (List.mem x xs') then
-                                x :: xs'
-                              else xs')
+                        | None -> xs'
+                        | Some x ->
+                          if not (List.mem x xs') then
+                            x :: xs'
+                          else xs')
                      xs
                      mapped_changes)
                 []
@@ -916,8 +913,25 @@ let get_metadata () =
             (fun change ->
                not change.Change.removed &&
                not change.Change.file.File.trashed)
-            get_ids_to_update
-            (fun cache ids ->
+            get_resources_and_files_to_update
+            (fun cache resources_and_files ->
+               List.iter
+                 (fun (r, f) ->
+                    Utils.log_with_header
+                      "BEGIN: Refreshing resource (id=%Ld)\n%!"
+                      r.CacheData.Resource.id;
+                    let updated_resource =
+                      update_resource_from_file r f in
+                    update_cached_resource cache updated_resource;
+                    Utils.log_with_header
+                      "END: Refreshing resource (id=%Ld)\n%!"
+                      updated_resource.CacheData.Resource.id;
+                 )
+                 resources_and_files;
+               let ids =
+                 List.map
+                   (fun (r, _) -> r.CacheData.Resource.id)
+                   resources_and_files in
                Utils.log_with_header "Invalidating resources: ids=%s\n%!"
                  (String.concat ", " (List.map Int64.to_string ids));
                Cache.Resource.invalidate_resources cache ids);
