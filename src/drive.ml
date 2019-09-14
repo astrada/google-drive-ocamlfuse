@@ -37,6 +37,8 @@ let changes_std_params =
           "changes(removed,file(" ^ file_fields ^ "),fileId),\
            nextPageToken,newStartPageToken"
   }
+let device_scope = "https://www.googleapis.com/auth/drive.file"
+let device_root_folder = "gdfuse"
 
 let do_request = Oauth2.do_request
 let async_do_request f =
@@ -635,13 +637,38 @@ let get_file_from_server parent_folder_id name trashed =
     let file = files |. GapiLens.head in
     SessionM.return (Some file)
 
-let get_root_folder_id_from_server () =
+let get_root_folder_id_from_server config =
   Utils.log_with_header "BEGIN: Getting root resource from server\n%!";
-  FilesResource.get
-    ~supportsAllDrives:true
-    ~std_params:file_std_params
-    ~fileId:default_root_folder_id >>= fun file ->
-  Utils.log_with_header "END: Getting root resource from server\n%!";
+  begin if config.Config.scope = device_scope then
+      get_file_from_server
+        default_root_folder_id device_root_folder false >>= fun root_option ->
+      match root_option with
+      | None ->
+        let file = {
+          File.empty with
+          File.name = device_root_folder;
+          mimeType = "application/vnd.google-apps.folder";
+        } in
+        Utils.log_with_header "BEGIN: Creating root (%s) on server\n%!"
+          device_root_folder;
+        FilesResource.create
+          ~supportsAllDrives:true
+          ~std_params:file_std_params
+          file >>= fun created_file ->
+        Utils.log_with_header "END: Creating root (id=%s) on server\n%!"
+          created_file.File.id;
+        SessionM.return created_file
+      | Some root ->
+        SessionM.return root
+    else
+      FilesResource.get
+        ~supportsAllDrives:true
+        ~std_params:file_std_params
+        ~fileId:default_root_folder_id >>= fun file ->
+      SessionM.return file
+  end >>= fun file ->
+  Utils.log_with_header "END: Getting root resource (id=%s) from server\n%!"
+    file.File.id;
   SessionM.return file.File.id
 
 let get_root_folder_id config =
@@ -676,7 +703,7 @@ let get_root_folder_id config =
     | s -> SessionM.return s
   end >>= fun root_folder_id ->
   begin if root_folder_id = default_root_folder_id then
-      get_root_folder_id_from_server ()
+      get_root_folder_id_from_server config
     else
       SessionM.return root_folder_id
   end >>= fun root_folder_id ->

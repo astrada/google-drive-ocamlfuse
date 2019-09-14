@@ -190,7 +190,7 @@ let setup_application params =
     else params.service_account_user_to_impersonate in
   let scope =
     if params.device
-    then "https://www.googleapis.com/auth/drive.file"
+    then Drive.device_scope
     else if params.scope = ""
     then current_config |. Config.scope
     else params.scope in
