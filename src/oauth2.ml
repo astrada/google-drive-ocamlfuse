@@ -1,5 +1,7 @@
 open GapiUtils.Infix
 open GapiLens.Infix
+open GapiMonad
+open GapiMonad.SessionM.Infix
 
 let scope = [GapiDriveV2Service.Scope.drive]
 
@@ -97,8 +99,9 @@ let do_request go =
   try_request 0
 
 (* Get access token using the installed apps flow or print authorization URL
- * if headleass mode is on *)
-let get_access_token headless browser =
+ * if headless mode is on or get access token using the device flow if device
+ * mode is on. *)
+let get_access_token headless device browser =
   let context = Context.get_ctx () in
   let config_lens = context |. Context.config_lens in
   let client_id = config_lens |. Config.client_id in
@@ -112,33 +115,49 @@ let get_access_token headless browser =
     match config_lens |. Config.scope with
     | "" -> scope
     | s -> [s] in
-  let code = 
-    if verification_code = "" then
-      let url = GapiOAuth2.authorization_code_url
-                  ~redirect_uri
-                  ~scope
-                  ~response_type:"code"
-                  client_id in
-      if headless then begin
-        Printf.printf
-          "Please, open the following URL in a web browser: %s\n%!"
-          url;
-      end else Utils.start_browser browser url;
-      Printf.printf "Please enter the verification code: %!";
-      input_line stdin
-    else
-      verification_code
+  let get_access_token =
+    if device then begin
+      GapiOAuth2Devices.request_code
+        ~client_id
+        ~scope >>= fun authorization_code ->
+      Printf.printf
+        "Please, open the following URL in a web browser: %s\nand enter the \
+        following code: %s\n%!"
+        authorization_code.GapiOAuth2Devices.AuthorizationCode.verification_url
+        authorization_code.GapiOAuth2Devices.AuthorizationCode.user_code;
+      GapiOAuth2Devices.poll_authorization_server
+        ~client_id
+        ~client_secret
+        ~authorization_code >>= fun access_token ->
+      SessionM.return access_token
+    end else begin
+      let code = 
+        if verification_code = "" then
+          let url = GapiOAuth2.authorization_code_url
+                      ~redirect_uri
+                      ~scope
+                      ~response_type:"code"
+                      client_id in
+          if headless then begin
+            Printf.printf
+              "Please, open the following URL in a web browser: %s\n%!"
+              url;
+          end else Utils.start_browser browser url;
+          Printf.printf "Please enter the verification code: %!";
+          input_line stdin
+        else
+          verification_code
+      in
+      GapiOAuth2.get_access_token
+        ~client_id
+        ~client_secret
+        ~code
+        ~redirect_uri >>= fun access_token ->
+      SessionM.return access_token
+    end
   in
   try
-    let (response, _) =
-      do_request
-        (fun session ->
-           GapiOAuth2.get_access_token
-             ~client_id
-             ~client_secret
-             ~code
-             ~redirect_uri
-             session) in
+    let (response, _) = do_request get_access_token in
     Printf.printf "Access token retrieved correctly.\n%!";
     let { GapiAuthResponse.OAuth2.access_token;
           refresh_token;

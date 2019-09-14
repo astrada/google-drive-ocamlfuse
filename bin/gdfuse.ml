@@ -102,6 +102,7 @@ type application_params = {
   log_to : string;
   scope : string;
   redirect_uri : string;
+  device : bool;
 }
 
 let setup_application params =
@@ -188,7 +189,9 @@ let setup_application params =
     then current_config |. Config.service_account_user_to_impersonate
     else params.service_account_user_to_impersonate in
   let scope =
-    if params.scope = ""
+    if params.device
+    then "https://www.googleapis.com/auth/drive.file"
+    else if params.scope = ""
     then current_config |. Config.scope
     else params.scope in
   let redirect_uri =
@@ -196,6 +199,7 @@ let setup_application params =
     then current_config |. Config.redirect_uri
     else params.redirect_uri in
   let headless = params.headless in
+  let device = params.device in
   let sqlite3_busy_timeout =
     (* Previously default timeout was 500ms that's too low for multi-threading.
      * Update default value to 5000ms *)
@@ -369,10 +373,13 @@ let setup_application params =
         if headless then
           failwith ("In headless mode, you should specify a client id and a \
                      client secret")
+        else if device then
+          failwith ("In device mode, you should specify a client id and a \
+                     client secret")
         else
           get_auth_tokens_from_server ()
       else
-        Oauth2.get_access_token headless params.browser
+        Oauth2.get_access_token headless device params.browser
     else
       Utils.log_message "Refresh token already present.\n%!"
   end else begin
@@ -663,6 +670,7 @@ let () =
   let log_to = ref "" in
   let scope = ref "" in
   let redirect_uri = ref "" in
+  let device = ref false in
   let program = Filename.basename Sys.executable_name in
   let usage =
     Printf.sprintf
@@ -772,6 +780,9 @@ let () =
        "-redirect_uri",
        Arg.Set_string redirect_uri,
        " sets a custom Drive API redirect URI.";
+       "-device",
+       Arg.Set device,
+       " use OAuth2 for devices. Default is false.";
       ]) in
   let () =
     Arg.parse
@@ -811,6 +822,7 @@ let () =
         log_to = !log_to;
         scope = !scope;
         redirect_uri = !redirect_uri;
+        device = !device;
       } in
       if !mountpoint = "" then begin
         setup_application { params with mountpoint = "." };
