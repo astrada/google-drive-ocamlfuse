@@ -20,3 +20,5 @@ There are Ubuntu packages in this [PPA](https://launchpad.net/~alessandro-strada
 * Read-ahead buffers when streaming
 * Accessing content shared with you (requires [configuration](https://github.com/astrada/google-drive-ocamlfuse/blob/beta/doc/Configuration.md))
 * Team Drive [Support](https://github.com/astrada/google-drive-ocamlfuse/wiki/Team-Drives)
+* Service Account [Support](https://github.com/astrada/google-drive-ocamlfuse/wiki/Service-Accounts)
+* OAuth2 for Devices [Support](https://github.com/astrada/google-drive-ocamlfuse/wiki/OAuth2-for-Devices)
