@@ -1,3 +1,13 @@
+0.7.13
+======
+
+This version introduces [OAuth2 for devices](https://github.com/astrada/google-drive-ocamlfuse/wiki/OAuth2-for-Devices) authorization flow for headless devices.
+
+0.7.12
+======
+
+This version introduces this new config options: `log_to`, `scope`, and `redirect_uri` and corresponding command line options.
+
 0.7.11
 ======
 

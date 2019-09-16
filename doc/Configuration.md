@@ -261,6 +261,18 @@ Path of the directory containing log files (if blank uses the default):
 
     service_account_user_to_impersonate
 
+[Since 0.7.12] Specifies where the logs are going to be written. It can be `stdout`, `stderr`, an absolute path, or blank to keep the standard logging behavior:
+
+    log_to=
+
+[Since 0.7.12] Specifies a custom Drive API [scope](https://developers.google.com/drive/api/v3/about-auth#OAuth2Authorizing):
+
+    scope=
+
+[Since 0.7.12] Specifies a custom `redirect_uri` for the OAuth2 [flow](https://developers.google.com/identity/protocols/OAuth2InstalledApp#step-2-send-a-request-to-googles-oauth-20-server):
+
+    redirect_uri=
+
 ### Document export formats
 
 `desktop` format creates a shortcut to the document that will be opened in the web browser for edit.

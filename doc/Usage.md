@@ -29,7 +29,8 @@ Options
 
 Run `google-drive-ocamlfuse -help` to get all the command options available. To find more details about `-o` mount options, you can refer to this [page](http://manpages.ubuntu.com/manpages/zesty/man8/mount.fuse.8.html). Non-standard mount option `gdfroot` can be used to specify a custom path to the configuration directory (default is `$HOME/.gdfuse`).
 
-(Since 0.7.5) `-docsmode`: this option can be used to quickly set Google Docs config options. Supported values are:
+#### Since 0.7.5
+`-docsmode`: This option can be used to quickly set Google Docs config options. Supported values are:
 * `libreoffice`: sets
   * `download_docs=true`
   * `document_format=odt`
@@ -56,3 +57,15 @@ Run `google-drive-ocamlfuse -help` to get all the command options available. To 
   * `apps_script_format=desktop`
 * `off`: sets
   * `download_docs=false`
+
+#### Since 0.7.11
+* `-serviceaccountpath`: This option can be used to specify the path of the JSON file containing the credentials of a service account
+* `-serviceaccountuser`: This option can be used to specify the email of a G Suite user to impersonate (with the service account specified by the `-serviceaccountpath` option)
+
+#### Since 0.7.12
+* `-log_to`: Specifies where the logs are going to be written. It can be `stdout`, `stderr`, or an absolute path
+* `-scope`: Specifies a custom Drive API [scope](https://developers.google.com/drive/api/v3/about-auth#OAuth2Authorizing)
+* `-redirect_uri`: Specifies a custom `redirect_uri` for the OAuth2 [flow](https://developers.google.com/identity/protocols/OAuth2InstalledApp#step-2-send-a-request-to-googles-oauth-20-server)
+
+#### Since 0.7.13
+* `-device`: Use [OAuth2 for Devices](https://github.com/astrada/google-drive-ocamlfuse/wiki/OAuth2-for-Devices) authorization flow
