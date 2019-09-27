@@ -90,7 +90,8 @@ To uninstall anything that was previously installed, execute
 
     dune uninstall
 
-### Usage
+Usage
+-----
 
 The first time, you can run `google-drive-ocamlfuse` without parameters:
 
@@ -104,9 +105,15 @@ for more details about configuration). And it will start a web browser to
 obtain authorization to access your Google Drive. This will let you modify
 default configuration before mounting the filesystem.
 
-Then you can mount the filesystem:
+Then you can choose a local directory to mount your Google Drive (e.g.: `~/GoogleDrive`).
 
-    google-drive-ocamlfuse mountpoint
+Create the mount point, if it doesn't exists:
+
+    mkdir ~/GoogleDrive
+
+Then you can mount the filesystem (replacing <mountpoint> with the name of your desired folder):
+
+    google-drive-ocamlfuse <mountpoint>
 
 If you have more than one account, you can run:
 
