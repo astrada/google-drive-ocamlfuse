@@ -111,9 +111,9 @@ Create the mount point, if it doesn't exists:
 
     mkdir ~/GoogleDrive
 
-Then you can mount the filesystem (replacing <mountpoint> with the name of your desired folder):
+Then you can mount the filesystem (replacing [mountpoint] with the name of your desired folder):
 
-    google-drive-ocamlfuse <mountpoint>
+    google-drive-ocamlfuse [mountpoint]
 
 If you have more than one account, you can run:
 
