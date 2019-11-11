@@ -221,6 +221,7 @@ let get_filename name is_document get_document_format =
   let document_format =
     if is_document then get_document_format config
     else "" in
+  Utils.log_with_header "document format: %s\n%!" document_format;
   if is_document &&
       config.Config.docs_file_extension &&
       document_format <> "" then
@@ -235,6 +236,19 @@ let get_filename name is_document get_document_format =
       clean_name ^ "." ^ document_format
     else clean_name
   else clean_name
+
+let get_file_extension_from_format resource config =
+  let fmt = CacheData.Resource.get_format resource config in
+  match fmt with
+  | "desktop" when config.Config.desktop_entry_as_html -> "html"
+  | _ -> fmt
+
+let get_file_extension_from_mime_type mime_type config =
+  let fmt =
+    CacheData.Resource.get_format_from_mime_type mime_type config in
+  match fmt with
+  | "desktop" when config.Config.desktop_entry_as_html -> "html"
+  | _ -> fmt
 
 let build_resource_tables parent_path trashed =
   let context = Context.get_ctx () in
@@ -251,7 +265,7 @@ let build_resource_tables parent_path trashed =
          get_filename
            name
            (CacheData.Resource.is_document resource)
-           (fun config -> CacheData.Resource.get_format resource config)
+           (fun config -> get_file_extension_from_format resource config)
        in
        let filename = Filename.basename resource.CacheData.Resource.path in
        if clean_name <> filename then begin
@@ -337,7 +351,7 @@ let get_unique_filename_from_resource resource name filename_table =
     (Option.default "" resource.CacheData.Resource.full_file_extension)
     (Option.default "" resource.CacheData.Resource.remote_id)
     (CacheData.Resource.is_document resource)
-    (fun config -> CacheData.Resource.get_format resource config)
+    (fun config -> get_file_extension_from_format resource config)
     filename_table
 
 let get_unique_filename_from_file file filename_table =
@@ -347,7 +361,7 @@ let get_unique_filename_from_file file filename_table =
     file.File.id
     (CacheData.Resource.is_document_mime_type file.File.mimeType)
     (fun config ->
-      CacheData.Resource.get_format_from_mime_type file.File.mimeType config)
+      get_file_extension_from_mime_type file.File.mimeType config)
     filename_table
 
 let recompute_path resource name =
@@ -1345,6 +1359,25 @@ let create_desktop_entry resource content_path config =
         exec_or_url_entry
         icon_entry)
 
+let create_html_with_redirect resource content_path config =
+  Utils.with_out_channel
+    ~mode:[Open_creat; Open_trunc; Open_wronly] content_path
+    (fun out_ch ->
+      let url = Option.default "" resource.CacheData.Resource.web_view_link in
+      let name = Option.default "" resource.CacheData.Resource.name in
+      Printf.fprintf out_ch
+        "<!DOCTYPE html>\n\
+<html>\n\
+  <head>\n\
+    <title>%s</title>\n\
+    <meta http-equiv=\"refresh\" content=\"0;URL='%s'\" />\n\
+  </head>\n\
+  <body>\n\
+    <p>This page has moved to a <a href=\"%s\">%s</a>.</p>\n\
+  </body>\n\
+</html>"
+        name url url name)
+
 let download_media media_download fileId =
   Utils.try_with_m
     (FilesResource.get
@@ -1432,7 +1465,11 @@ let download_resource resource =
     begin if is_desktop_format resource config then begin
       shrink_cache_before_downloading () >>= fun () ->
       update_cache_size_for_documents cache resource content_path Int64.neg;
-      create_desktop_entry resource content_path config;
+      begin if config.Config.desktop_entry_as_html then begin
+        create_html_with_redirect resource content_path config;
+      end else begin
+        create_desktop_entry resource content_path config;
+      end end;
       SessionM.return ()
     end else begin
       shrink_cache_before_downloading () >>= fun () ->

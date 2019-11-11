@@ -147,6 +147,9 @@ type t = {
   scope : string;
   (* Specifies a custom Drive API redirect URI. *)
   redirect_uri : string;
+  (* Specifies if transform desktop entries in HTML files, as support for
+   * .desktop files is being removed from Nautilus. *)
+  desktop_entry_as_html : bool;
 }
 
 let metadata_cache_time = {
@@ -409,6 +412,10 @@ let redirect_uri = {
   GapiLens.get = (fun x -> x.redirect_uri);
   GapiLens.set = (fun v x -> { x with redirect_uri = v })
 }
+let desktop_entry_as_html = {
+  GapiLens.get = (fun x -> x.desktop_entry_as_html);
+  GapiLens.set = (fun v x -> { x with desktop_entry_as_html = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -491,6 +498,7 @@ let default = {
   service_account_user_to_impersonate = "";
   scope = "";
   redirect_uri = "";
+  desktop_entry_as_html = false;
 }
 
 let default_debug = {
@@ -559,6 +567,7 @@ let default_debug = {
   service_account_user_to_impersonate = "";
   scope = "";
   redirect_uri = "";
+  desktop_entry_as_html = false;
 }
 
 let of_table table =
@@ -717,6 +726,9 @@ let of_table table =
     redirect_uri =
       get "redirect_uri" Std.identity
         default.redirect_uri;
+    desktop_entry_as_html =
+      get "desktop_entry_as_html" bool_of_string
+        default.desktop_entry_as_html;
   }
 
 let to_table data =
@@ -793,6 +805,7 @@ let to_table data =
     data.service_account_user_to_impersonate;
   add "scope" data.scope;
   add "redirect_uri" data.redirect_uri;
+  add "desktop_entry_as_html" (data.desktop_entry_as_html |> string_of_bool);
   table
 
 let debug_print out_ch start_time curl info_type info =
