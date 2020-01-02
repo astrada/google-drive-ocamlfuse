@@ -1703,9 +1703,13 @@ let get_attr path =
             else 0o777)
       in
       perm land mask in
-    let st_nlink =
-      if CacheData.Resource.is_folder resource then 2
-      else 1 in
+    (* To avoid potential performance issues, counting the number of subdirs
+     * (as st_nlink is usually equals to 2 + subdir number), let set the value
+     * to 1, as it can be used to mean "I don't know the subdirectory count"
+     * (https://github.com/cryptomator/fuse-nio-adapter/issues/34). See also:
+     * https://bugzilla.kernel.org/show_bug.cgi?id=196405#c5
+     *)
+    let st_nlink = 1 in
     let st_uid =
       Option.map_default 
         Int64.to_int
