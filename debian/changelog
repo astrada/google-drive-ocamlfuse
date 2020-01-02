@@ -1,3 +1,15 @@
+google-drive-ocamlfuse (0.7.15-0ubuntu1) eoan; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 02 Jan 2020 21:23:03 +0100
+
+google-drive-ocamlfuse (0.7.14-0ubuntu1) eoan; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 12 Nov 2019 21:17:20 +0100
+
 google-drive-ocamlfuse (0.7.13-0ubuntu1) eoan; urgency=low
 
   * OAuth2 for Devices support
