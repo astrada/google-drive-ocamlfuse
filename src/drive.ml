@@ -213,6 +213,27 @@ let handle_default_exceptions =
 let try_with_default f s =
   Utils.try_with_m f handle_default_exceptions s
 
+(* retry with a default exception handler *)
+let with_retry_default f =
+  let rec loop n =
+    Utils.try_with_m f
+      (fun e ->
+         try handle_default_exceptions e with
+         | Utils.Temporary_error ->
+           if n >= !Utils.max_retries then begin
+             Utils.raise_m IO_error
+           end else begin
+             GapiUtils.wait_exponential_backoff n;
+             let n' = n + 1 in
+             Utils.log_with_header
+               "Retrying (%d/%d).\n%!"
+               n' !Utils.max_retries;
+             loop n'
+           end
+         | _ -> Utils.raise_m e)
+  in
+  loop 0
+
 (* Resource cache *)
 let get_filename name is_document get_document_format =
   let context = Context.get_ctx () in
@@ -605,14 +626,15 @@ let get_file_from_server parent_folder_id name trashed =
   let q =
     Printf.sprintf "name='%s' and '%s' in parents and trashed=%b"
       (escape_apostrophe name) parent_folder_id trashed in
-  FilesResource.list
-    ~supportsAllDrives:true
-    ~driveId:config.Config.team_drive_id
-    ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
-    ~corpora:(if config.Config.team_drive_id <> "" then "drive" else "user")
-    ~std_params:file_list_std_params
-    ~q
-    ~pageSize:1 >>= fun file_list ->
+  with_retry_default
+    (FilesResource.list
+       ~supportsAllDrives:true
+       ~driveId:config.Config.team_drive_id
+       ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
+       ~corpora:(if config.Config.team_drive_id <> "" then "drive" else "user")
+       ~std_params:file_list_std_params
+       ~q
+       ~pageSize:1) >>= fun file_list ->
   Utils.log_with_header
     "END: Getting resource %s (in folder %s) from server\n%!"
     name parent_folder_id;
@@ -637,20 +659,22 @@ let get_root_folder_id_from_server config =
         } in
         Utils.log_with_header "BEGIN: Creating root (%s) on server\n%!"
           device_root_folder;
-        FilesResource.create
-          ~supportsAllDrives:true
-          ~std_params:file_std_params
-          file >>= fun created_file ->
+        with_retry_default
+          (FilesResource.create
+             ~supportsAllDrives:true
+             ~std_params:file_std_params
+             file) >>= fun created_file ->
         Utils.log_with_header "END: Creating root (id=%s) on server\n%!"
           created_file.File.id;
         SessionM.return created_file
       | Some root ->
         SessionM.return root
     else
-      FilesResource.get
-        ~supportsAllDrives:true
-        ~std_params:file_std_params
-        ~fileId:default_root_folder_id >>= fun file ->
+      with_retry_default
+        (FilesResource.get
+           ~supportsAllDrives:true
+           ~std_params:file_std_params
+           ~fileId:default_root_folder_id) >>= fun file ->
       SessionM.return file
   end >>= fun file ->
   Utils.log_with_header "END: Getting root resource (id=%s) from server\n%!"
@@ -745,10 +769,11 @@ let get_metadata () =
             GapiService.StandardParameters.fields =
               "startPageToken"
       } in
-    ChangesResource.getStartPageToken
-      ~supportsAllDrives:true
-      ~driveId:config.Config.team_drive_id
-      ~std_params >>= fun startPageToken ->
+    with_retry_default
+      (ChangesResource.getStartPageToken
+         ~supportsAllDrives:true
+         ~driveId:config.Config.team_drive_id
+         ~std_params) >>= fun startPageToken ->
     SessionM.return startPageToken.StartPageToken.startPageToken
   in
 
@@ -765,8 +790,9 @@ let get_metadata () =
             GapiService.StandardParameters.fields =
               "user(displayName),storageQuota(limit,usage)"
       } in
-    AboutResource.get
-      ~std_params >>= fun about ->
+    with_retry_default
+      (AboutResource.get
+         ~std_params) >>= fun about ->
     get_start_page_token start_page_token_db >>= fun start_page_token ->
     let metadata = {
       CacheData.Metadata.display_name = about.About.user.User.displayName;
@@ -787,13 +813,14 @@ let get_metadata () =
   let update_resource_cache new_metadata old_metadata =
     let get_all_changes =
       let rec loop pageToken accu =
-        ChangesResource.list
-          ~supportsAllDrives:true
-          ~driveId:config.Config.team_drive_id
-          ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
-          ~std_params:changes_std_params
-          ~includeRemoved:true
-          ~pageToken >>= fun change_list ->
+        with_retry_default
+          (ChangesResource.list
+             ~supportsAllDrives:true
+             ~driveId:config.Config.team_drive_id
+             ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
+             ~std_params:changes_std_params
+             ~includeRemoved:true
+             ~pageToken) >>= fun change_list ->
         let changes = change_list.ChangeList.changes @ accu in
         if change_list.ChangeList.nextPageToken = "" then
           SessionM.return (changes, change_list.ChangeList.newStartPageToken)
@@ -874,14 +901,15 @@ let get_metadata () =
           { GapiService.StandardParameters.default with
                 GapiService.StandardParameters.fields = "newStartPageToken"
           } in
-        ChangesResource.list
-          ~supportsAllDrives:true
-          ~driveId:config.Config.team_drive_id
-          ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
-          ~std_params
-          ~includeRemoved:true
-          ~pageSize:change_limit
-          ~pageToken:start_page_token_db >>= fun change_list ->
+        with_retry_default
+          (ChangesResource.list
+             ~supportsAllDrives:true
+             ~driveId:config.Config.team_drive_id
+             ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
+             ~std_params
+             ~includeRemoved:true
+             ~pageSize:change_limit
+             ~pageToken:start_page_token_db) >>= fun change_list ->
         let (no_changes, over_limit) =
           (change_list.ChangeList.newStartPageToken = start_page_token_db,
            change_list.ChangeList.newStartPageToken = "") in
@@ -1049,7 +1077,7 @@ let get_metadata () =
       Option.map_default
         CacheData.Metadata.cache_size.GapiLens.get 0L old_metadata in
     Utils.log_with_header "BEGIN: Refreshing metadata\n%!";
-    try_with_default
+    with_retry_default
       (request_metadata start_page_token cache_size) >>= fun server_metadata ->
     Utils.log_with_header "END: Refreshing metadata\n";
     update_resource_cache
@@ -1206,10 +1234,11 @@ and get_resource path trashed =
       Utils.log_with_header
         "BEGIN: Getting file from server (remote id=%s)\n%!"
         remote_id;
-      FilesResource.get
-        ~supportsAllDrives:true
-        ~std_params:file_std_params
-        ~fileId:remote_id >>= fun file ->
+      with_retry_default
+        (FilesResource.get
+           ~supportsAllDrives:true
+           ~std_params:file_std_params
+           ~fileId:remote_id) >>= fun file ->
       Utils.log_with_header
         "END: Getting file from server (remote id=%s)\n%!"
         remote_id;
@@ -1256,7 +1285,7 @@ and get_resource path trashed =
           if CacheData.Resource.is_valid resource metadata_last_update then
             SessionM.return resource
           else
-            try_with_default (refresh_resource resource cache)
+            with_retry_default (refresh_resource resource cache)
     end >>= fun resource ->
     begin match resource.CacheData.Resource.state with
         CacheData.Resource.State.NotFound ->
@@ -1311,10 +1340,11 @@ let with_retry f resource =
              end else begin
                GapiUtils.wait_exponential_backoff n;
                let fileId = res.CacheData.Resource.remote_id |> Option.get in
-               FilesResource.get
-                 ~supportsAllDrives:true
-                 ~std_params:file_std_params
-                 ~fileId >>= fun file ->
+               with_retry_default
+                 (FilesResource.get
+                    ~supportsAllDrives:true
+                    ~std_params:file_std_params
+                    ~fileId) >>= fun file ->
                let (state, verb) =
                  if resource.CacheData.Resource.state =
                     CacheData.Resource.State.ToUpload then
@@ -1402,12 +1432,13 @@ let download_media media_download fileId =
          Utils.log_with_header
            "Warning: abusive file detected, but downloading anyway (fileId=%s)\n%!"
            fileId;
-         FilesResource.get
-           ~supportsAllDrives:true
-           ~acknowledgeAbuse:true
-           ~std_params:file_download_std_params
-           ~media_download
-           ~fileId >>= fun file ->
+         with_retry_default
+           (FilesResource.get
+              ~supportsAllDrives:true
+              ~acknowledgeAbuse:true
+              ~std_params:file_download_std_params
+              ~media_download
+              ~fileId) >>= fun file ->
          SessionM.return file
        end else
          handle_default_exceptions e)
@@ -1449,10 +1480,11 @@ let download_resource resource =
         GapiService.get ~media_download export_link
           GapiRequest.parse_empty_response
       with Not_found ->
-        FilesResource.export
-          ~media_download
-          ~fileId
-          ~mimeType >>= fun () ->
+        with_retry_default
+          (FilesResource.export
+             ~media_download
+             ~fileId
+             ~mimeType) >>= fun () ->
         SessionM.return ()
       end
     end else if Option.default 0L
@@ -1772,15 +1804,16 @@ let read_dir path =
   let config = Context.get_ctx () |. Context.config_lens in
   let get_all_files q =
     let rec loop ?pageToken accu =
-      FilesResource.list
-        ~supportsAllDrives:true
-        ~driveId:config.Config.team_drive_id
-        ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
-        ~corpora:(if config.Config.team_drive_id <> "" then "drive"
-                  else "user")
-        ~std_params:file_list_std_params
-        ~q
-        ?pageToken >>= fun file_list ->
+      with_retry_default
+        (FilesResource.list
+           ~supportsAllDrives:true
+           ~driveId:config.Config.team_drive_id
+           ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
+           ~corpora:(if config.Config.team_drive_id <> "" then "drive"
+                     else "user")
+           ~std_params:file_list_std_params
+           ~q
+           ?pageToken) >>= fun file_list ->
       let files = file_list.FileList.files @ accu in
       if file_list.FileList.nextPageToken = "" then
         SessionM.return files
@@ -1974,7 +2007,7 @@ let update_remote_resource path
   let (path_in_cache, trashed) = get_path_in_cache path config in
   let update_file =
     get_resource path_in_cache trashed >>= fun resource ->
-    try_with_default (do_remote_update resource) >>= fun file_option ->
+    do_remote_update resource >>= fun file_option ->
     begin match file_option with
         None ->
           purge_cache cache resource
@@ -2009,11 +2042,12 @@ let utime path atime mtime =
         remote_id mtime;
       let file_patch = File.empty
             |> File.modifiedTime ^= Netdate.create mtime in
-      FilesResource.update
-        ~supportsAllDrives:true
-        ~std_params:file_std_params
-        ~fileId:remote_id
-        file_patch >>= fun patched_file ->
+      with_retry_default
+        (FilesResource.update
+           ~supportsAllDrives:true
+           ~std_params:file_std_params
+           ~fileId:remote_id
+           file_patch) >>= fun patched_file ->
       Utils.log_with_header "END: Updating file mtime (remote id=%s, mtime=%f)\n%!"
         remote_id mtime;
       SessionM.return (Some patched_file)
@@ -2186,12 +2220,13 @@ let upload resource =
     (if content_type = "" then "autodetect" else content_type)
     size;
   let file_patch = File.empty |> File.modifiedTime ^= GapiDate.now () in
-  FilesResource.update
-    ~supportsAllDrives:true
-    ~std_params:file_std_params
-    ?media_source
-    ~fileId:remote_id
-    file_patch >>= fun file ->
+  with_retry_default
+    (FilesResource.update
+       ~supportsAllDrives:true
+       ~std_params:file_std_params
+       ?media_source
+       ~fileId:remote_id
+       file_patch) >>= fun file ->
   let resource = update_resource_from_file resource file in
   Utils.log_with_header
     "END: Uploading file (id=%Ld, path=%s, cache path=%s, content type=%s).\n%!"
@@ -2317,10 +2352,11 @@ let create_remote_resource ?link_target is_folder path mode =
     Utils.log_with_header
       "BEGIN: Creating %s (path=%s, trashed=%b) on server\n%!"
       (if is_folder then "folder" else "file") path_in_cache trashed;
-    FilesResource.create
-      ~supportsAllDrives:true
-      ~std_params:file_std_params
-      file >>= fun created_file ->
+    with_retry_default
+      (FilesResource.create
+         ~supportsAllDrives:true
+         ~std_params:file_std_params
+         file) >>= fun created_file ->
     Utils.log_with_header
       "END: Creating file/folder (path=%s, trashed=%b) on server\n%!"
       path_in_cache trashed;
@@ -2365,15 +2401,16 @@ let check_if_empty remote_id is_folder trashed =
             GapiService.StandardParameters.fields = "files(id)"
       }
     in
-    FilesResource.list
-      ~supportsAllDrives:true
-      ~driveId:config.Config.team_drive_id
-      ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
-      ~corpora:(if config.Config.team_drive_id <> "" then "drive"
-                else "user")
-      ~std_params
-      ~pageSize:1
-      ~q >>= fun children ->
+    with_retry_default
+      (FilesResource.list
+         ~supportsAllDrives:true
+         ~driveId:config.Config.team_drive_id
+         ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
+         ~corpora:(if config.Config.team_drive_id <> "" then "drive"
+                   else "user")
+         ~std_params
+         ~pageSize:1
+         ~q) >>= fun children ->
     if children.FileList.files = [] then begin
       Utils.log_with_header "Folder (remote id=%s) is empty\n%!" remote_id;
       SessionM.return ()
@@ -2403,11 +2440,12 @@ let trash_resource is_folder trashed path =
             File.trashed = true;
       }
     in
-    FilesResource.update
-      ~supportsAllDrives:true
-      ~std_params:file_std_params
-      ~fileId:remote_id
-      file_patch >>= fun trashed_file ->
+    with_retry_default
+      (FilesResource.update
+         ~supportsAllDrives:true
+         ~std_params:file_std_params
+         ~fileId:remote_id
+         file_patch) >>= fun trashed_file ->
     Utils.log_with_header "END: Trashing file (remote id=%s)\n%!" remote_id;
     SessionM.return (Some trashed_file)
   in
@@ -2443,10 +2481,11 @@ let delete_resource is_folder path =
     Utils.log_with_header
       "BEGIN: Permanently deleting file (remote id=%s)\n%!"
       remote_id;
-    FilesResource.delete
-      ~supportsAllDrives:true
-      ~std_params:file_std_params
-      ~fileId:remote_id >>= fun () ->
+    with_retry_default
+      (FilesResource.delete
+         ~supportsAllDrives:true
+         ~std_params:file_std_params
+         ~fileId:remote_id) >>= fun () ->
     Utils.log_with_header
       "END: Permanently deleting file (remote id=%s)\n%!"
       remote_id;
@@ -2545,11 +2584,12 @@ let rename path new_path =
         { File.empty with
               File.name = new_name;
         } in
-      FilesResource.update
-        ~supportsAllDrives:true
-        ~std_params:file_std_params
-        ~fileId:remote_id
-        file_patch >>= fun patched_file ->
+      with_retry_default
+        (FilesResource.update
+           ~supportsAllDrives:true
+           ~std_params:file_std_params
+           ~fileId:remote_id
+           file_patch) >>= fun patched_file ->
       Utils.log_with_header
         "END: Renaming file (remote id=%s) from %s to %s\n%!"
         remote_id old_name new_name;
@@ -2572,11 +2612,12 @@ let rename path new_path =
                 File.mimeType =
                   Option.default "" resource.CacheData.Resource.mime_type;
           } in
-        FilesResource.update
-          ~supportsAllDrives:true
-          ~std_params:file_std_params
-          ~fileId:target_remote_id
-          file_patch >>= fun patched_file ->
+        with_retry_default
+          (FilesResource.update
+             ~supportsAllDrives:true
+             ~std_params:file_std_params
+             ~fileId:target_remote_id
+             file_patch) >>= fun patched_file ->
         let cache = context.Context.cache in
         let target_content_path =
           Cache.get_content_path cache target_resource in
@@ -2643,13 +2684,14 @@ let rename path new_path =
           old_parent_resource.CacheData.Resource.remote_id |> Option.get in
         SessionM.return id
       end >>= fun old_parent_id ->
-      FilesResource.update
-        ~supportsAllDrives:true
-        ~std_params:file_std_params
-        ~addParents:new_parent_id
-        ~fileId:remote_id
-        ~removeParents:old_parent_id
-        File.empty >>= fun patched_file ->
+      with_retry_default
+        (FilesResource.update
+           ~supportsAllDrives:true
+           ~std_params:file_std_params
+           ~addParents:new_parent_id
+           ~fileId:remote_id
+           ~removeParents:old_parent_id
+           File.empty) >>= fun patched_file ->
       Utils.log_with_header "END: Moving file (remote id=%s) from %s to %s\n%!"
         remote_id old_parent_path new_parent_path;
       SessionM.return patched_file
@@ -2773,11 +2815,12 @@ let chmod path mode =
         remote_id mode;
       let file_patch = File.empty
         |> File.appProperties ^= [CacheData.Resource.mode_to_app_property mode] in
-      FilesResource.update
-        ~supportsAllDrives:true
-        ~std_params:file_std_params
-        ~fileId:remote_id
-        file_patch >>= fun patched_file ->
+      with_retry_default
+        (FilesResource.update
+           ~supportsAllDrives:true
+           ~std_params:file_std_params
+           ~fileId:remote_id
+           file_patch) >>= fun patched_file ->
       Utils.log_with_header "END: Updating mode (remote id=%s, mode=%o)\n%!"
         remote_id mode;
       SessionM.return (Some patched_file)
@@ -2813,11 +2856,12 @@ let chown path uid gid =
       in
       let file_patch = File.empty
          |> File.appProperties ^= app_properties in
-      FilesResource.update
-        ~supportsAllDrives:true
-        ~std_params:file_std_params
-        ~fileId:remote_id
-        file_patch >>= fun patched_file ->
+      with_retry_default
+        (FilesResource.update
+           ~supportsAllDrives:true
+           ~std_params:file_std_params
+           ~fileId:remote_id
+           file_patch) >>= fun patched_file ->
       Utils.log_with_header "End: Updating owner (remote id=%s, uid=%d gid=%d)\n%!"
         remote_id uid gid;
       SessionM.return (Some patched_file)
@@ -2867,11 +2911,12 @@ let set_xattr path name value xflags =
         |> File.appProperties ^= [
              CacheData.Resource.xattr_to_app_property name value;
            ] in
-      FilesResource.update
-        ~supportsAllDrives:true
-        ~std_params:file_std_params
-        ~fileId:remote_id
-        file_patch >>= fun patched_file ->
+      with_retry_default
+        (FilesResource.update
+           ~supportsAllDrives:true
+           ~std_params:file_std_params
+           ~fileId:remote_id
+           file_patch) >>= fun patched_file ->
       Utils.log_with_header "END: Setting xattr (remote id=%s, name=%s value=%s xflags=%s)\n%!"
         remote_id name value (Utils.xattr_flags_to_string xflags);
       SessionM.return (Some patched_file)
@@ -2911,11 +2956,12 @@ let remove_xattr path name =
         |> File.appProperties ^= [
              CacheData.Resource.xattr_no_value_to_app_property name;
            ] in
-      FilesResource.update
-        ~supportsAllDrives:true
-        ~std_params:file_std_params
-        ~fileId:remote_id
-        file_patch >>= fun patched_file ->
+      with_retry_default
+        (FilesResource.update
+           ~supportsAllDrives:true
+           ~std_params:file_std_params
+           ~fileId:remote_id
+           file_patch) >>= fun patched_file ->
       Utils.log_with_header "END: Removing xattr (remote id=%s, name=%s)\n%!"
         remote_id name;
       SessionM.return (Some patched_file)
