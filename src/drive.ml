@@ -93,14 +93,31 @@ let disambiguate_filename
   let rec find_first_unique_filename filename counter =
     let new_candidate =
       let fingerprint = get_remote_id_fingerprint counter remote_id in
-      match full_file_extension with
-      | "" ->
+      let filename_length = String.length filename in
+      let extension_opt =
+        if String.length full_file_extension > 0 && ExtString.String.ends_with
+             filename full_file_extension then
+          Some full_file_extension
+        else
+          try
+            let dot_pos = String.rindex filename '.' in
+            let ext =
+              String.sub filename (dot_pos + 1)
+                (filename_length - dot_pos - 1) in
+            Some ext
+          with Not_found -> None
+      in
+      match extension_opt with
+      | None ->
         Printf.sprintf "%s (%s)" filename fingerprint
-      | extension ->
+      | Some extension ->
+        let extension_length = String.length extension in
         let base_name =
-          String.sub filename 0 (String.length filename -
-                                 String.length extension - 1) in
-        Printf.sprintf "%s (%s).%s" base_name fingerprint extension
+          String.sub filename 0 (filename_length - extension_length - 1) in
+        if String.length base_name > 0 then
+          Printf.sprintf "%s (%s).%s" base_name fingerprint extension
+        else
+          Printf.sprintf "(%s).%s" fingerprint extension
     in
     if not (Hashtbl.mem filename_table new_candidate) then begin
       Utils.log_with_header "Checking: %s: OK\n%!" new_candidate;
