@@ -1723,7 +1723,8 @@ let get_attr path =
   else begin
     let (resource, content_path) = do_request request_resource |> fst in
     let stat =
-      if content_path <> "" then Some (Unix.LargeFile.stat content_path)
+      if content_path <> "" && Sys.file_exists content_path then
+        Some (Unix.LargeFile.stat content_path)
       else None in
     let st_kind =
       if CacheData.Resource.is_folder resource then Unix.S_DIR
@@ -2297,7 +2298,7 @@ let queue_upload resource =
   if config.Config.async_upload_queue then begin
     let cache = context.Context.cache in
     flush_memory_buffers resource;
-    UploadQueue.queue_resource cache resource;
+    UploadQueue.queue_resource cache config resource;
     SessionM.return ()
   end else
     upload_resource_with_retry resource
@@ -2816,7 +2817,13 @@ let truncate path size =
     let file_size =
       Int64.sub size (Option.default 0L resource.CacheData.Resource.size) in
     shrink_cache ~file_size ();
-    Unix.LargeFile.truncate content_path size;
+    begin if Sys.file_exists content_path then
+      Unix.LargeFile.truncate content_path size
+    else
+      Utils.log_with_header
+        "Warning: file %s does not exists (remote id=%s)\n%!"
+        content_path remote_id
+    end;
     Utils.log_with_header "END: Truncating file (remote id=%s)\n%!" remote_id;
     SessionM.return ()
   in

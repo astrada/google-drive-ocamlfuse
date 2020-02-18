@@ -150,6 +150,9 @@ type t = {
   (* Specifies if transform desktop entries in HTML files, as support for
    * .desktop files is being removed from Nautilus. *)
   desktop_entry_as_html : bool;
+  (* Async upload queue maximum number of entries (files) before blocking.
+   * 0 means unlimited. *)
+  async_upload_queue_max_length : int;
 }
 
 let metadata_cache_time = {
@@ -416,6 +419,10 @@ let desktop_entry_as_html = {
   GapiLens.get = (fun x -> x.desktop_entry_as_html);
   GapiLens.set = (fun v x -> { x with desktop_entry_as_html = v })
 }
+let async_upload_queue_max_length = {
+  GapiLens.get = (fun x -> x.async_upload_queue_max_length);
+  GapiLens.set = (fun v x -> { x with async_upload_queue_max_length = v })
+}
 
 let umask =
   let prev_umask = Unix.umask 0 in
@@ -499,6 +506,7 @@ let default = {
   scope = "";
   redirect_uri = "";
   desktop_entry_as_html = false;
+  async_upload_queue_max_length = 0;
 }
 
 let default_debug = {
@@ -568,6 +576,7 @@ let default_debug = {
   scope = "";
   redirect_uri = "";
   desktop_entry_as_html = false;
+  async_upload_queue_max_length = 0;
 }
 
 let of_table table =
@@ -729,6 +738,9 @@ let of_table table =
     desktop_entry_as_html =
       get "desktop_entry_as_html" bool_of_string
         default.desktop_entry_as_html;
+    async_upload_queue_max_length =
+      get "async_upload_queue_max_length" int_of_string
+        default.async_upload_queue_max_length;
   }
 
 let to_table data =
@@ -806,6 +818,8 @@ let to_table data =
   add "scope" data.scope;
   add "redirect_uri" data.redirect_uri;
   add "desktop_entry_as_html" (data.desktop_entry_as_html |> string_of_bool);
+  add "async_upload_queue_max_length"
+    (data.async_upload_queue_max_length |> string_of_int);
   table
 
 let debug_print out_ch start_time curl info_type info =

@@ -3,5 +3,5 @@ val start_async_upload_thread :
 
 val stop_async_upload_thread : unit -> unit
 
-val queue_resource : CacheData.t -> CacheData.Resource.t -> unit
+val queue_resource : CacheData.t -> Config.t -> CacheData.Resource.t -> unit
 

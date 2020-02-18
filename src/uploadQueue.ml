@@ -99,15 +99,31 @@ let stop_async_upload_thread () =
        q |> stop_async_upload ^= true
     )
 
-let queue_resource cache resource =
+let queue_resource cache config resource =
   let resource_id = resource.CacheData.Resource.id in
-  Utils.log_with_header
-    "BEGIN: Queue resource id=%Ld for uploading\n%!"
-    resource_id;
-  let upload_entry_with_resource_id =
-    Cache.UploadQueue.select_with_resource_id cache resource_id in
-  match upload_entry_with_resource_id with
-  | None ->
+  let wait_for_slot () =
+    let check () =
+      let max_length = config.Config.async_upload_queue_max_length in
+      let entries = Cache.UploadQueue.count_entries cache in
+      if entries >= max_length then begin
+        Utils.log_with_header
+          "Waiting for pending uploads (%d) to get below the limit (%d)\n%!"
+          entries max_length;
+      end else begin
+        Utils.log_with_header
+          "Pending uploads (%d) below the limit (%d)\n%!"
+          entries max_length;
+        raise Exit
+      end
+    in
+    try
+      while true do
+        check ();
+        Thread.delay 1.0;
+      done
+    with Exit -> ()
+  in
+  let queue_r () =
     let upload_entry = {
       CacheData.UploadEntry.id = 0L;
       resource_id;
@@ -119,7 +135,19 @@ let queue_resource cache resource =
     Utils.log_with_header
       "END: Resource id=%Ld queued for uploading (entry id=%Ld)\n%!"
       resource_id
-      inserted_upload_entry.CacheData.UploadEntry.id;
+      inserted_upload_entry.CacheData.UploadEntry.id
+  in
+  Utils.log_with_header
+    "BEGIN: Queue resource id=%Ld for uploading\n%!"
+    resource_id;
+  let upload_entry_with_resource_id =
+    Cache.UploadQueue.select_with_resource_id cache resource_id in
+  match upload_entry_with_resource_id with
+  | None ->
+    begin if config.Config.async_upload_queue_max_length > 0 then
+      wait_for_slot ()
+    end;
+    queue_r ()
   | Some e ->
     Utils.log_with_header
       "END: Resource with id=%Ld already queued (entry id=%Ld)\n%!"
