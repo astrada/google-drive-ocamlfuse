@@ -56,6 +56,7 @@ struct
     web_view_link : string option;
     export_links : string option;
     version : int64 option;
+    target_id : string option;
     (* app data stored in Drive *)
     file_mode_bits : int64 option;
     uid : int64 option;
@@ -132,6 +133,10 @@ struct
   let version = {
     GapiLens.get = (fun x -> x.version);
     GapiLens.set = (fun v x -> { x with version = v })
+  }
+  let target_id = {
+    GapiLens.get = (fun x -> x.target_id);
+    GapiLens.set = (fun v x -> { x with target_id = v })
   }
   let file_mode_bits = {
     GapiLens.get = (fun x -> x.file_mode_bits);
@@ -283,7 +288,11 @@ struct
       | _ -> false
 
   let is_symlink resource =
+    resource.mime_type = Some "text/plain" &&
     Option.is_some resource.link_target
+
+  let is_shortcut resource =
+    resource.mime_type = Some "application/vnd.google-apps.shortcut"
 
   let is_valid resource metadata_last_update =
     resource.state = State.ToUpload ||
