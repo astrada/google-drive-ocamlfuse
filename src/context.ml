@@ -17,6 +17,8 @@ type t = {
   cache : CacheData.t;
   (* CURL global state *)
   curl_state : [`Initialized] GapiCurl.t;
+  (* Mountpoint path *)
+  mountpoint_path : string;
   (* Mountpoint current stats *)
   mountpoint_stats : Unix.LargeFile.stats;
   (* Current metadata *)
@@ -62,6 +64,10 @@ let cache = {
 let curl_state = {
   GapiLens.get = (fun x -> x.curl_state);
   GapiLens.set = (fun v x -> { x with curl_state = v })
+}
+let mountpoint_path = {
+  GapiLens.get = (fun x -> x.mountpoint_path);
+  GapiLens.set = (fun v x -> { x with mountpoint_path = v })
 }
 let mountpoint_stats = {
   GapiLens.get = (fun x -> x.mountpoint_stats);

@@ -341,6 +341,7 @@ let setup_application params =
     state_store;
     cache;
     curl_state;
+    mountpoint_path = mountpoint;
     mountpoint_stats = Unix.LargeFile.stat mountpoint;
     metadata = None;
     metadata_lock = Mutex.create ();

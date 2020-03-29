@@ -14,10 +14,12 @@ exception No_attribute
 exception Permission_denied
 
 let folder_mime_type = "application/vnd.google-apps.folder"
+let shortcut_mime_type = "application/vnd.google-apps.shortcut"
 let file_fields =
   "appProperties,capabilities(canEdit),createdTime,explicitlyTrashed,\
    fileExtension,fullFileExtension,id,md5Checksum,mimeType,modifiedTime,\
-   name,parents,size,trashed,version,viewedByMeTime,webViewLink,exportLinks"
+   name,parents,size,trashed,version,viewedByMeTime,webViewLink,exportLinks,\
+   shortcutDetails(targetId)"
 let file_std_params =
   { GapiService.StandardParameters.default with
         GapiService.StandardParameters.fields = file_fields
@@ -338,6 +340,7 @@ let create_resource path =
     web_view_link = None;
     export_links = None;
     version = None;
+    target_id = None;
     file_mode_bits = None;
     uid = None;
     gid = None;
@@ -413,7 +416,7 @@ let recompute_path resource name =
     get_unique_filename_from_resource resource name filename_table in
   Filename.concat resource.CacheData.Resource.parent_path filename
 
-let update_resource_from_file ?state resource file =
+let update_resource_from_file ?state ?link_target resource file =
   let path =
     match resource.CacheData.Resource.name with
         Some cached_name ->
@@ -430,6 +433,19 @@ let update_resource_from_file ?state resource file =
       resource.CacheData.Resource.size
     | _ ->
       Some file.File.size
+  in
+  let target_id =
+    if file.File.mimeType = shortcut_mime_type then
+      match file.File.shortcutDetails with
+      | { File.ShortcutDetails.targetId; _ } when targetId <> "" ->
+        Some targetId
+      | _ -> None
+    else
+      None
+  in
+  let link_target =
+    if file.File.mimeType = shortcut_mime_type then link_target
+    else CacheData.Resource.get_link_target file.File.appProperties
   in
   { resource with
         CacheData.Resource.remote_id = Some file.File.id;
@@ -450,11 +466,12 @@ let update_resource_from_file ?state resource file =
           Some (CacheData.Resource.serialize_export_links
                   file.File.exportLinks);
         version = Some file.File.version;
+        target_id;
         file_mode_bits = CacheData.Resource.get_file_mode_bits
             file.File.appProperties;
         uid = CacheData.Resource.get_uid file.File.appProperties;
         gid = CacheData.Resource.get_gid file.File.appProperties;
-        link_target = CacheData.Resource.get_link_target file.File.appProperties;
+        link_target;
         xattrs = CacheData.Resource.get_xattrs file.File.appProperties;
         last_update = Unix.gettimeofday ();
         path;
@@ -462,12 +479,13 @@ let update_resource_from_file ?state resource file =
         state = new_state
   }
 
-let insert_resource_into_cache ?state cache resource file =
-  let resource = update_resource_from_file ?state resource file in
+let insert_resource_into_cache ?state ?link_target cache resource file =
+  let resource = update_resource_from_file ?state ?link_target resource file in
   Utils.log_with_header "BEGIN: Saving resource to db (remote id=%s)\n%!"
     file.File.id;
   let inserted = Cache.Resource.insert_resource cache resource in
-  Utils.log_with_header "END: Saving resource to db (remote id=%s, id=%Ld, state=%s)\n%!"
+  Utils.log_with_header
+    "END: Saving resource to db (remote id=%s, id=%Ld, state=%s)\n%!"
     file.File.id
     inserted.CacheData.Resource.id
     (CacheData.Resource.State.to_string inserted.CacheData.Resource.state);
@@ -678,6 +696,7 @@ let get_root_folder_id_from_server config =
           device_root_folder;
         with_retry_default
           (FilesResource.create
+             ~enforceSingleParent:true
              ~supportsAllDrives:true
              ~std_params:file_std_params
              file) >>= fun created_file ->
@@ -702,7 +721,7 @@ let get_root_folder_id config =
   let rec loop path parent_folder_id =
     let (name, rest) =
       try
-        ExtString.String.split path "/"
+        ExtString.String.split path Filename.dir_sep
       with ExtString.Invalid_string -> (path, "")
     in
     match name with
@@ -725,7 +744,7 @@ let get_root_folder_id config =
   in
   begin match config.Config.root_folder with
     | "" -> SessionM.return default_root_id
-    | s when ExtString.String.starts_with s "/" ->
+    | s when not (Filename.is_relative s) ->
       loop (String.sub s 1 (String.length s - 1)) default_root_id
     | s -> SessionM.return s
   end >>= fun root_folder_id ->
@@ -1182,6 +1201,57 @@ let statfs () =
 (* END Metadata *)
 
 (* Resources *)
+let get_resource_with_id_from_server remote_id =
+  let root_folder_id = get_root_folder_id_from_context () in
+
+  let get_file rid =
+    Utils.log_with_header
+      "BEGIN: Getting file from server (remote id=%s)\n%!"
+      rid;
+    with_retry_default
+      (FilesResource.get
+         ~supportsAllDrives:true
+         ~std_params:file_std_params
+         ~fileId:rid) >>= fun file ->
+    Utils.log_with_header
+      "END: Getting file from server (remote id=%s)\n%!"
+      rid;
+    SessionM.return file
+  in
+
+  let rec get_full_path file path_parts =
+    if file.File.parents = [root_folder_id] then
+      SessionM.return path_parts
+    else
+      let parent_id = List.hd file.File.parents in
+      get_file parent_id >>= fun parent ->
+      get_full_path parent (clean_filename parent.File.name :: path_parts)
+  in
+
+  if remote_id = root_folder_id then
+    SessionM.return (get_well_known_resource root_directory false)
+  else begin
+    Utils.log_with_header
+      "BEGIN: Getting resource from server (remote id=%s)\n%!"
+      remote_id;
+    get_file remote_id >>= fun file ->
+    get_full_path file [clean_filename file.File.name] >>= fun path_parts ->
+    let path = root_directory ^ (String.concat Filename.dir_sep path_parts) in
+    let new_resource = create_resource path in
+    let resource = update_resource_from_file new_resource file in
+    Utils.log_with_header
+      "BEGIN: Getting resource from server (remote id=%s path=%s)\n%!"
+      remote_id path;
+    SessionM.return resource
+  end
+
+let get_resource_with_id remote_id cache =
+  let cached_resource =
+    Cache.Resource.select_first_resource_with_remote_id cache remote_id in
+  match cached_resource with
+  | Some r -> SessionM.return r
+  | None -> get_resource_with_id_from_server remote_id
+
 let get_resource_from_server parent_folder_id name new_resource trashed cache =
   get_file_from_server parent_folder_id name trashed >>= fun file ->
   match file with
@@ -1688,10 +1758,31 @@ let is_file_read_only resource =
   config.Config.large_file_read_only &&
     CacheData.Resource.is_large_file config resource
 
+let fetch_link_target path_in_cache trashed cache =
+  let mountpoint_path = Context.get_ctx () |. Context.mountpoint_path in
+  get_resource path_in_cache trashed >>= fun resource ->
+  begin match resource.CacheData.Resource.link_target with
+    | None ->
+      begin match resource.CacheData.Resource.target_id with
+        | None -> raise Invalid_operation
+        | Some tid ->
+          get_resource_with_id tid cache >>= fun link_resource ->
+          let link_target =
+            Filename.chop_suffix mountpoint_path Filename.dir_sep ^
+            link_resource.CacheData.Resource.path in
+          let updated_resource =
+            resource |> CacheData.Resource.link_target ^= Some link_target in
+          update_cached_resource cache updated_resource;
+          SessionM.return link_target
+      end
+    | Some link_target -> SessionM.return link_target
+  end
+
 (* stat *)
 let get_attr path =
   let context = Context.get_ctx () in
   let config = context |. Context.config_lens in
+  let cache = context.Context.cache in
   let (path_in_cache, trashed) = get_path_in_cache path config in
 
   let request_resource =
@@ -1728,6 +1819,7 @@ let get_attr path =
       else None in
     let st_kind =
       if CacheData.Resource.is_folder resource then Unix.S_DIR
+      else if CacheData.Resource.is_shortcut resource then Unix.S_LNK
       else
         Option.map_default
           CacheData.Resource.file_mode_bits_to_kind
@@ -1745,7 +1837,8 @@ let get_attr path =
           resource.CacheData.Resource.file_mode_bits
       in
       let mask =
-        if CacheData.Resource.is_symlink resource then 0o777
+        if CacheData.Resource.is_symlink resource ||
+           CacheData.Resource.is_shortcut resource then 0o777
         else
           lnot config.Config.umask land (
             if is_file_read_only resource
@@ -1771,13 +1864,24 @@ let get_attr path =
         context.Context.mountpoint_stats.Unix.LargeFile.st_gid
         resource.CacheData.Resource.gid in
     let st_size =
-      if CacheData.Resource.is_symlink resource then
-        resource.CacheData.Resource.link_target
-          |> Option.get
-          |> String.length
-          |> Int64.of_int
+      if CacheData.Resource.is_symlink resource ||
+         CacheData.Resource.is_shortcut resource then
+        let link_target =
+          begin match resource.CacheData.Resource.link_target with
+            | None ->
+              begin match resource.CacheData.Resource.target_id with
+                | None -> raise Invalid_operation
+                | Some tid ->
+                  let fetch_link_target =
+                    fetch_link_target path_in_cache trashed cache in
+                  do_request fetch_link_target |> fst
+              end
+            | Some l -> l
+          end
+        in
+        link_target |> String.length |> Int64.of_int
       else match stat with
-          None ->
+        | None ->
             if CacheData.Resource.is_folder resource then f_bsize
             else Option.default 0L resource.CacheData.Resource.size
         | Some st ->
@@ -2062,6 +2166,7 @@ let utime path atime mtime =
             |> File.modifiedTime ^= Netdate.create mtime in
       with_retry_default
         (FilesResource.update
+           ~enforceSingleParent:true
            ~supportsAllDrives:true
            ~std_params:file_std_params
            ~fileId:remote_id
@@ -2240,6 +2345,7 @@ let upload resource =
   let file_patch = File.empty |> File.modifiedTime ^= GapiDate.now () in
   with_retry_default
     (FilesResource.update
+       ~enforceSingleParent:true
        ~supportsAllDrives:true
        ~std_params:file_std_params
        ?media_source
@@ -2347,31 +2453,50 @@ let create_remote_resource ?link_target is_folder path mode =
     in
     let name = Filename.basename path_in_cache in
     let mimeType =
-      if is_folder
-      then folder_mime_type
+      if Option.is_some link_target then shortcut_mime_type
+      else if is_folder then folder_mime_type
       else if config.Config.autodetect_mime then ""
       else Mime.map_filename_to_mime_type name
     in
     let appProperties = [CacheData.Resource.mode_to_app_property mode] in
-    let appProperties = match link_target with
-        None -> appProperties
-      | Some link ->
-          if json_length link > max_link_target_length then
-            raise Invalid_operation
-          else
-            CacheData.Resource.link_target_to_app_property link :: appProperties in
+    begin match link_target with
+      | None -> SessionM.return ""
+      | Some tp ->
+        let target_path = 
+          if Filename.is_relative tp then
+            let target_dirname = Filename.dirname path in
+            target_dirname ^ Filename.dir_sep ^ tp
+          else tp
+        in
+        let target_path =
+          if ExtString.String.ends_with target_path Filename.dir_sep then
+            Filename.chop_suffix target_path Filename.dir_sep
+          else target_path
+        in
+        let (target_path_in_cache, target_trashed) =
+          get_path_in_cache target_path config in
+        get_resource target_path_in_cache target_trashed >>= fun resource ->
+        SessionM.return (Option.get resource.CacheData.Resource.remote_id)
+    end >>= fun target_id ->
     let file = {
       File.empty with
-          File.name;
-          parents = [parent_id];
-          mimeType;
-          appProperties;
+      File.name;
+      parents = [parent_id];
+      mimeType;
+      appProperties;
+      shortcutDetails = {
+        File.ShortcutDetails.empty with
+        targetId = target_id;
+      }
     } in
     Utils.log_with_header
-      "BEGIN: Creating %s (path=%s, trashed=%b) on server\n%!"
-      (if is_folder then "folder" else "file") path_in_cache trashed;
+      "BEGIN: Creating %s%s (path=%s, trashed=%b%s) on server\n%!"
+      (match link_target with None -> "" | Some _ -> "shortcut to ")
+      (if is_folder then "folder" else "file") path_in_cache trashed
+      (match link_target with None -> "" | Some t -> ", target=" ^ t);
     with_retry_default
       (FilesResource.create
+         ~enforceSingleParent:true
          ~supportsAllDrives:true
          ~std_params:file_std_params
          file) >>= fun created_file ->
@@ -2389,6 +2514,7 @@ let create_remote_resource ?link_target is_folder path mode =
     let inserted =
       insert_resource_into_cache
         ~state:CacheData.Resource.State.Synchronized
+        ?link_target
         cache new_resource created_file in
     SessionM.return inserted
   in
@@ -2460,6 +2586,7 @@ let trash_resource is_folder trashed path =
     in
     with_retry_default
       (FilesResource.update
+         ~enforceSingleParent:true
          ~supportsAllDrives:true
          ~std_params:file_std_params
          ~fileId:remote_id
@@ -2604,6 +2731,7 @@ let rename path new_path =
         } in
       with_retry_default
         (FilesResource.update
+           ~enforceSingleParent:true
            ~supportsAllDrives:true
            ~std_params:file_std_params
            ~fileId:remote_id
@@ -2632,6 +2760,7 @@ let rename path new_path =
           } in
         with_retry_default
           (FilesResource.update
+             ~enforceSingleParent:true
              ~supportsAllDrives:true
              ~std_params:file_std_params
              ~fileId:target_remote_id
@@ -2704,6 +2833,7 @@ let rename path new_path =
       end >>= fun old_parent_id ->
       with_retry_default
         (FilesResource.update
+           ~enforceSingleParent:true
            ~supportsAllDrives:true
            ~std_params:file_std_params
            ~addParents:new_parent_id
@@ -2841,6 +2971,7 @@ let chmod path mode =
         |> File.appProperties ^= [CacheData.Resource.mode_to_app_property mode] in
       with_retry_default
         (FilesResource.update
+           ~enforceSingleParent:true
            ~supportsAllDrives:true
            ~std_params:file_std_params
            ~fileId:remote_id
@@ -2882,6 +3013,7 @@ let chown path uid gid =
          |> File.appProperties ^= app_properties in
       with_retry_default
         (FilesResource.update
+           ~enforceSingleParent:true
            ~supportsAllDrives:true
            ~std_params:file_std_params
            ~fileId:remote_id
@@ -2937,6 +3069,7 @@ let set_xattr path name value xflags =
            ] in
       with_retry_default
         (FilesResource.update
+           ~enforceSingleParent:true
            ~supportsAllDrives:true
            ~std_params:file_std_params
            ~fileId:remote_id
@@ -2982,6 +3115,7 @@ let remove_xattr path name =
            ] in
       with_retry_default
         (FilesResource.update
+           ~enforceSingleParent:true
            ~supportsAllDrives:true
            ~std_params:file_std_params
            ~fileId:remote_id
@@ -3000,22 +3134,16 @@ let remove_xattr path name =
 
 (* readlink *)
 let read_link path =
-  let config = Context.get_ctx () |. Context.config_lens in
+  let context = Context.get_ctx () in
+  let config = context |. Context.config_lens in
+  let cache = context.Context.cache in
   let (path_in_cache, trashed) = get_path_in_cache path config in
-  let fetch_link_target =
-    get_resource path_in_cache trashed >>= fun resource ->
-    let link_target =
-      match resource.CacheData.Resource.link_target with
-          None -> raise Invalid_operation
-        | Some link -> link
-    in
-    SessionM.return link_target
-  in
+  let fetch_link_target = fetch_link_target path_in_cache trashed cache in
   do_request fetch_link_target |> fst
 (* END readlink *)
 
 (* symlink *)
 let symlink target linkpath =
-  create_remote_resource ~link_target:target false linkpath 0o120777
+  create_remote_resource ~link_target:target false linkpath 0o777
 (* END symlink *)
 

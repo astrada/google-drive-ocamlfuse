@@ -39,6 +39,7 @@ sig
     web_view_link : string option;
     export_links : string option;
     version : int64 option;
+    target_id : string option;
     file_mode_bits : int64 option;
     uid : int64 option;
     gid : int64 option;
@@ -66,10 +67,11 @@ sig
   val web_view_link : (t, string option) GapiLens.t
   val export_links : (t, string option) GapiLens.t
   val version : (t, int64 option) GapiLens.t
+  val link_target : (t, string option) GapiLens.t
   val file_mode_bits : (t, int64 option) GapiLens.t
   val uid : (t, int64 option) GapiLens.t
   val gid : (t, int64 option) GapiLens.t
-  val link_target : (t, string option) GapiLens.t
+  val target_id : (t, string option) GapiLens.t
   val xattrs : (t, string) GapiLens.t
   val parent_path : (t, string) GapiLens.t
   val path : (t, string) GapiLens.t
@@ -99,6 +101,7 @@ sig
   val is_document_mime_type : string -> bool
   val is_document : t -> bool
   val is_symlink : t -> bool
+  val is_shortcut : t -> bool
   val is_valid : t -> float -> bool
   val is_large_file : Config.t -> t -> bool
   val to_stream : Config.t -> t -> bool * bool
