@@ -273,9 +273,17 @@ Path of the directory containing log files (if blank uses the default):
 
     redirect_uri=
 
+[Since 0.7.14] If set to `true`, instead of creating `.desktop` link files, it produces `.html` files with a redirect to the Google Document edit page:
+
+    desktop_entry_as_html=false
+
+[Since 0.7.18] Specifies the maximum number of entries (files) of the async upload queue. `0` (default) means unlimited:
+
+    async_upload_queue_max_length=0
+
 ### Document export formats
 
-`desktop` format creates a shortcut to the document that will be opened in the web browser for edit.
+`desktop` format creates a shortcut to the document that will be opened in the web browser for edit. If `desktop_entry_as_html=true` instead of `.desktop` files you will get `.html` files.
 
 If you don't want to export a specific kind of docs, just remove the format portion. For example, if you have this line in your `config` file:
 

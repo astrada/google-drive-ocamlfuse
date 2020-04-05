@@ -65,3 +65,28 @@ Now log out and back in again and your Google Drive should be mounted on `~/Goog
 By inserting the following line into ~/.profile the shell will test whether something has already been mounted on your target mountpoint, and if not, will execute the mount.
 
     $ mount | grep "${HOME}/GoogleDrive" >/dev/null || /usr/bin/google-drive-ocamlfuse "${HOME}/GoogleDrive"&
+
+## Mount when using WiFi
+
+When attempting automount when using WiFi, the mount will fail if using the procedures above since there is no internet connection.  As such, you must confirm a connection is present before automounting.
+
+1)  Create this script and put it in /home/**_username_**/bin (username changed to your profile name).  You'll also need to change the "/home/username/GoogleDrive" in the script below to whatever your mount point is.
+
+```
+#!/bin/bash
+
+while true; do
+  # check to see if there is a connection by pinging a Google server
+  if ping -q -c 1 -W 1 8.8.8.8 >/dev/null; then
+    # if connected, mount the drive and break the loop
+    google-drive-ocamlfuse /home/username/GoogleDrive; break;
+  else
+    # if not connected, wait for one second and then check again
+    sleep 1
+  fi
+done
+```
+
+2)  Make the script executable either through the CLI or a file manager which allows you to change permissions.
+
+3)  Use AutoStart/Startup Applications to start the script after login.

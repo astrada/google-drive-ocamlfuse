@@ -16,6 +16,10 @@ This [PPA repository](https://launchpad.net/~alessandro-strada/+archive/ubuntu/g
     sudo apt-get update
     sudo apt-get install google-drive-ocamlfuse
 
+## Docker
+
+There is Docker [image](https://hub.docker.com/r/maltokyo/docker-google-drive-ocamlfuse) maintained by [maltokyo](https://github.com/maltokyo).
+
 ## Archlinux
 
 `google-drive-ocamlfuse` is available in the [AUR](https://aur.archlinux.org/packages/google-drive-ocamlfuse/) (thanks to [mlq](http://pwmt.org/) for uploading the package). To install it, run:
@@ -93,3 +97,15 @@ You should install gmp this way (before retrying installing google-drive-ocamlfu
     env CFLAGS="-I/opt/local/include/" opam install conf-gmp-powm-sec.1
 
 See issue [#357](https://github.com/astrada/google-drive-ocamlfuse/issues/357).
+
+### Installing with OPAM on Debian/Raspbian
+
+Installing OPAM on Debian/Raspbian can be a little difficult, because the default settings are to use the legacy resolver `aspcud` that doesn't work well with OPAM 2.0. The workaround is to use the `mccs` solver (disinstalling `aspcud`), like this:
+
+    sudo apt install opam mccs
+    sudo apt remove aspcud
+    opam init --solver=mccs
+    opam switch create 4.09.0
+    eval $(opam env)
+    opam depext google-drive-ocamlfuse
+    opam install google-drive-ocamlfuse

@@ -1,3 +1,15 @@
+0.7.19
+======
+This version adds support for Google Drive [Shortcuts](https://support.google.com/drive/answer/9700156?hl=en&visit_id=637217083697801162-3050789304&rd=1). They are treated as symlinks.
+
+0.7.18
+======
+This version introduces a new config option: `async_upload_queue_max_length`. If set to a value above `0`, it sets the maximum number of entries of the async queue. If the limit is reached, when a new file is uploaded, the application waits for the completion of a previously queued upload, before queuing the new file.
+
+0.7.14
+======
+This version introduces a new config option: `desktop_entry_as_html`. If set to `true`, instead of creating `.desktop` link files, it produces `.html` files with redirect to the Google Documents.
+
 0.7.13
 ======
 

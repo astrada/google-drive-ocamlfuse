@@ -53,3 +53,8 @@ You can create OAuth2 credentials from the Google APIs Console. [Here](https://d
 Anyway, you can always revoke access to Google Drive from
 [here](https://security.google.com/settings/security/permissions?pli=1).
 
+### Service accounts & device mode
+
+If you want you can use a [service account](https://github.com/astrada/google-drive-ocamlfuse/wiki/Service-Accounts) that is useful to access the users' Drive of a G Suite domain.
+
+You can also use a [simpler authorization flow](https://github.com/astrada/google-drive-ocamlfuse/wiki/OAuth2-for-Devices) specific for TVs and limited-input devices, but this way you won't have access to all the files in your Drive.

@@ -1,11 +1,11 @@
-In the basic procedure described in [Usage](Usage.md), you need a web browser for the authorization step.  On a headless server without a GUI interface or a web browser, you can get it to work by using a web browser on a separate computer, and pasting the results into the `~/.gdfuse/default/config` (or `~/.gdfuse/label/config` if you use labels) file of your headless server.
+In the basic procedure described in [[Usage]], you need a web browser for the authorization step.  On a headless server without a GUI interface or a web browser, you can get it to work by using a web browser on a separate computer, and pasting the results into the `~/.gdfuse/default/config` (or `~/.gdfuse/label/config` if you use labels) file of your headless server.
 
 Caveat: I do not know whether this is the "optimal" way to do this.  I was in a pinch, and this approach worked.  At first, I had a difficult time getting it to work, but Alessandro responded immediately with help, and we got it to work.   These are the steps I followed, and of course, please edit this page if you have tips or a better approach.   
 
 (I used the "Alternate Authorization Mode"  although the Standard Authorization mode using the GAE (Google App Engine) service may work too.)
 
-1. Install normally as per the [Installation](Installation.md) page
-1. On the computer with the web browser, create an OAuth2 application and credentials. These steps are similar to those described in the "Alternate Authorization Mode" section in [Authorization](Authorization.md). The following steps are what I did, based on my notes:
+1. Install normally as per the [[Installation]] page
+1. On the computer with the web browser, create an OAuth2 application and credentials. These steps are similar to those described in the "Alternate Authorization Mode" section in [[Authorization]]. The following steps are what I did, based on my notes:
     1. Sign in to your Google account and create a project: https://console.cloud.google.com/
     1. Enable the Google Drive API
         1. In the left-hand pane (Navigation menu), open "APIs & Services" -> "Library", this will take you to https://console.cloud.google.com/apis/library
@@ -57,3 +57,20 @@ I then ran the same command above, with the addition of the -debug parameter, an
 		Failure("OAuth2 error: invalid_grant (HTTP response code: 400)")
 
 This is where I got stuck but Alessandro helped me right away.  The problem was that my verification code had expired. I don't know what the timeout period is, but I just went back to the google page mentioned above, clicked on "Reset client secret…", which gave me a new secret id and secret, re-ran the auth page to get a new verification code, pasted  the new values into the `config` file, and then it worked like a charm. 
+
+Simple another way
+---------------
+1. make a dummy script to just output the autohize URL, named xdg-open, firefox, ...
+```
+$ echo $'#!/bin/sh\necho $* > /dev/stderr' > xdg-open
+$ chmod 755 xdg-open
+```
+2. call google-drive-ocamlfuse with the path in the above dummy script
+```
+$ env PATH=`pwd`:$PATH google-drive-ocamlfuse
+https://accounts.google.com/signin/oauth/consent?....
+```
+3. access the output URL with your browser and authorize it
+4. then the command will output "Access token retrieved correctly.", it works
+
+reference: http://moguno.hatenablog.jp/entry/2016/03/24/010502 (Japanese)
