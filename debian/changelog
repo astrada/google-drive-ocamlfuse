@@ -1,3 +1,39 @@
+google-drive-ocamlfuse (0.7.19-0ubuntu1) focal; urgency=low
+
+  * Add support for Drive Shortcuts
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Thu, 02 Apr 2020 21:01:39 +0200
+
+google-drive-ocamlfuse (0.7.18-0ubuntu2) focal; urgency=low
+
+  * No change port to focal
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 01 Mar 2020 17:21:36 +0100
+
+google-drive-ocamlfuse (0.7.18-0ubuntu1) eoan; urgency=low
+
+  * Limit upload queue length
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 18 Feb 2020 16:32:47 +0100
+
+google-drive-ocamlfuse (0.7.17-0ubuntu2) eoan; urgency=low
+
+  * Bump gapi-ocaml dependency.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 09 Feb 2020 23:22:02 +0100
+
+google-drive-ocamlfuse (0.7.17-0ubuntu1) eoan; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Tue, 14 Jan 2020 21:26:38 +0100
+
+google-drive-ocamlfuse (0.7.16-0ubuntu1) eoan; urgency=low
+
+  * Bugfix release.
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 12 Jan 2020 16:21:22 +0100
+
 google-drive-ocamlfuse (0.7.15-0ubuntu1) eoan; urgency=low
 
   * Bugfix release.
