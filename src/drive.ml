@@ -19,7 +19,7 @@ let file_fields =
   "appProperties,capabilities(canEdit),createdTime,explicitlyTrashed,\
    fileExtension,fullFileExtension,id,md5Checksum,mimeType,modifiedTime,\
    name,parents,size,trashed,version,viewedByMeTime,webViewLink,exportLinks,\
-   shortcutDetails(targetId)"
+   shortcutDetails(targetId),shared"
 let file_std_params =
   { GapiService.StandardParameters.default with
         GapiService.StandardParameters.fields = file_fields
@@ -155,11 +155,11 @@ let is_lost_and_found path trashed config =
   else ExtString.String.starts_with path lost_and_found_directory
 
 let is_shared_with_me_root path trashed config =
-  if trashed || not config.Config.shared_with_me then false
+  if trashed then false
   else path = shared_with_me_directory
 
 let is_shared_with_me path trashed config =
-  if trashed || not config.Config.shared_with_me then false
+  if trashed then false
   else ExtString.String.starts_with path shared_with_me_directory
 
 let get_path_in_cache path config =
@@ -226,6 +226,9 @@ let handle_default_exceptions =
     Utils.raise_m Utils.Temporary_error
   | Buffering.Invalid_block ->
     Utils.raise_m Invalid_operation
+  | GapiRequest.NotFound _ ->
+    Utils.log_with_header "Server error: not found.\n%!";
+    Utils.raise_m File_not_found
   | e -> Utils.raise_m e
 
 (* with_try with a default exception handler *)
@@ -656,11 +659,18 @@ let update_cache_size_for_documents cache resource content_path op =
 let get_file_from_server parent_folder_id name trashed =
   let config = Context.get_ctx () |. Context.config_lens in
   Utils.log_with_header
-    "BEGIN: Getting resource %s (in folder %s) from server\n%!"
-    name parent_folder_id;
+    "BEGIN: Getting resource %s (%s) from server\n%!"
+    name (if parent_folder_id = ""
+          then "shared with me"
+          else "in folder" ^ parent_folder_id);
   let q =
-    Printf.sprintf "name='%s' and '%s' in parents and trashed=%b"
-      (escape_apostrophe name) parent_folder_id trashed in
+    if parent_folder_id <> "" then
+      Printf.sprintf "name='%s' and '%s' in parents and trashed=%b"
+        (escape_apostrophe name) parent_folder_id trashed
+    else
+      Printf.sprintf "name='%s' and sharedWithMe = true"
+        (escape_apostrophe name)
+  in
   with_retry_default
     (FilesResource.list
        ~supportsAllDrives:true
@@ -1090,13 +1100,11 @@ let get_metadata () =
               Utils.log_with_header
                 "END: Invalidating lost+found resource\n%!";
             end;
-            if config.Config.shared_with_me then begin
-              Utils.log_with_header
-                "BEGIN: Invalidating .shared resource\n%!";
-              Cache.Resource.invalidate_path cache shared_with_me_directory;
-              Utils.log_with_header
-                "END: Invalidating .shared resource\n%!";
-            end
+            Utils.log_with_header
+              "BEGIN: Invalidating .shared resource\n%!";
+            Cache.Resource.invalidate_path cache shared_with_me_directory;
+            Utils.log_with_header
+              "END: Invalidating .shared resource\n%!";
           end;
           SessionM.return {
             new_metadata with
@@ -1219,13 +1227,16 @@ let get_resource_with_id_from_server remote_id =
     SessionM.return file
   in
 
-  let rec get_full_path file path_parts =
-    if file.File.parents = [root_folder_id] then
-      SessionM.return path_parts
+  let rec get_full_path file path_parts shared =
+    if file.File.parents = [] && shared then
+      SessionM.return (shared_with_me_directory :: path_parts)
+    else if file.File.parents = [root_folder_id] then
+      SessionM.return ("" :: path_parts)
     else
       let parent_id = List.hd file.File.parents in
       get_file parent_id >>= fun parent ->
-      get_full_path parent (clean_filename parent.File.name :: path_parts)
+      get_full_path
+        parent (clean_filename parent.File.name :: path_parts) shared
   in
 
   if remote_id = root_folder_id then
@@ -1235,8 +1246,9 @@ let get_resource_with_id_from_server remote_id =
       "BEGIN: Getting resource from server (remote id=%s)\n%!"
       remote_id;
     get_file remote_id >>= fun file ->
-    get_full_path file [clean_filename file.File.name] >>= fun path_parts ->
-    let path = root_directory ^ (String.concat Filename.dir_sep path_parts) in
+    get_full_path file [clean_filename file.File.name]
+      file.File.shared >>= fun path_parts ->
+    let path = String.concat Filename.dir_sep path_parts in
     let new_resource = create_resource path in
     let resource = update_resource_from_file new_resource file in
     Utils.log_with_header
@@ -2072,8 +2084,7 @@ let read_dir path =
       (Filename.basename trash_directory) :: filenames
     else filenames in
   let filenames =
-    if path = root_directory && not trashed &&
-       config.Config.shared_with_me then
+    if path = root_directory && not trashed then
       (Filename.basename shared_with_me_directory) :: filenames
     else filenames in
   if path = root_directory && not trashed &&

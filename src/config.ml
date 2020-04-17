@@ -99,8 +99,6 @@ type t = {
   read_ahead_buffers : int;
   (* Fetch files with no parents and make them available in lost+found. *)
   lost_and_found : bool;
-  (* Fetch shared files and make them available in .shared *)
-  shared_with_me : bool;
   (* Path of the directory storing application state *)
   data_directory : string;
   (* Path of the directory storing application cache *)
@@ -327,10 +325,6 @@ let lost_and_found = {
   GapiLens.get = (fun x -> x.lost_and_found);
   GapiLens.set = (fun v x -> { x with lost_and_found = v })
 }
-let shared_with_me = {
-  GapiLens.get = (fun x -> x.shared_with_me);
-  GapiLens.set = (fun v x -> { x with shared_with_me = v })
-}
 let data_directory = {
   GapiLens.get = (fun x -> x.data_directory);
   GapiLens.set = (fun v x -> { x with data_directory = v })
@@ -483,7 +477,6 @@ let default = {
   max_memory_cache_size = 10485760;
   read_ahead_buffers = 3;
   lost_and_found = false;
-  shared_with_me = false;
   data_directory = "";
   cache_directory = "";
   log_directory = "";
@@ -553,7 +546,6 @@ let default_debug = {
   max_memory_cache_size = 10485760;
   read_ahead_buffers = 3;
   lost_and_found = false;
-  shared_with_me = false;
   data_directory = "";
   cache_directory = "";
   log_directory = "";
@@ -669,9 +661,6 @@ let of_table table =
     lost_and_found =
       get "lost_and_found" bool_of_string
         default.lost_and_found;
-    shared_with_me =
-      get "shared_with_me" bool_of_string
-        default.shared_with_me;
     data_directory =
       get "data_directory" Std.identity
         default.data_directory;
@@ -792,7 +781,6 @@ let to_table data =
   add "max_memory_cache_size" (data.max_memory_cache_size |> string_of_int);
   add "read_ahead_buffers" (data.read_ahead_buffers |> string_of_int);
   add "lost_and_found" (data.lost_and_found |> string_of_bool);
-  add "shared_with_me" (data.shared_with_me |> string_of_bool);
   add "data_directory" data.data_directory;
   add "cache_directory" data.cache_directory;
   add "log_directory" data.log_directory;
