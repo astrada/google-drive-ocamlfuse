@@ -23,6 +23,7 @@ sig
   val select_resources_with_parent_path : CacheData.t -> string -> bool -> CacheData.Resource.t list
   val select_resources_order_by_last_update : CacheData.t -> CacheData.Resource.t list
   val select_resource_with_id : CacheData.t -> int64 -> CacheData.Resource.t option
+  val select_next_folder_to_fetch : CacheData.t -> CacheData.Resource.t option
 
 end
 

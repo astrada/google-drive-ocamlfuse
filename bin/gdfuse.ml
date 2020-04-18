@@ -352,6 +352,7 @@ let setup_application params =
     root_folder_id = None;
     flush_db_thread = None;
     async_upload_thread = None;
+    folder_fetching_thread = None;
   } in
   Context.set_ctx context;
   if not (DbCache.check_clean_shutdown cache) then begin
@@ -836,7 +837,7 @@ let () =
              begin match context.Context.buffer_eviction_thread with
                | None -> ()
                | Some buffer_eviction_thread -> begin
-                   Utils.log_message
+                   Utils.log_with_header
                      "Stopping buffer eviction thread (TID=%d)...%!"
                      (Thread.id buffer_eviction_thread);
                    Buffering.MemoryBuffers.stop_eviction_thread
@@ -848,7 +849,7 @@ let () =
              begin match context.Context.flush_db_thread with
                | None -> ()
                | Some flush_db_thread -> begin
-                   Utils.log_message
+                   Utils.log_with_header
                      "Stopping flush DB thread (TID=%d)...%!"
                      (Thread.id flush_db_thread);
                    MemoryCache.stop_flush_db_thread ();
@@ -859,20 +860,33 @@ let () =
              begin match context.Context.async_upload_thread with
                | None -> ()
                | Some async_upload_thread -> begin
-                   Utils.log_message
+                   Utils.log_with_header
                      "Stopping async upload thread (TID=%d)\n%!"
                      (Thread.id async_upload_thread);
                    UploadQueue.stop_async_upload_thread ();
                    Thread.join async_upload_thread;
                  end
              end;
-             Utils.log_message "Flushing cache...\n%!";
+             begin match context.Context.folder_fetching_thread with
+               | None -> ()
+               | Some folder_fetching_thread -> begin
+                   Utils.log_with_header
+                     "Stopping background folder fetching thread (TID=%d)...%!"
+                     (Thread.id folder_fetching_thread);
+                   BackgroundFolderFetching.stop_folder_fetching_thread ();
+                   Thread.join folder_fetching_thread;
+                   Utils.log_message "done\n%!";
+                 end
+             end;
+             Utils.log_with_header "Flushing cache...\n%!";
              Cache.flush context.Context.cache;
-             Utils.log_message "Storing clean shutdown flag...%!";
+             Utils.log_with_header "Storing clean shutdown flag...%!";
              DbCache.set_clean_shutdown context.Context.cache;
-             Utils.log_message "done\nCURL cleanup...%!";
+             Utils.log_message "done\n%!";
+             Utils.log_with_header "CURL cleanup...%!";
              ignore (GapiCurl.global_cleanup context.Context.curl_state);
-             Utils.log_message "done\nClearing context...%!";
+             Utils.log_message "done\n%!";
+             Utils.log_with_header "Clearing context...%!";
              Context.clear_ctx ();
              Utils.log_message "done\n%!");
         start_filesystem !mountpoint !fuse_args

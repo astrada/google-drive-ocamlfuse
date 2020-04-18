@@ -146,6 +146,12 @@ struct
       MemoryCache.Resource.select_resource_with_id cache id
     else
       DbCache.Resource.select_resource_with_id cache id
+
+  let select_next_folder_to_fetch cache =
+    if cache.CacheData.in_memory then
+      MemoryCache.Resource.select_next_folder_to_fetch cache
+    else
+      DbCache.Resource.select_next_folder_to_fetch cache
   (* END Queries *)
 
 end

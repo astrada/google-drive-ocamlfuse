@@ -2407,6 +2407,10 @@ let init_filesystem () =
   if config.Config.async_upload_queue then begin
     UploadQueue.start_async_upload_thread
       cache config.Config.async_upload_threads upload_resource_by_id;
+  end;
+  if config.Config.background_folder_fetching then begin
+    BackgroundFolderFetching.start_folder_fetching_thread cache
+      (fun path -> read_dir path |> ignore);
   end
 
 let queue_upload resource =

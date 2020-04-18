@@ -25,6 +25,7 @@ sig
   val select_resources_order_by_last_update : CacheData.t -> CacheData.Resource.t list
   val select_all_resources : CacheData.t -> CacheData.Resource.t list
   val select_resource_with_id : CacheData.t -> int64 -> CacheData.Resource.t option
+  val select_next_folder_to_fetch : CacheData.t -> CacheData.Resource.t option
 
 end
 

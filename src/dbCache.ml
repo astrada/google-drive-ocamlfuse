@@ -439,6 +439,17 @@ struct
     in
       Sqlite3.prepare db sql
 
+  let prepare_select_next_folder_to_fetch_stmt db =
+    let sql =
+      "SELECT " ^ fields ^ " \
+       FROM resource \
+       WHERE mime_type = 'application/vnd.google-apps.folder' \
+         AND state = 'ToDownload' \
+         AND trashed = 0 \
+       ORDER BY last_update;"
+    in
+      Sqlite3.prepare db sql
+
 end
 
 module MetadataStmts =
@@ -941,6 +952,11 @@ struct
     select_resource cache
       ResourceStmts.prepare_select_with_id_stmt
       (fun stmt -> bind_int stmt ":id" (Some id))
+
+  let select_next_folder_to_fetch cache =
+    select_resource cache
+      ResourceStmts.prepare_select_next_folder_to_fetch_stmt
+      (fun _ -> ())
   (* END Queries *)
 
 end
@@ -1148,6 +1164,11 @@ let setup_db cache =
          CREATE INDEX IF NOT EXISTS parent_path_index ON resource (parent_path, trashed); \
          CREATE INDEX IF NOT EXISTS remote_id_index ON resource (remote_id); \
          CREATE INDEX IF NOT EXISTS last_update_index ON resource (last_update); \
+         CREATE INDEX IF NOT EXISTS next_folder_index \
+           ON resource (mime_type, state, trashed, last_update) \
+           WHERE mime_type = 'application/vnd.google-apps.folder' \
+             AND state = 'ToDownload' \
+             AND trashed = 0; \
          CREATE TABLE IF NOT EXISTS metadata ( \
             id INTEGER PRIMARY KEY, \
             display_name TEXT NOT NULL, \

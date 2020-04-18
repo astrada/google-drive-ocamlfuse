@@ -39,6 +39,8 @@ type t = {
   flush_db_thread : Thread.t option;
   (* Async upload thread *)
   async_upload_thread : Thread.t option;
+  (* Background folder fetching thread *)
+  folder_fetching_thread : Thread.t option;
 }
 
 let app_dir = {
@@ -108,6 +110,10 @@ let flush_db_thread = {
 let async_upload_thread = {
   GapiLens.get = (fun x -> x.async_upload_thread);
   GapiLens.set = (fun v x -> { x with async_upload_thread = v })
+}
+let folder_fetching_thread = {
+  GapiLens.get = (fun x -> x.folder_fetching_thread);
+  GapiLens.set = (fun v x -> { x with folder_fetching_thread = v })
 }
 
 let config_lens =

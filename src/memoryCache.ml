@@ -450,6 +450,39 @@ struct
          Utils.safe_find d.resources id
       )
 
+  let select_next_folder_to_fetch cache =
+    ConcurrentMemoryCache.with_lock
+      (fun () ->
+         let d = ConcurrentMemoryCache.get_no_lock () in
+         let resources =
+           Hashtbl.fold
+             (fun _ r rs ->
+                if r.CacheData.Resource.mime_type =
+                   Some "application/vnd.google-apps.folder" &&
+                   r.CacheData.Resource.state =
+                   CacheData.Resource.State.ToDownload &&
+                   r.CacheData.Resource.trashed = Some false
+                then
+                  r :: rs
+                else
+                  rs
+             )
+             d.resources
+             [] in
+         if List.length resources = 0 then None
+         else
+           let sorted =
+             List.sort
+               (fun x y ->
+                  compare
+                    x.CacheData.Resource.last_update
+                    y.CacheData.Resource.last_update
+               )
+               resources
+           in
+           Some (List.hd sorted)
+      )
+
 end
 
 module Metadata =
