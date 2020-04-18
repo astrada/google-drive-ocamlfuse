@@ -2489,7 +2489,11 @@ let create_remote_resource ?link_target is_folder path mode =
         let (target_path_in_cache, target_trashed) =
           get_path_in_cache target_path config in
         get_resource target_path_in_cache target_trashed >>= fun resource ->
-        SessionM.return (Option.get resource.CacheData.Resource.remote_id)
+        if CacheData.Resource.is_shortcut resource then
+          (* Drive doesn't support shortcuts to shortcuts *)
+          Utils.raise_m Permission_denied
+        else
+          SessionM.return (Option.get resource.CacheData.Resource.remote_id)
     end >>= fun target_id ->
     let file = {
       File.empty with
