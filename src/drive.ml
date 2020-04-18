@@ -2476,7 +2476,9 @@ let create_remote_resource ?link_target is_folder path mode =
         let target_path = 
           if Filename.is_relative tp then
             let target_dirname = Filename.dirname path in
-            target_dirname ^ Filename.dir_sep ^ tp
+            if target_dirname = root_directory
+            then target_dirname ^ tp
+            else target_dirname ^ Filename.dir_sep ^ tp
           else tp
         in
         let target_path =
