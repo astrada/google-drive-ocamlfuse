@@ -1,3 +1,15 @@
+google-drive-ocamlfuse (0.7.21-0ubuntu1) focal; urgency=low
+
+  * Add background fetching option
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sun, 19 Apr 2020 14:01:25 +0200
+
+google-drive-ocamlfuse (0.7.20-0ubuntu1) focal; urgency=low
+
+  * Bugfix release
+
+ -- Alessandro Strada <alessandro.strada@gmail.com>  Sat, 18 Apr 2020 13:53:07 +0200
+
 google-drive-ocamlfuse (0.7.19-0ubuntu1) focal; urgency=low
 
   * Add support for Drive Shortcuts
