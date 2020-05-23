@@ -2467,20 +2467,41 @@ let create_remote_resource ?link_target is_folder path mode =
       parent_resource |. CacheData.Resource.remote_id |> Option.get
     in
     let name = Filename.basename path_in_cache in
+    let is_shortcut =
+      (* A Drive Shortcut is created for relative targets or absolute 
+       * targets that are inside the mountpoint. Otherwise a symlink
+       * is created. N.B.: that doesn't work for relative targets outside
+       * the mountpoint. *)
+      match link_target with
+      | None -> false
+      | Some tp ->
+        if not (Filename.is_relative tp) then
+          let mountpoint_path = context.mountpoint_path in
+          ExtString.String.starts_with tp mountpoint_path
+        else true
+    in
     let mimeType =
-      if Option.is_some link_target then shortcut_mime_type
+      if is_shortcut then shortcut_mime_type
       else if is_folder then folder_mime_type
       else if config.Config.autodetect_mime then ""
       else Mime.map_filename_to_mime_type name
     in
-    let appProperties = [CacheData.Resource.mode_to_app_property mode] in
+    let appProperties =
+      match link_target with
+      | Some link when not is_shortcut ->
+        if json_length link > max_link_target_length then
+          raise Invalid_operation
+        else
+          [CacheData.Resource.link_target_to_app_property link;
+           CacheData.Resource.mode_to_app_property 0o120777]
+      | _ -> [CacheData.Resource.mode_to_app_property mode]
+    in
     begin match link_target with
-      | None -> SessionM.return ""
-      | Some tp ->
+      | Some tp when is_shortcut ->
         let target_path = 
           if Filename.is_relative tp then
             let target_dirname = Filename.dirname path in
-            if target_dirname = root_directory
+            if target_dirname = Filename.dir_sep
             then target_dirname ^ tp
             else target_dirname ^ Filename.dir_sep ^ tp
           else tp
@@ -2498,6 +2519,7 @@ let create_remote_resource ?link_target is_folder path mode =
           Utils.raise_m Permission_denied
         else
           SessionM.return (Option.get resource.CacheData.Resource.remote_id)
+      | _ -> SessionM.return ""
     end >>= fun target_id ->
     let file = {
       File.empty with
@@ -2512,7 +2534,10 @@ let create_remote_resource ?link_target is_folder path mode =
     } in
     Utils.log_with_header
       "BEGIN: Creating %s%s (path=%s, trashed=%b%s) on server\n%!"
-      (match link_target with None -> "" | Some _ -> "shortcut to ")
+      (match link_target with
+       | None -> ""
+       | Some _ when is_shortcut -> "shortcut to "
+       | Some _ -> "symlink to ")
       (if is_folder then "folder" else "file") path_in_cache trashed
       (match link_target with None -> "" | Some t -> ", target=" ^ t);
     with_retry_default
