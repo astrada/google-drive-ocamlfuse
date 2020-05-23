@@ -8,72 +8,60 @@ let gae_proxy_url = "https://gd-ocaml-auth.appspot.com"
 let gae_proxy_request page query_string =
   let context = Context.get_ctx () in
   let page_url = Printf.sprintf "%s/%s?%s" gae_proxy_url page query_string in
-  GapiConversation.with_curl
-    context.Context.gapi_config
-    (fun session ->
-       let (tokens, _) =
-         GapiConversation.request
-           GapiCore.HttpMethod.GET
-           session
-           page_url
-           (fun pipe code headers session ->
-              let response = GapiConversation.read_all pipe in
-              if code <> 200 then begin
-                Utils.log_with_header "END: %s fail\n%!" page;
-                raise (ServerError (Printf.sprintf
-                                      "Server response: %s (code=%d)"
-                                      response code));
-              end else begin
-                match response with
-                    "Not_found" ->
-                      Utils.log_with_header
-                        "END: %s not found, retrying\n%!" page;
-                      raise Not_found
-                  | "access_denied"
-                  | "ConflictError"
-                  | "Exception" as error_code ->
-                      Utils.log_with_header
-                        "END: %s fail (error_code=%s)\n%!" page error_code;
-                      raise (ServerError ("error_code " ^ error_code))
-                  | "Missing_request_id" ->
-                      failwith "Bug! Missing_request_id"
-                  | "Missing_refresh_token" ->
-                      failwith "Bug! Missing_refresh_token"
-                  | _ -> ()
-              end;
-              Utils.log_with_header
-                "END: %s ok\n%!" page;
-              let json = Yojson.Safe.from_string response in
-              let fields =
-                match json with
-                    `Assoc xs -> xs
-                  | _ ->
-                      failwith ("Unexpected response from proxy: " ^ response)
-              in
-              let table = Hashtbl.create 8 in
-              List.iter
-                (fun (n, v) -> Hashtbl.add table n v)
-                fields;
-              table)
-       in
-       tokens)
+  GapiConversation.with_curl context.Context.gapi_config (fun session ->
+      let tokens, _ =
+        GapiConversation.request GapiCore.HttpMethod.GET session page_url
+          (fun pipe code headers session ->
+            let response = GapiConversation.read_all pipe in
+            ( if code <> 200 then (
+              Utils.log_with_header "END: %s fail\n%!" page;
+              raise
+                (ServerError
+                   (Printf.sprintf "Server response: %s (code=%d)" response
+                      code)) )
+            else
+              match response with
+              | "Not_found" ->
+                  Utils.log_with_header "END: %s not found, retrying\n%!" page;
+                  raise Not_found
+              | ("access_denied" | "ConflictError" | "Exception") as error_code
+                ->
+                  Utils.log_with_header "END: %s fail (error_code=%s)\n%!" page
+                    error_code;
+                  raise (ServerError ("error_code " ^ error_code))
+              | "Missing_request_id" -> failwith "Bug! Missing_request_id"
+              | "Missing_refresh_token" -> failwith "Bug! Missing_refresh_token"
+              | _ -> () );
+            Utils.log_with_header "END: %s ok\n%!" page;
+            let json = Yojson.Safe.from_string response in
+            let fields =
+              match json with
+              | `Assoc xs -> xs
+              | _ -> failwith ("Unexpected response from proxy: " ^ response)
+            in
+            let table = Hashtbl.create 8 in
+            List.iter (fun (n, v) -> Hashtbl.add table n v) fields;
+            table)
+      in
+      tokens)
 
 let get_string_field table name =
   match Hashtbl.find table name with
-      `String s -> s
-    | _ -> failwith ("Cannot get " ^ name ^ " field from JSON response")
+  | `String s -> s
+  | _ -> failwith ("Cannot get " ^ name ^ " field from JSON response")
 
 let get_tokens () =
   Utils.log_with_header "BEGIN: Getting tokens from GAE proxy\n";
   let context = Context.get_ctx () in
   let request_id = context |. Context.request_id_lens in
   let query_string =
-    Netencoding.Url.mk_url_encoded_parameters [("requestid", request_id)] in
+    Netencoding.Url.mk_url_encoded_parameters [ ("requestid", request_id) ]
+  in
   let table =
     try
-      Utils.with_retry (fun () ->
-        gae_proxy_request "gettokens" query_string)
-      "get_tokens"
+      Utils.with_retry
+        (fun () -> gae_proxy_request "gettokens" query_string)
+        "get_tokens"
     with e ->
       prerr_endline "Cannot get token. Quitting.";
       exit 1
@@ -81,17 +69,16 @@ let get_tokens () =
   let get_string = get_string_field table in
   let current_state = context |. Context.state_lens in
   context
-    |> Context.state_lens ^=
-         { current_state with
-               State.auth_request_id = get_string "request_id";
-               auth_request_date =
-                 get_string "refresh_date" |> GapiDate.of_string;
-               refresh_token = get_string "refresh_token";
-               last_access_token = get_string "access_token";
-               access_token_date =
-                 get_string "refresh_date" |> GapiDate.of_string;
-         }
-    |> Context.save_state_from_context
+  |> Context.state_lens
+     ^= {
+          current_state with
+          State.auth_request_id = get_string "request_id";
+          auth_request_date = get_string "refresh_date" |> GapiDate.of_string;
+          refresh_token = get_string "refresh_token";
+          last_access_token = get_string "access_token";
+          access_token_date = get_string "refresh_date" |> GapiDate.of_string;
+        }
+  |> Context.save_state_from_context
 
 let start_server_polling () =
   let rec loop n =
@@ -103,19 +90,20 @@ let start_server_polling () =
       Unix.sleep 5;
       loop (succ n)
   in
-    loop 0
+  loop 0
 
 let refresh_access_token () =
   Utils.log_with_header "BEGIN: Refreshing access token\n";
   let context = Context.get_ctx () in
   let token = context |. Context.refresh_token_lens in
   let query_string =
-    Netencoding.Url.mk_url_encoded_parameters [("token", token)] in
+    Netencoding.Url.mk_url_encoded_parameters [ ("token", token) ]
+  in
   let table =
     try
-      Utils.with_retry (fun () ->
-        gae_proxy_request "refreshtoken" query_string)
-      "refresh_token"
+      Utils.with_retry
+        (fun () -> gae_proxy_request "refreshtoken" query_string)
+        "refresh_token"
     with e ->
       prerr_endline "Cannot refresh access token. Quitting.";
       exit 1
@@ -123,10 +111,10 @@ let refresh_access_token () =
   let get_string = get_string_field table in
   let current_state = context |. Context.state_lens in
   context
-    |> Context.state_lens ^=
-      { current_state with
-            State.last_access_token = get_string "access_token";
-            access_token_date = get_string "refresh_date" |> GapiDate.of_string;
-      }
-    |> Context.save_state_from_context
-
+  |> Context.state_lens
+     ^= {
+          current_state with
+          State.last_access_token = get_string "access_token";
+          access_token_date = get_string "refresh_date" |> GapiDate.of_string;
+        }
+  |> Context.save_state_from_context

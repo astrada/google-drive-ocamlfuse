@@ -8,4 +8,3 @@ val add_work : ('a -> 'b) -> 'a -> t -> unit
 val pending_threads : t -> int
 
 val shutdown : t -> unit
-
