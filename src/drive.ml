@@ -1665,7 +1665,9 @@ let fetch_link_target path_in_cache trashed cache =
       | Some tid ->
           get_resource_with_id tid cache >>= fun link_resource ->
           let link_target =
-            Filename.chop_suffix mountpoint_path Filename.dir_sep
+            ( if ExtString.String.ends_with mountpoint_path Filename.dir_sep then
+              Filename.chop_suffix mountpoint_path Filename.dir_sep
+            else mountpoint_path )
             ^ link_resource.CacheData.Resource.path
           in
           let updated_resource =
