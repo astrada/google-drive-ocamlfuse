@@ -15,10 +15,10 @@ export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || pr
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
 
 alias gdrivelogin="node login_puppet.js $U $P $APPID"
-alias gdrivemounter="mkdir /mnt/gdrive_$U;  fusermount -u  /mnt/gdrive_pherzohlc; google-drive-ocamlfuse -headless -label me -id $APPID  -secret $KEY; google-drive-ocamlfuse -label me /mnt/gdrive_$U;"
+alias gdrivemounter="mkdir /mnt/gdrive_$U;  fusermount -u  /mnt/gdrive_$U; google-drive-ocamlfuse -headless -label me -id $APPID  -secret $KEY; google-drive-ocamlfuse -label me /mnt/gdrive_$U;"
 alias killgdrive="ps ax | grep 'google-drive-ocamlfuse' | awk -F ' ' '{print $1}' | xargs sudo kill -9"
 
-if [ "$(ls -A /mnt/gdrive_pherzohlc)" ]; then
+if [ "$(ls -A /mnt/gdrive_$U)" ]; then
         echo "GDrive Up";
 else
         sed -i ~/.gdfuse/me/config -e "s/verification_code=.*/verification_code="$(echo `gdrivelogin | tr -d '\n'` | sed -e 's/[]\/$*.^[]/\\&/g')"/g";
