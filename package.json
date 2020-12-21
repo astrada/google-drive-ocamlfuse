@@ -1,0 +1,22 @@
+{
+  "name": "google-drive-ocamlfuse",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FUSE filesystem over Google Drive",
+  "main": "login_puppet.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/astrada/google-drive-ocamlfuse.git"
+  },
+  "author": "Alessandro Strada",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/astrada/google-drive-ocamlfuse/issues"
+  },
+  "homepage": "https://github.com/astrada/google-drive-ocamlfuse#readme",
+  "dependencies": {
+    "puppeteer": "^5.5.0",
+    "puppeteer-extra": "^3.1.15",
+    "puppeteer-extra-plugin-stealth": "^2.6.5"
+  }
+}
