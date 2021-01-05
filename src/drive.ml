@@ -2298,7 +2298,6 @@ let create_remote_resource ?link_target is_folder path mode =
   let config = context |. Context.config_lens in
   if
     is_lost_and_found path trashed config
-    || is_shared_with_me path trashed config
   then raise Permission_denied;
 
   let cache = context.Context.cache in
@@ -2456,7 +2455,6 @@ let trash_resource is_folder trashed path =
   let config = context |. Context.config_lens in
   if
     is_lost_and_found path trashed config
-    || is_shared_with_me path trashed config
   then raise Permission_denied;
 
   let trash resource =
@@ -2557,10 +2555,6 @@ let rename path new_path =
   if
     is_lost_and_found_root path trashed config
     || is_lost_and_found new_path target_trashed config
-  then raise Permission_denied;
-  if
-    is_shared_with_me path trashed config
-    || is_shared_with_me new_path target_trashed config
   then raise Permission_denied;
 
   let old_parent_path = Filename.dirname path_in_cache in
