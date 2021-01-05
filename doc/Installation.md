@@ -8,6 +8,15 @@ I've set up a [PPA repository](https://launchpad.net/~alessandro-strada/+archive
     sudo apt-get update
     sudo apt-get install google-drive-ocamlfuse
 
+## PPAs down
+
+As of 2 November 2020, the PPAs seem to be offline, returning a 404 Not Found error. As a workaround, get the .DEB file for your system, and install via `apt install ./deb-file.deb` at:
+
+- https://launchpad.net/~alessandro-strada/+archive/ubuntu/ppa/+packages for the release versions.
+
+- https://launchpad.net/~alessandro-strada/+archive/ubuntu/google-drive-ocamlfuse-beta/+packages for the beta versions.
+
+(If `apt` throws errors related to `libc6`, try changing the version of `google-drive-ocamlfuse` downloaded.)
 ## PPA repository (beta versions)
 
 This [PPA repository](https://launchpad.net/~alessandro-strada/+archive/ubuntu/google-drive-ocamlfuse-beta) hosts versions from [beta branch](https://github.com/astrada/google-drive-ocamlfuse/tree/beta). These are experimental versions, to test new functionalities. If you want to install them, run the following commands:
@@ -109,3 +118,19 @@ Installing OPAM on Debian/Raspbian can be a little difficult, because the defaul
     eval $(opam env)
     opam depext google-drive-ocamlfuse
     opam install google-drive-ocamlfuse
+
+### Installing with OPAM on Gentoo
+
+Installing with OPAM on Gentoo can be achieved, but there are issues. Give this a try:
+
+    emerge sys-fs/fuse:0                                   #Currently no support for fuse version 3
+    emerge dev-db/sqlite:3                                 #Needs sqlite version 3
+    echo -e 'dev-ml/* ~amd64\t\t\t#Needed to install google-drive-ocamlfuse\n' >> /etc/portage/package.accept_keywords
+    emerge  dev-ml/opam
+    emerge --unmerge ocamlbuild                            #Prevent installation error
+    export OPAM_USER_PATH_RO=/rw/usrlocal:/root            #Allow install as root
+    opam init
+    opam install google-drive-ocamlfuse
+    opam install google-drive-ocamlfuse  --destdir /usr/local/
+    opam uninstall google-drive-ocamlfuse/
+

@@ -181,7 +181,7 @@ When set to `true`, creates a new directory `/lost+found` where you can access u
 
     lost_and_found=false
 
-When set to `true`, creates a new read-only directory `/.shared` where you can access all files that are shared with you (those you can get in the `Shared with me` section of the web interface):
+[Removed in version 0.7.20] When set to `true`, creates a new read-only directory `/.shared` where you can access all files that are shared with you (those you can get in the `Shared with me` section of the web interface):
 
     shared_with_me=false
 
@@ -280,6 +280,10 @@ Path of the directory containing log files (if blank uses the default):
 [Since 0.7.18] Specifies the maximum number of entries (files) of the async upload queue. `0` (default) means unlimited:
 
     async_upload_queue_max_length=0
+
+[Since 0.7.21] Specifies whether to fetch folder data in a background thread:
+
+    background_folder_fetching=false
 
 ### Document export formats
 

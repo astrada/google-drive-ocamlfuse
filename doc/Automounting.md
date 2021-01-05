@@ -34,6 +34,39 @@ If you have another account you can mount it specifying the label after the `#` 
 
     gdfuse#account2  /home/$USERNAME/gdrive2     fuse    uid=1000,gid=1000,_netdev     0       0
 
+## Mount using systemd
+
+1) Create unit file `sudo nano /etc/systemd/system/google-drive-ocamlfuse.service` content (be sure to replace instances of {username}, {label}, and {mountpoint}):
+
+```bash
+[Unit]
+Description=FUSE filesystem over Google Drive
+After=network.target
+
+[Service]
+User={username}
+Group={username}
+ExecStart=google-drive-ocamlfuse -label {label} {mountpoint}
+ExecStop=fusermount -u {mountpoint}
+Restart=always
+Type=forking
+
+[Install]
+WantedBy=multi-user.target
+```
+
+2. To mount drive:
+```
+    sudo systemctl start google-drive-ocamlfuse.service
+```
+3. To unmount drive:
+```
+    sudo systemctl stop google-drive-ocamlfuse.service
+```
+4. To automount on boot:
+```
+    sudo systemctl enable google-drive-ocamlfuse.service
+```
 ## Mount using pam_mount
 
 First go through the authorization process. Install the package `libpam-mount` or its equivalent. Edit the file `/etc/security/pam_mount.conf.xml` and uncomment the following line (as root):

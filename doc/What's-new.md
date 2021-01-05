@@ -1,3 +1,11 @@
+0.7.21
+======
+This version introduces a new config option: `background_folder_fetching`. If set to a `true` (the default is `false`), it starts a thread to fetch folder data in background, so accessing folders should be faster.
+
+0.7.20
+======
+This version remove the config option: `shared_with_me`. Now it's on by default, because Google Drive removed the "Add to My Drive" option for shared files, so there is no other way of accessing shared resources.
+
 0.7.19
 ======
 This version adds support for Google Drive [Shortcuts](https://support.google.com/drive/answer/9700156?hl=en&visit_id=637217083697801162-3050789304&rd=1). They are treated as symlinks.

@@ -46,7 +46,7 @@ the tokens from Google.
 
     Access token retrieved correctly.
 
-You can create OAuth2 credentials from the Google APIs Console. [Here](https://developers.google.com/console/help/new/#creatingdeletingprojects) you can find how to create a new application and [here](https://developers.google.com/console/help/new/#setting-up-oauth-20) how to set up OAuth 2.0 credentials. When [activating APIs](https://developers.google.com/console/help/new/#activating-and-deactivating-apis), you must select the Drive API. When creating a new client ID, you must select "Installed applications" as Application type and "Other" as Installed application type (Redirect URI should be `urn:ietf:wg:oauth:2.0:oob`). Check that Drive API is among the Enabled APIs of your [Developers Console](https://console.developers.google.com/project/_/apiui/apis/library).
+You can create OAuth2 credentials from the Google APIs Console. [Here](https://support.google.com/googleapi/answer/6251787?hl=en) you can find how to create a new application and [here](https://support.google.com/cloud/answer/6158849?hl=en) how to set up OAuth 2.0 credentials. When [activating APIs](https://cloud.google.com/service-usage/docs/enable-disable), you must select the Drive API. When creating a new client ID, you must select "Desktop app" as Application type. Check that Drive API is among the Enabled APIs of your [Developers Console](https://console.cloud.google.com/apis/library).
 
 ### Revoking access
 

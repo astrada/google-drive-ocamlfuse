@@ -13,7 +13,7 @@ Caveat: I do not know whether this is the "optimal" way to do this.  I was in a 
     1. Get your client ID and client secret
         1. Open the Navigation menu (click the hamburger icon at the top left), open "APIs & Services" -> "Credentials", this will open https://console.cloud.google.com/apis/credentials
         1. Then click on the button "Create Credentials", and choose choose "OAuth client ID", this will take you to https://console.cloud.google.com/apis/credentials/oauthclient .
-            * For Application type, choose "Other"
+            * For Application type, choose "Other" or "Desktop"
             * For Name, input something personal, for example "My OCAMLDrive".
         1. Click "Create". You will get a Client ID, a Client Secret.
 
