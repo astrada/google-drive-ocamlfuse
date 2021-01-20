@@ -247,3 +247,9 @@ let file_copy source_path target_path =
                 copy_loop ()
           in
           copy_loop ()))
+
+(* Base64 *)
+let base64_encode s =
+  let base64 = Cryptokit.Base64.encode_compact () in
+  Cryptokit.transform_string base64 s
+
