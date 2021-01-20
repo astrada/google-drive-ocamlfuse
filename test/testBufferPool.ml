@@ -14,33 +14,40 @@ let test_acquire_buffer () =
   let buffer_pool = BufferPool.create ~pool_size:10 ~buffer_size:10 in
   let mutex = Mutex.create () in
   let condition = Condition.create () in
-  let buffer = BufferPool.acquire_buffer mutex condition buffer_pool in
-  buffer.BufferPool.Buffer.arr.{0} <- 'a';
-  BufferPool.release_buffer buffer condition buffer_pool;
-  let buffer' = BufferPool.acquire_buffer mutex condition buffer_pool in
-  assert_equal ~printer:Std.string_of_char 'a' buffer'.BufferPool.Buffer.arr.{0}
+  Utils.with_lock mutex (fun () ->
+      let buffer = BufferPool.acquire_buffer mutex condition buffer_pool in
+      buffer.BufferPool.Buffer.arr.{0} <- 'a';
+      BufferPool.release_buffer buffer condition buffer_pool;
+      let buffer' = BufferPool.acquire_buffer mutex condition buffer_pool in
+      assert_equal ~printer:Std.string_of_char 'a'
+        buffer'.BufferPool.Buffer.arr.{0})
 
 let test_pending_requests () =
   let flag = ref false in
   let buffer_pool = BufferPool.create ~pool_size:10 ~buffer_size:10 in
   let mutex = Mutex.create () in
   let condition = Condition.create () in
+  Mutex.lock mutex;
   let buffer = BufferPool.acquire_buffer mutex condition buffer_pool in
   assert_equal ~printer:string_of_int 0
     (BufferPool.pending_requests buffer_pool);
   buffer.BufferPool.Buffer.arr.{0} <- 'b';
+  Mutex.unlock mutex;
   let thread =
     Thread.create
       (fun () ->
-        let b = BufferPool.acquire_buffer mutex condition buffer_pool in
-        flag := b.BufferPool.Buffer.arr.{0} = 'a')
+        Utils.with_lock mutex (fun () ->
+            let b = BufferPool.acquire_buffer mutex condition buffer_pool in
+            flag := b.BufferPool.Buffer.arr.{0} = 'a'))
       ()
   in
   Thread.delay 0.05;
   assert_equal ~printer:string_of_int 1
     (BufferPool.pending_requests buffer_pool);
   buffer.BufferPool.Buffer.arr.{0} <- 'a';
+  Mutex.lock mutex;
   BufferPool.release_buffer buffer condition buffer_pool;
+  Mutex.unlock mutex;
   Thread.join thread;
   assert_equal ~printer:string_of_int 0
     (BufferPool.pending_requests buffer_pool);
