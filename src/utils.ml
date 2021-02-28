@@ -31,15 +31,15 @@ let try_finally f finally =
     finally ();
     result
   with e ->
-    ( try finally ()
-      with e' ->
-        let message = Printexc.to_string e' in
-        let backtrace = Printexc.get_backtrace () in
-        let elapsed = Unix.gettimeofday () -. start_time in
-        let thread_id = get_thread_id () in
-        Printf.fprintf !log_channel
-          "[%f] TID=%d: Error in finally block:\nException:%s\nBacktrace:%s\n%!"
-          elapsed thread_id message backtrace );
+    (try finally ()
+     with e' ->
+       let message = Printexc.to_string e' in
+       let backtrace = Printexc.get_backtrace () in
+       let elapsed = Unix.gettimeofday () -. start_time in
+       let thread_id = get_thread_id () in
+       Printf.fprintf !log_channel
+         "[%f] TID=%d: Error in finally block:\nException:%s\nBacktrace:%s\n%!"
+         elapsed thread_id message backtrace);
     raise e
 
 (* Channels *)
@@ -60,15 +60,15 @@ let open_log_out_ch log_to path =
   | p when String.index p '/' = 0 -> open_out p
   | l ->
       failwith
-        ( "Invalid log_to value: " ^ l
-        ^ " should be 'stdout', 'stderr', or an absolute path" )
+        ("Invalid log_to value: " ^ l
+       ^ " should be 'stdout', 'stderr', or an absolute path")
 
 let log_message format =
   if !verbose then (
     if !debug_buffers then Mutex.lock log_mutex;
     let result = Printf.fprintf !log_channel format in
     if !debug_buffers then Mutex.unlock log_mutex;
-    result )
+    result)
   else Printf.ifprintf !log_channel format
 
 let log_with_header format =
@@ -79,7 +79,7 @@ let log_with_header format =
     Printf.fprintf !log_channel "[%f] TID=%d: " elapsed thread_id;
     let result = Printf.fprintf !log_channel format in
     if !debug_buffers then Mutex.unlock log_mutex;
-    result )
+    result)
   else Printf.ifprintf !log_channel format
 
 let log_exception e =
@@ -184,10 +184,10 @@ let start_browser browser url =
     let status = Unix.close_process_in ch in
     if status = Unix.WEXITED 0 then (
       log_with_header "END: Starting web browser with command: %s\n" command;
-      true )
+      true)
     else (
       log_with_header "FAIL: Starting web browser with command: %s\n" command;
-      false )
+      false)
   in
   let browsers =
     if browser <> "" then [ browser ]
@@ -208,7 +208,7 @@ let with_retry ?(filter_exception = fun _ -> true) f label =
       if n >= !max_retries then (
         log_with_header "Error during %s after %d attempts: %s\n%!" label
           !max_retries (Printexc.to_string e);
-        raise e )
+        raise e)
       else
         let n' = n + 1 in
         log_with_header "Retrying (%d/%d) %s after exception: %s\n%!" n'
@@ -253,3 +253,16 @@ let base64_encode s =
   let base64 = Cryptokit.Base64.encode_compact () in
   Cryptokit.transform_string base64 s
 
+(* Normalize paths *)
+let normalize_absolute_path path =
+  if Filename.is_relative path then failwith "Absolute path expected";
+  let dirs = Str.split (Str.regexp (Str.quote Filename.dir_sep)) path in
+  let rec loop ds accu =
+    match ds with
+    | [] -> accu
+    | "" :: ts | "." :: ts -> loop ts accu
+    | ".." :: ts -> loop ts (List.tl accu)
+    | d :: ts -> loop ts (d :: accu)
+  in
+  let normalized_dirs = loop dirs [] |> List.rev in
+  Filename.dir_sep ^ String.concat Filename.dir_sep normalized_dirs

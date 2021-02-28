@@ -2299,6 +2299,12 @@ let create_remote_resource ?link_target is_folder path mode =
   let cache = context.Context.cache in
   let parent_path = Filename.dirname path_in_cache in
   let create_file =
+    let mountpoint_path = context.mountpoint_path in
+    let mountpoint_path =
+      if ExtString.String.ends_with mountpoint_path Filename.dir_sep then
+        Filename.chop_suffix mountpoint_path Filename.dir_sep
+      else mountpoint_path
+    in
     get_resource parent_path trashed >>= fun parent_resource ->
     let parent_id =
       parent_resource |. CacheData.Resource.remote_id |> Option.get
@@ -2313,7 +2319,6 @@ let create_remote_resource ?link_target is_folder path mode =
       | None -> false
       | Some tp ->
           if not (Filename.is_relative tp) then
-            let mountpoint_path = context.mountpoint_path in
             ExtString.String.starts_with tp mountpoint_path
           else true
     in
@@ -2345,12 +2350,22 @@ let create_remote_resource ?link_target is_folder path mode =
           else tp
         in
         let target_path =
+          if ExtString.String.starts_with target_path mountpoint_path then
+            let mountpoint_path_length = String.length mountpoint_path in
+            String.sub target_path mountpoint_path_length
+              (String.length target_path - mountpoint_path_length)
+          else target_path
+        in
+        let target_path =
           if ExtString.String.ends_with target_path Filename.dir_sep then
             Filename.chop_suffix target_path Filename.dir_sep
           else target_path
         in
+        let normalized_target_path =
+          try Utils.normalize_absolute_path target_path with _ -> ""
+        in
         let target_path_in_cache, target_trashed =
-          get_path_in_cache target_path config
+          get_path_in_cache normalized_target_path config
         in
         get_resource target_path_in_cache target_trashed >>= fun resource ->
         if CacheData.Resource.is_shortcut resource then
