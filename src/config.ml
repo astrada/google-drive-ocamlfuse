@@ -3,7 +3,7 @@ open GapiLens.Infix
 
 let application_name = "google-drive-ocamlfuse"
 
-let version = "0.7.26"
+let version = "0.7.27"
 
 type t = {
   (* Number of seconds metadata should be cached. *)
@@ -941,11 +941,11 @@ let create_gapi_config config debug curl_log_path log_to =
       let service_account_credentials_json =
         Utils.with_in_channel config.service_account_credentials_path (fun ch ->
             let b = Buffer.create 512 in
-            ( try
-                while true do
-                  Buffer.add_string b (input_line ch)
-                done
-              with End_of_file -> () );
+            (try
+               while true do
+                 Buffer.add_string b (input_line ch)
+               done
+             with End_of_file -> ());
             Buffer.contents b)
       in
       let user_to_impersonate =
