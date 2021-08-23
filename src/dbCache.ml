@@ -105,7 +105,7 @@ module ResourceStmts = struct
     "remote_id, name, mime_type, created_time, modified_time, \
      viewed_by_me_time, file_extension, full_file_extension, md5_checksum, \
      size, can_edit, trashed, web_view_link, export_links, version, \
-     target_id, "
+     resource_key, target_id, target_resource_key, "
 
   let app_properties_fields = "file_mode_bits, uid, gid, link_target, xattrs, "
 
@@ -122,9 +122,9 @@ module ResourceStmts = struct
       ^ ") VALUES ( :remote_id, :name, :mime_type, :created_time, \
          :modified_time, :viewed_by_me_time, :file_extension, \
          :full_file_extension, :md5_checksum, :size, :can_edit, :trashed, \
-         :web_view_link, :export_links, :version, :target_id, :file_mode_bits, \
-         :uid, :gid, :link_target, :xattrs, :parent_path, :path, :state, \
-         :last_update );"
+         :web_view_link, :export_links, :version, :resource_key, :target_id, \
+         :target_resource_key, :file_mode_bits, :uid, :gid, :link_target, \
+         :xattrs, :parent_path, :path, :state, :last_update );"
     in
     Sqlite3.prepare db sql
 
@@ -134,9 +134,9 @@ module ResourceStmts = struct
       ^ ") VALUES ( :id, :remote_id, :name, :mime_type, :created_time, \
          :modified_time, :viewed_by_me_time, :file_extension, \
          :full_file_extension, :md5_checksum, :size, :can_edit, :trashed, \
-         :web_view_link, :export_links, :version, :target_id, :file_mode_bits, \
-         :uid, :gid, :link_target, :xattrs, :parent_path, :path, :state, \
-         :last_update );"
+         :web_view_link, :export_links, :version, :resource_key, :target_id, \
+         :target_resource_key, :file_mode_bits, :uid, :gid, :link_target, \
+         :xattrs, :parent_path, :path, :state, :last_update );"
     in
     Sqlite3.prepare db sql
 
@@ -148,7 +148,8 @@ module ResourceStmts = struct
        = :file_extension, full_file_extension = :full_file_extension, \
        md5_checksum = :md5_checksum, size = :size, can_edit = :can_edit, \
        trashed = :trashed, web_view_link = :web_view_link, export_links = \
-       :export_links, version = :version, target_id = :target_id, \
+       :export_links, version = :version, resource_key = :resource_key, \
+       target_id = :target_id, target_resource_key = :target_resource_key, \
        file_mode_bits = :file_mode_bits, uid = :uid, gid = :gid, link_target = \
        :link_target, xattrs = :xattrs, parent_path = :parent_path, path = \
        :path, state = :state, last_update = :last_update WHERE id = :id;"
@@ -425,7 +426,9 @@ module Resource = struct
     bind_text stmt ":web_view_link" resource.web_view_link;
     bind_text stmt ":export_links" resource.export_links;
     bind_int stmt ":version" resource.version;
+    bind_text stmt ":resource_key" resource.resource_key;
     bind_text stmt ":target_id" resource.target_id;
+    bind_text stmt ":target_resource_key" resource.target_resource_key;
     bind_int stmt ":file_mode_bits" resource.file_mode_bits;
     bind_int stmt ":uid" resource.uid;
     bind_int stmt ":gid" resource.gid;
@@ -629,18 +632,20 @@ module Resource = struct
       web_view_link = row_data.(13) |> data_to_string;
       export_links = row_data.(14) |> data_to_string;
       version = row_data.(15) |> data_to_int64;
-      target_id = row_data.(16) |> data_to_string;
-      file_mode_bits = row_data.(17) |> data_to_int64;
-      uid = row_data.(18) |> data_to_int64;
-      gid = row_data.(19) |> data_to_int64;
-      link_target = row_data.(20) |> data_to_string;
-      xattrs = row_data.(21) |> data_to_string |> Option.get;
-      parent_path = row_data.(22) |> data_to_string |> Option.get;
-      path = row_data.(23) |> data_to_string |> Option.get;
+      resource_key = row_data.(16) |> data_to_string;
+      target_id = row_data.(17) |> data_to_string;
+      target_resource_key = row_data.(18) |> data_to_string;
+      file_mode_bits = row_data.(19) |> data_to_int64;
+      uid = row_data.(20) |> data_to_int64;
+      gid = row_data.(21) |> data_to_int64;
+      link_target = row_data.(22) |> data_to_string;
+      xattrs = row_data.(23) |> data_to_string |> Option.get;
+      parent_path = row_data.(24) |> data_to_string |> Option.get;
+      path = row_data.(25) |> data_to_string |> Option.get;
       state =
-        row_data.(24) |> data_to_string |> Option.get
+        row_data.(26) |> data_to_string |> Option.get
         |> CacheData.Resource.State.of_string;
-      last_update = row_data.(25) |> data_to_float |> Option.get;
+      last_update = row_data.(27) |> data_to_float |> Option.get;
     }
 
   let select_resource cache prepare bind =
@@ -870,11 +875,12 @@ let setup_db cache =
          viewed_by_me_time REAL NULL, file_extension TEXT NULL, \
          full_file_extension TEXT NULL, md5_checksum TEXT NULL, size INTEGER \
          NULL, can_edit INTEGER NULL, trashed INTEGER NULL, web_view_link TEXT \
-         NULL, export_links TEXT NULL, version INTEGER NULL, target_id TEXT \
-         NULL, file_mode_bits INTEGER NULL, uid INTEGER NULL, gid INTEGER \
-         NULL, link_target TEXT NULL, xattrs TEXT NOT NULL, parent_path TEXT \
-         NOT NULL, path TEXT NOT NULL, state TEXT NOT NULL, last_update REAL \
-         NOT NULL ); CREATE INDEX IF NOT EXISTS path_index ON resource (path, \
+         NULL, export_links TEXT NULL, version INTEGER NULL, resource_key TEXT \
+         NULL, target_id TEXT NULL, target_resource_key TEXT NULL, \
+         file_mode_bits INTEGER NULL, uid INTEGER NULL, gid INTEGER NULL, \
+         link_target TEXT NULL, xattrs TEXT NOT NULL, parent_path TEXT NOT \
+         NULL, path TEXT NOT NULL, state TEXT NOT NULL, last_update REAL NOT \
+         NULL ); CREATE INDEX IF NOT EXISTS path_index ON resource (path, \
          trashed); CREATE INDEX IF NOT EXISTS parent_path_index ON resource \
          (parent_path, trashed); CREATE INDEX IF NOT EXISTS remote_id_index ON \
          resource (remote_id); CREATE INDEX IF NOT EXISTS last_update_index ON \

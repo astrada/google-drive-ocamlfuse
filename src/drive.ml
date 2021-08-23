@@ -24,7 +24,7 @@ let folder_mime_type = "application/vnd.google-apps.folder"
 let shortcut_mime_type = "application/vnd.google-apps.shortcut"
 
 let file_fields =
-  "appProperties,capabilities(canEdit),createdTime,explicitlyTrashed,fileExtension,fullFileExtension,id,md5Checksum,mimeType,modifiedTime,name,parents,size,trashed,version,viewedByMeTime,webViewLink,exportLinks,shortcutDetails(targetId),shared"
+  "appProperties,capabilities(canEdit),createdTime,explicitlyTrashed,fileExtension,fullFileExtension,id,md5Checksum,mimeType,modifiedTime,name,parents,size,trashed,version,viewedByMeTime,webViewLink,exportLinks,shortcutDetails(targetId,targetResourceKey),shared,resourceKey"
 
 let file_std_params =
   {
@@ -240,6 +240,36 @@ let handle_default_exceptions = function
       Utils.raise_m File_not_found
   | e -> Utils.raise_m e
 
+let build_resource_keys_header ids_and_resource_keys =
+  let ids_with_valid_resource_keys =
+    List.filter
+      (fun (_, resource_key) ->
+        match resource_key with None -> false | Some "" -> false | _ -> true)
+      ids_and_resource_keys
+  in
+  let id_resource_key_pairs =
+    List.map
+      (fun id_resource_key ->
+        match id_resource_key with
+        | Some id, Some resource_key -> id ^ "/" ^ resource_key
+        | _ -> "")
+      ids_with_valid_resource_keys
+  in
+  let valid_id_resource_key_pairs =
+    List.filter
+      (fun p -> match p with "" -> false | _ -> true)
+      id_resource_key_pairs
+  in
+  match valid_id_resource_key_pairs with
+  | [] -> []
+  | _ ->
+      let header_value = String.concat "," valid_id_resource_key_pairs in
+      let custom_header =
+        GapiCore.Header.KeyValueHeader
+          ("X-Goog-Drive-Resource-Keys", header_value)
+      in
+      [ custom_header ]
+
 (* with_try with a default exception handler *)
 let try_with_default f s = Utils.try_with_m f handle_default_exceptions s
 
@@ -342,7 +372,9 @@ let create_resource path =
     web_view_link = None;
     export_links = None;
     version = None;
+    resource_key = None;
     target_id = None;
+    target_resource_key = None;
     file_mode_bits = None;
     uid = None;
     gid = None;
@@ -425,11 +457,23 @@ let update_resource_from_file ?state ?link_target resource file =
         resource.CacheData.Resource.size
     | _ -> Some file.File.size
   in
+  let resource_key =
+    match file.File.resourceKey with "" -> None | _ as s -> Some s
+  in
   let target_id =
     if file.File.mimeType = shortcut_mime_type then
       match file.File.shortcutDetails with
       | { File.ShortcutDetails.targetId; _ } when targetId <> "" ->
           Some targetId
+      | _ -> None
+    else None
+  in
+  let target_resource_key =
+    if file.File.mimeType = shortcut_mime_type then
+      match file.File.shortcutDetails with
+      | { File.ShortcutDetails.targetResourceKey; _ }
+        when targetResourceKey <> "" ->
+          Some targetResourceKey
       | _ -> None
     else None
   in
@@ -455,7 +499,9 @@ let update_resource_from_file ?state ?link_target resource file =
     export_links =
       Some (CacheData.Resource.serialize_export_links file.File.exportLinks);
     version = Some file.File.version;
+    resource_key;
     target_id;
+    target_resource_key;
     file_mode_bits =
       CacheData.Resource.get_file_mode_bits file.File.appProperties;
     uid = CacheData.Resource.get_uid file.File.appProperties;
@@ -630,6 +676,25 @@ let update_cache_size_for_documents cache resource content_path op =
           let delta = op size in
           update_cache_size delta metadata cache
         with e -> Utils.log_exception e)
+
+let build_resource_keys_header_from_resource resource =
+  let ids_and_resource_keys =
+    [
+      ( resource.CacheData.Resource.remote_id,
+        resource.CacheData.Resource.resource_key );
+    ]
+  in
+  build_resource_keys_header ids_and_resource_keys
+
+let build_resource_keys_header_from_resources resources =
+  let ids_and_resource_keys =
+    List.map
+      (fun resource ->
+        ( resource.CacheData.Resource.remote_id,
+          resource.CacheData.Resource.resource_key ))
+      resources
+  in
+  build_resource_keys_header ids_and_resource_keys
 
 (* END Resource cache *)
 
@@ -1435,10 +1500,13 @@ let create_html_with_redirect resource content_path config =
          </html>"
         name url url name)
 
-let download_media media_download fileId =
+let download_media media_download resource =
+  let fileId = resource.CacheData.Resource.remote_id |> Option.get in
+  let custom_headers = build_resource_keys_header_from_resource resource in
   Utils.try_with_m
     (FilesResource.get ~supportsAllDrives:true
-       ~std_params:file_download_std_params ~media_download ~fileId) (fun e ->
+       ~std_params:file_download_std_params ~media_download ~custom_headers
+       ~fileId) (fun e ->
       let config = Context.get_ctx () |. Context.config_lens in
       if
         match_service_error "cannotDownloadAbusiveFile" e
@@ -1450,7 +1518,8 @@ let download_media media_download fileId =
           fileId;
         with_retry_default
           (FilesResource.get ~supportsAllDrives:true ~acknowledgeAbuse:true
-             ~std_params:file_download_std_params ~media_download ~fileId)
+             ~std_params:file_download_std_params ~media_download
+             ~custom_headers ~fileId)
         >>= fun file -> SessionM.return file)
       else handle_default_exceptions e)
 
@@ -1493,7 +1562,7 @@ let download_resource resource =
           (FilesResource.export ~media_download ~fileId ~mimeType)
         >>= fun () -> SessionM.return ()
     else if Option.default 0L resource.CacheData.Resource.size > 0L then
-      download_media media_download fileId >>= fun _ -> SessionM.return ()
+      download_media media_download resource >>= fun _ -> SessionM.return ()
     else (
       Utils.log_with_header
         "BEGIN: Creating resource without content (path=%s)\n%!" content_path;
@@ -1598,8 +1667,7 @@ let stream_resource offset buffer resource =
     GapiMediaResource.generate_range_spec [ (Some offset, Some finish) ]
   in
   let media_download = { GapiMediaResource.destination; range_spec } in
-  let fileId = resource |. CacheData.Resource.remote_id |> Option.get in
-  download_media media_download fileId >>= fun _ ->
+  download_media media_download resource >>= fun _ ->
   Utils.log_with_header
     "END: Stream resource (id=%Ld, offset=%Ld, finish=%Ld, length=%d)\n%!"
     resource.CacheData.Resource.id offset finish length;
@@ -1766,7 +1834,7 @@ let get_attr path =
           | None -> (
               match resource.CacheData.Resource.target_id with
               | None -> raise Invalid_operation
-              | Some tid ->
+              | Some _ ->
                   let fetch_link_target =
                     fetch_link_target path_in_cache trashed cache
                   in
@@ -2044,9 +2112,11 @@ let utime path atime mtime =
       let file_patch =
         File.empty |> File.modifiedTime ^= Netdate.create mtime
       in
+      let custom_headers = build_resource_keys_header_from_resource resource in
       with_retry_default
         (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~fileId:remote_id file_patch)
+           ~std_params:file_std_params ~custom_headers ~fileId:remote_id
+           file_patch)
       >>= fun patched_file ->
       Utils.log_with_header
         "END: Updating file mtime (remote id=%s, mtime=%f)\n%!" remote_id mtime;
@@ -2207,9 +2277,11 @@ let upload resource =
     (if content_type = "" then "autodetect" else content_type)
     size;
   let file_patch = File.empty |> File.modifiedTime ^= GapiDate.now () in
+  let custom_headers = build_resource_keys_header_from_resource resource in
   with_retry_default
     (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-       ~std_params:file_std_params ?media_source ~fileId:remote_id file_patch)
+       ~std_params:file_std_params ?media_source ~custom_headers
+       ~fileId:remote_id file_patch)
   >>= fun file ->
   let resource = update_resource_from_file resource file in
   Utils.log_with_header
@@ -2472,9 +2544,11 @@ let trash_resource is_folder trashed path =
     check_if_empty remote_id is_folder trashed >>= fun () ->
     Utils.log_with_header "BEGIN: Trashing file (remote id=%s)\n%!" remote_id;
     let file_patch = { File.empty with File.trashed = true } in
+    let custom_headers = build_resource_keys_header_from_resource resource in
     with_retry_default
       (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-         ~std_params:file_std_params ~fileId:remote_id file_patch)
+         ~std_params:file_std_params ~custom_headers ~fileId:remote_id
+         file_patch)
     >>= fun trashed_file ->
     Utils.log_with_header "END: Trashing file (remote id=%s)\n%!" remote_id;
     SessionM.return (Some trashed_file)
@@ -2505,9 +2579,10 @@ let delete_resource is_folder path =
     check_if_empty remote_id is_folder trashed >>= fun () ->
     Utils.log_with_header "BEGIN: Permanently deleting file (remote id=%s)\n%!"
       remote_id;
+    let custom_headers = build_resource_keys_header_from_resource resource in
     with_retry_default
       (FilesResource.delete ~supportsAllDrives:true ~std_params:file_std_params
-         ~fileId:remote_id)
+         ~custom_headers ~fileId:remote_id)
     >>= fun () ->
     Utils.log_with_header "END: Permanently deleting file (remote id=%s)\n%!"
       remote_id;
@@ -2587,22 +2662,26 @@ let rename path new_path =
   in
   let delete_source_path = delete_path path path_in_cache trashed in
   let update =
-    let trash_target_and_rename_file resource remote_id =
+    let trash_target_and_rename_file resource =
+      let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
       delete_target_path >>= fun () ->
       Utils.log_with_header
         "BEGIN: Renaming file (remote id=%s) from %s to %s\n%!" remote_id
         old_name new_name;
       let file_patch = { File.empty with File.name = new_name } in
+      let custom_headers = build_resource_keys_header_from_resource resource in
       with_retry_default
         (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~fileId:remote_id file_patch)
+           ~std_params:file_std_params ~custom_headers ~fileId:remote_id
+           file_patch)
       >>= fun patched_file ->
       Utils.log_with_header
         "END: Renaming file (remote id=%s) from %s to %s\n%!" remote_id old_name
         new_name;
       SessionM.return patched_file
     in
-    let replace_target resource remote_id not_found_callback =
+    let replace_target resource not_found_callback =
+      let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
       let replace_target_content () =
         get_resource new_path_in_cache target_trashed >>= fun target_resource ->
         let target_remote_id =
@@ -2622,9 +2701,12 @@ let rename path new_path =
               Option.default "" resource.CacheData.Resource.mime_type;
           }
         in
+        let custom_headers =
+          build_resource_keys_header_from_resource target_resource
+        in
         with_retry_default
           (FilesResource.update ~enforceSingleParent:true
-             ~supportsAllDrives:true ~std_params:file_std_params
+             ~supportsAllDrives:true ~std_params:file_std_params ~custom_headers
              ~fileId:target_remote_id file_patch)
         >>= fun patched_file ->
         let cache = context.Context.cache in
@@ -2654,21 +2736,18 @@ let rename path new_path =
         SessionM.return patched_file
       in
       Utils.try_with_m (replace_target_content ()) (function
-        | File_not_found -> not_found_callback resource remote_id
+        | File_not_found -> not_found_callback resource
         | e -> Utils.raise_m e)
     in
     let rename_file resource =
       if old_name <> new_name then
-        let remote_id =
-          resource |. CacheData.Resource.remote_id |> Option.get
-        in
         (if config.Config.mv_keep_target then
-         replace_target resource remote_id trash_target_and_rename_file
-        else trash_target_and_rename_file resource remote_id)
+         replace_target resource trash_target_and_rename_file
+        else trash_target_and_rename_file resource)
         >>= fun renamed_file -> SessionM.return (Some renamed_file)
       else SessionM.return None
     in
-    let trash_target_and_move resource remote_id =
+    let trash_target_and_move resource =
       let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
       delete_target_path >>= fun () ->
       Utils.log_with_header
@@ -2679,17 +2758,25 @@ let rename path new_path =
         new_parent_resource.CacheData.Resource.remote_id |> Option.get
       in
       (if is_lost_and_found_root old_parent_path trashed config then
-       SessionM.return ""
+       let custom_headers =
+         build_resource_keys_header_from_resources
+           [ new_parent_resource; resource ]
+       in
+       SessionM.return ("", custom_headers)
       else
         get_resource old_parent_path trashed >>= fun old_parent_resource ->
-        let id =
+        let old_parent_id =
           old_parent_resource.CacheData.Resource.remote_id |> Option.get
         in
-        SessionM.return id)
-      >>= fun old_parent_id ->
+        let custom_headers =
+          build_resource_keys_header_from_resources
+            [ old_parent_resource; new_parent_resource; resource ]
+        in
+        SessionM.return (old_parent_id, custom_headers))
+      >>= fun (old_parent_id, custom_headers) ->
       with_retry_default
         (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~addParents:new_parent_id
+           ~std_params:file_std_params ~custom_headers ~addParents:new_parent_id
            ~fileId:remote_id ~removeParents:old_parent_id File.empty)
       >>= fun patched_file ->
       Utils.log_with_header "END: Moving file (remote id=%s) from %s to %s\n%!"
@@ -2698,10 +2785,9 @@ let rename path new_path =
     in
     let move resource =
       (if old_parent_path <> new_parent_path then
-       let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
        (if config.Config.mv_keep_target then
-        replace_target resource remote_id trash_target_and_move
-       else trash_target_and_move resource remote_id)
+        replace_target resource trash_target_and_move
+       else trash_target_and_move resource)
        >>= fun moved_file -> SessionM.return (Some moved_file)
       else SessionM.return None)
       >>= fun moved_file ->
@@ -2822,9 +2908,11 @@ let chmod path mode =
         |> File.appProperties
            ^= [ CacheData.Resource.mode_to_app_property mode ]
       in
+      let custom_headers = build_resource_keys_header_from_resource resource in
       with_retry_default
         (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~fileId:remote_id file_patch)
+           ~std_params:file_std_params ~custom_headers ~fileId:remote_id
+           file_patch)
       >>= fun patched_file ->
       Utils.log_with_header "END: Updating mode (remote id=%s, mode=%o)\n%!"
         remote_id mode;
@@ -2861,9 +2949,11 @@ let chown path uid gid =
         else CacheData.Resource.uid_to_app_property uid_string :: app_properties
       in
       let file_patch = File.empty |> File.appProperties ^= app_properties in
+      let custom_headers = build_resource_keys_header_from_resource resource in
       with_retry_default
         (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~fileId:remote_id file_patch)
+           ~std_params:file_std_params ~custom_headers ~fileId:remote_id
+           file_patch)
       >>= fun patched_file ->
       Utils.log_with_header
         "End: Updating owner (remote id=%s, uid=%d gid=%d)\n%!" remote_id uid
@@ -2918,9 +3008,11 @@ let set_xattr path name value xflags =
         |> File.appProperties
            ^= [ CacheData.Resource.xattr_to_app_property name value ]
       in
+      let custom_headers = build_resource_keys_header_from_resource resource in
       with_retry_default
         (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~fileId:remote_id file_patch)
+           ~std_params:file_std_params ~custom_headers ~fileId:remote_id
+           file_patch)
       >>= fun patched_file ->
       Utils.log_with_header
         "END: Setting xattr (remote id=%s, name=%s value=%s xflags=%s)\n%!"
@@ -2967,9 +3059,11 @@ let remove_xattr path name =
         |> File.appProperties
            ^= [ CacheData.Resource.xattr_no_value_to_app_property name ]
       in
+      let custom_headers = build_resource_keys_header_from_resource resource in
       with_retry_default
         (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~fileId:remote_id file_patch)
+           ~std_params:file_std_params ~custom_headers ~fileId:remote_id
+           file_patch)
       >>= fun patched_file ->
       Utils.log_with_header "END: Removing xattr (remote id=%s, name=%s)\n%!"
         remote_id name;

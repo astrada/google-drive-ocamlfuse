@@ -38,7 +38,9 @@ module Resource : sig
     web_view_link : string option;
     export_links : string option;
     version : int64 option;
+    resource_key : string option;
     target_id : string option;
+    target_resource_key : string option;
     file_mode_bits : int64 option;
     uid : int64 option;
     gid : int64 option;
@@ -90,7 +92,11 @@ module Resource : sig
 
   val gid : (t, int64 option) GapiLens.t
 
+  val resource_key : (t, string option) GapiLens.t
+
   val target_id : (t, string option) GapiLens.t
+
+  val target_resource_key : (t, string option) GapiLens.t
 
   val xattrs : (t, string) GapiLens.t
 

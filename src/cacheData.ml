@@ -53,7 +53,9 @@ module Resource = struct
     web_view_link : string option;
     export_links : string option;
     version : int64 option;
+    resource_key : string option;
     target_id : string option;
+    target_resource_key : string option;
     (* app data stored in Drive *)
     file_mode_bits : int64 option;
     uid : int64 option;
@@ -163,10 +165,22 @@ module Resource = struct
       GapiLens.set = (fun v x -> { x with version = v });
     }
 
+  let resource_key =
+    {
+      GapiLens.get = (fun x -> x.resource_key);
+      GapiLens.set = (fun v x -> { x with resource_key = v });
+    }
+
   let target_id =
     {
       GapiLens.get = (fun x -> x.target_id);
       GapiLens.set = (fun v x -> { x with target_id = v });
+    }
+
+  let target_resource_key =
+    {
+      GapiLens.get = (fun x -> x.target_resource_key);
+      GapiLens.set = (fun v x -> { x with target_resource_key = v });
     }
 
   let file_mode_bits =
