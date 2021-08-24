@@ -290,6 +290,13 @@ let with_retry_default f =
   in
   loop 0
 
+let get_file_extension file_name =
+  try
+    let dot_index = String.rindex file_name '.' in
+    String.sub file_name (dot_index + 1)
+      (String.length file_name - dot_index - 1)
+  with Not_found -> ""
+
 (* Resource cache *)
 let get_filename name is_document get_document_format =
   let context = Context.get_ctx () in
@@ -298,16 +305,9 @@ let get_filename name is_document get_document_format =
   let document_format =
     if is_document then get_document_format config else ""
   in
-  Utils.log_with_header "document format: %s\n%!" document_format;
   if is_document && config.Config.docs_file_extension && document_format <> ""
   then
-    let current_extension =
-      try
-        let dot_index = String.index clean_name '.' in
-        String.sub clean_name (dot_index + 1)
-          (String.length clean_name - dot_index - 1)
-      with Not_found -> ""
-    in
+    let current_extension = get_file_extension clean_name in
     if current_extension <> document_format then
       clean_name ^ "." ^ document_format
     else clean_name
@@ -352,6 +352,23 @@ let build_resource_tables parent_path trashed =
         resource)
     resources;
   (filename_table, remote_id_table)
+
+let clean_document_extension file_name resource config =
+  if CacheData.Resource.is_document resource then
+    let document_extension = get_file_extension_from_format resource config in
+    if config.Config.docs_file_extension && document_extension <> "" then
+      let current_extension = get_file_extension file_name in
+      if current_extension = document_extension then
+        let regexp = Str.quote document_extension |> Str.regexp in
+        try
+          let pos =
+            Str.search_backward regexp file_name (String.length file_name)
+          in
+          if pos > 0 then Str.string_before file_name (pos - 1) else file_name
+        with Not_found -> file_name
+      else file_name
+    else file_name
+  else file_name
 
 let create_resource path =
   let parent_path = Filename.dirname path in
@@ -2668,7 +2685,8 @@ let rename path new_path =
       Utils.log_with_header
         "BEGIN: Renaming file (remote id=%s) from %s to %s\n%!" remote_id
         old_name new_name;
-      let file_patch = { File.empty with File.name = new_name } in
+      let clean_new_name = clean_document_extension new_name resource config in
+      let file_patch = { File.empty with File.name = clean_new_name } in
       let custom_headers = build_resource_keys_header_from_resource resource in
       with_retry_default
         (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
@@ -2814,8 +2832,6 @@ let rename path new_path =
         in
         let resource_with_new_path =
           updated_resource
-          |> CacheData.Resource.path ^= new_path_in_cache
-          |> CacheData.Resource.parent_path ^= new_parent_path
           |> CacheData.Resource.trashed ^= Some target_trashed
           |> CacheData.Resource.state
              ^=
