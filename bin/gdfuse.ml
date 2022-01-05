@@ -289,17 +289,17 @@ let setup_application params =
   let clear_cache =
     if config_without_docs_mode <> config then (
       Utils.log_message "Docs mode changed to %s%!\n" params.docs_mode;
-      true )
+      true)
     else (
       Utils.log_message "Docs mode not changed!\n";
-      params.clear_cache )
+      params.clear_cache)
   in
   if clear_cache then (
     Printf.printf "Clearing cache...%!";
     Utils.log_message "Cleaning up cache...%!";
     Cache.clean_up_cache cache;
     Utils.log_message "done\n%!";
-    Printf.printf "done\n%!" );
+    Printf.printf "done\n%!");
   let state_store =
     if saved_version <> Config.version then (
       Utils.log_message "Version mismatch (saved=%s, current=%s)%!\n"
@@ -307,13 +307,13 @@ let setup_application params =
       if not clear_cache then (
         Utils.log_message "Cleaning up cache...%!";
         Cache.clean_up_cache cache;
-        Utils.log_message "done%!" );
+        Utils.log_message "done%!");
       Utils.log_message "\n%!";
       let updated_state_store =
         state_store |> Context.saved_version_lens ^= Config.version
       in
       Context.save_state_store updated_state_store;
-      updated_state_store )
+      updated_state_store)
     else state_store
   in
   Utils.log_message "Setting up cache db...%!";
@@ -356,7 +356,7 @@ let setup_application params =
       Cache.clean_up_cache cache;
       Utils.log_message "done\nSetting up cache db...%!";
       Cache.setup_db cache;
-      Utils.log_message "done\n...%!" ) )
+      Utils.log_message "done\n...%!"))
   else DbCache.reset_clean_shutdown cache;
   if config.Config.service_account_credentials_path = "" then
     let refresh_token = context |. Context.refresh_token_lens in
@@ -377,7 +377,7 @@ let setup_application params =
       config.Config.service_account_credentials_path;
     if config.Config.service_account_user_to_impersonate <> "" then
       Utils.log_message "Impersonating user: %s.\n%!"
-        config.Config.service_account_user_to_impersonate )
+        config.Config.service_account_user_to_impersonate)
 
 (* END setup *)
 
@@ -727,7 +727,7 @@ let () =
   if !show_version then
     Printf.printf
       "google-drive-ocamlfuse, version %s\n\
-       Copyright (C) 2012-2021 Alessandro Strada\n\
+       Copyright (C) 2012-2022 Alessandro Strada\n\
        License MIT\n"
       Config.version
   else
@@ -764,7 +764,7 @@ let () =
         at_exit (fun () ->
             Utils.log_with_header "Exiting.\n%!";
             let context = Context.get_ctx () in
-            ( match context.Context.buffer_eviction_thread with
+            (match context.Context.buffer_eviction_thread with
             | None -> ()
             | Some buffer_eviction_thread ->
                 Utils.log_with_header
@@ -773,24 +773,24 @@ let () =
                 Buffering.MemoryBuffers.stop_eviction_thread
                   context.Context.memory_buffers;
                 Thread.join buffer_eviction_thread;
-                Utils.log_message "done\n%!" );
-            ( match context.Context.flush_db_thread with
+                Utils.log_message "done\n%!");
+            (match context.Context.flush_db_thread with
             | None -> ()
             | Some flush_db_thread ->
                 Utils.log_with_header "Stopping flush DB thread (TID=%d)...%!"
                   (Thread.id flush_db_thread);
                 MemoryCache.stop_flush_db_thread ();
                 Thread.join flush_db_thread;
-                Utils.log_message "done\n%!" );
-            ( match context.Context.async_upload_thread with
+                Utils.log_message "done\n%!");
+            (match context.Context.async_upload_thread with
             | None -> ()
             | Some async_upload_thread ->
                 Utils.log_with_header
                   "Stopping async upload thread (TID=%d)\n%!"
                   (Thread.id async_upload_thread);
                 UploadQueue.stop_async_upload_thread ();
-                Thread.join async_upload_thread );
-            ( match context.Context.folder_fetching_thread with
+                Thread.join async_upload_thread);
+            (match context.Context.folder_fetching_thread with
             | None -> ()
             | Some folder_fetching_thread ->
                 Utils.log_with_header
@@ -798,7 +798,7 @@ let () =
                   (Thread.id folder_fetching_thread);
                 BackgroundFolderFetching.stop_folder_fetching_thread ();
                 Thread.join folder_fetching_thread;
-                Utils.log_message "done\n%!" );
+                Utils.log_message "done\n%!");
             Utils.log_with_header "Flushing cache...\n%!";
             Cache.flush context.Context.cache;
             Utils.log_with_header "Storing clean shutdown flag...%!";
@@ -810,7 +810,7 @@ let () =
             Utils.log_with_header "Clearing context...%!";
             Context.clear_ctx ();
             Utils.log_message "done\n%!");
-        start_filesystem !mountpoint !fuse_args )
+        start_filesystem !mountpoint !fuse_args)
     with
     | Failure error_message -> quit error_message
     | e ->
