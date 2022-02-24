@@ -13,12 +13,11 @@ let gae_proxy_request page query_string =
         GapiConversation.request GapiCore.HttpMethod.GET session page_url
           (fun pipe code headers session ->
             let response = GapiConversation.read_all pipe in
-            ( if code <> 200 then (
-              Utils.log_with_header "END: %s fail\n%!" page;
-              raise
-                (ServerError
-                   (Printf.sprintf "Server response: %s (code=%d)" response
-                      code)) )
+            (if code <> 200 then (
+             Utils.log_with_header "END: %s fail\n%!" page;
+             raise
+               (ServerError
+                  (Printf.sprintf "Server response: %s (code=%d)" response code)))
             else
               match response with
               | "Not_found" ->
@@ -31,7 +30,7 @@ let gae_proxy_request page query_string =
                   raise (ServerError ("error_code " ^ error_code))
               | "Missing_request_id" -> failwith "Bug! Missing_request_id"
               | "Missing_refresh_token" -> failwith "Bug! Missing_refresh_token"
-              | _ -> () );
+              | _ -> ());
             Utils.log_with_header "END: %s ok\n%!" page;
             let json = Yojson.Safe.from_string response in
             let fields =

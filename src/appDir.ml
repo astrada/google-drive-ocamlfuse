@@ -57,9 +57,7 @@ let cache_dir =
   }
 
 let ( // ) = Filename.concat
-
 let home = Sys.getenv "HOME"
-
 let default_base_dir = home // ".gdfuse"
 
 (* XDG Base Directory *)
@@ -80,7 +78,7 @@ let get_config_path config_path xdg_base_directory base_dir fs_label =
   if config_path <> "" then (config_path, false)
   else if xdg_base_directory then (
     Utils.safe_makedir xdg_config_dir;
-    (xdg_config_path, true) )
+    (xdg_config_path, true))
   else if Sys.file_exists xdg_config_path then (xdg_config_path, true)
   else
     let base_dir = if base_dir = "" then default_base_dir else base_dir in

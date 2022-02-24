@@ -39,6 +39,8 @@ type t = {
   async_upload_thread : Thread.t option;
   (* Background folder fetching thread *)
   folder_fetching_thread : Thread.t option;
+  (* OAuth2 verification code *)
+  verification_code : string;
 }
 
 let app_dir =
@@ -149,18 +151,18 @@ let folder_fetching_thread =
     GapiLens.set = (fun v x -> { x with folder_fetching_thread = v });
   }
 
+let verification_code =
+  {
+    GapiLens.get = (fun x -> x.verification_code);
+    GapiLens.set = (fun v x -> { x with verification_code = v });
+  }
+
 let config_lens = config_store |-- ConfigFileStore.data
-
 let state_lens = state_store |-- StateFileStore.data
-
 let request_id_lens = state_lens |-- State.auth_request_id
-
 let refresh_token_lens = state_lens |-- State.refresh_token
-
 let saved_version_lens = StateFileStore.data |-- State.saved_version
-
 let metadata_lens = metadata |-- GapiLens.option_get
-
 let metadata_last_update_lens = metadata_lens |-- CacheData.Metadata.last_update
 
 module ConcurrentContext = ConcurrentGlobal.Make (struct
@@ -170,13 +172,9 @@ module ConcurrentContext = ConcurrentGlobal.Make (struct
 end)
 
 let get_ctx = ConcurrentContext.get
-
 let set_ctx = ConcurrentContext.set
-
 let clear_ctx = ConcurrentContext.clear
-
 let update_ctx = ConcurrentContext.update
-
 let with_ctx_lock = ConcurrentContext.with_lock
 
 let save_state_store state_store =

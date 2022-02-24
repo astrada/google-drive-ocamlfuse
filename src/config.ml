@@ -2,7 +2,6 @@ open GapiUtils.Infix
 open GapiLens.Infix
 
 let application_name = "google-drive-ocamlfuse"
-
 let version = "0.7.28"
 
 type t = {
@@ -113,7 +112,7 @@ type t = {
   (* Team drive id *)
   team_drive_id : string;
   (* Specifies to cache metadata in memory and periodically save them to disk.
-   *)
+  *)
   metadata_memory_cache : bool;
   (* Interval (in seconds) between metadata memory cache saving. *)
   metadata_memory_cache_saving_interval : int;
@@ -154,6 +153,10 @@ type t = {
   async_upload_queue_max_length : int;
   (* Use a background thread to prefetch folder structure in advance. *)
   background_folder_fetching : bool;
+  (* OAuth2: start local web server (https://developers.google.com/identity/protocols/oauth2/native-app#redirect-uri_loopback) *)
+  oauth2_loopback : bool;
+  (* OAuth2: port of the local web server *)
+  oauth2_loopback_port : int;
 }
 
 let metadata_cache_time =
@@ -560,6 +563,18 @@ let background_folder_fetching =
     GapiLens.set = (fun v x -> { x with background_folder_fetching = v });
   }
 
+let oauth2_loopback =
+  {
+    GapiLens.get = (fun x -> x.oauth2_loopback);
+    GapiLens.set = (fun v x -> { x with oauth2_loopback = v });
+  }
+
+let oauth2_loopback_port =
+  {
+    GapiLens.get = (fun x -> x.oauth2_loopback_port);
+    GapiLens.set = (fun v x -> { x with oauth2_loopback_port = v });
+  }
+
 let umask =
   let prev_umask = Unix.umask 0 in
   let _ = Unix.umask prev_umask in
@@ -642,6 +657,8 @@ let default =
     desktop_entry_as_html = false;
     async_upload_queue_max_length = 0;
     background_folder_fetching = false;
+    oauth2_loopback = false;
+    oauth2_loopback_port = 8080;
   }
 
 let default_debug =
@@ -713,6 +730,8 @@ let default_debug =
     desktop_entry_as_html = false;
     async_upload_queue_max_length = 0;
     background_folder_fetching = false;
+    oauth2_loopback = false;
+    oauth2_loopback_port = 8080;
   }
 
 let of_table table =
@@ -830,6 +849,10 @@ let of_table table =
     background_folder_fetching =
       get "background_folder_fetching" bool_of_string
         default.background_folder_fetching;
+    oauth2_loopback =
+      get "oauth2_loopback" bool_of_string default.oauth2_loopback;
+    oauth2_loopback_port =
+      get "oauth2_loopback_port" int_of_string default.oauth2_loopback_port;
   }
 
 let to_table data =
@@ -907,6 +930,8 @@ let to_table data =
     (data.async_upload_queue_max_length |> string_of_int);
   add "background_folder_fetching"
     (data.background_folder_fetching |> string_of_bool);
+  add "oauth2_loopback" (data.oauth2_loopback |> string_of_bool);
+  add "oauth2_loopback_port" (data.oauth2_loopback_port |> string_of_int);
   table
 
 let debug_print out_ch start_time curl info_type info =

@@ -6,21 +6,14 @@ open GapiDriveV3Model
 open GapiDriveV3Service
 
 exception Directory_not_empty
-
 exception Existing_attribute
-
 exception File_not_found
-
 exception IO_error
-
 exception Invalid_operation
-
 exception No_attribute
-
 exception Permission_denied
 
 let folder_mime_type = "application/vnd.google-apps.folder"
-
 let shortcut_mime_type = "application/vnd.google-apps.shortcut"
 
 let file_fields =
@@ -54,9 +47,7 @@ let changes_std_params =
   }
 
 let device_scope = "https://www.googleapis.com/auth/drive.file"
-
 let device_root_folder = "gdfuse"
-
 let do_request = Oauth2.do_request
 
 let async_do_request f =
@@ -66,34 +57,21 @@ let async_do_request f =
   thread
 
 let root_directory = "/"
-
 let default_root_folder_id = "root"
-
 let trash_directory = "/.Trash"
-
 let trash_directory_name_length = String.length trash_directory
-
 let trash_directory_base_path = "/.Trash/"
-
 let lost_and_found_directory = "/lost+found"
-
 let shared_with_me_directory = "/.shared"
-
 let f_bsize = 4096L
-
 let change_limit = 50
-
 let max_link_target_length = 127
-
 let max_attribute_length = 126
 
 (* Utilities *)
 let chars_blacklist_regexp = Str.regexp "[/\000]"
-
 let clean_filename name = Str.global_replace chars_blacklist_regexp "_" name
-
 let apostrophe_regexp = Str.regexp (Str.quote "'")
-
 let escape_apostrophe name = Str.global_replace apostrophe_regexp "\\'" name
 
 let json_length s =

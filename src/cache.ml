@@ -195,7 +195,7 @@ let delete_files_from_cache cache resources =
         let stats = Unix.LargeFile.stat path in
         let size = stats.Unix.LargeFile.st_size in
         Sys.remove path;
-        size )
+        size)
       else 0L
     with e ->
       Utils.log_exception e;

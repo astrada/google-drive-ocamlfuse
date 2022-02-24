@@ -38,5 +38,4 @@ let add_work f x pool =
       Hashtbl.add pool.table thread_id thread)
 
 let pending_threads pool = Hashtbl.length pool.table
-
 let shutdown pool = Hashtbl.iter (fun _ thread -> Thread.join thread) pool.table

@@ -30,7 +30,6 @@ let create ~pool_size ~buffer_size =
   }
 
 let max_buffers buffer_pool = buffer_pool.max_buffers
-
 let pending_requests buffer_pool = buffer_pool.pending_requests
 
 let free_buffers buffer_pool =
@@ -50,14 +49,14 @@ let acquire_buffer mutex condition buffer_pool =
             buffer_pool.buffer_size;
         mutex = Mutex.create ();
         condition = Condition.create ();
-      } )
+      })
     else (
       buffer_pool.pending_requests <- buffer_pool.pending_requests + 1;
       while Queue.length buffer_pool.free_buffers = 0 do
         Condition.wait condition mutex
       done;
       buffer_pool.pending_requests <- buffer_pool.pending_requests - 1;
-      get_buffer () )
+      get_buffer ())
 
 let release_buffer buffer condition buffer_pool =
   Queue.add buffer buffer_pool.free_buffers;

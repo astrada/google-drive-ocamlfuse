@@ -301,9 +301,7 @@ module Resource = struct
     app_property_to_int64 (find_app_property "gid" app_properties)
 
   let gid_to_app_property gid = ("gid", gid)
-
   let get_link_target app_properties = find_app_property "l" app_properties
-
   let link_target_to_app_property link_target = ("l", link_target)
 
   let get_xattrs app_properties =
@@ -313,7 +311,6 @@ module Resource = struct
          app_properties)
 
   let xattr_to_app_property name value = ("x-" ^ name, value)
-
   let xattr_no_value_to_app_property name = ("x-" ^ name, "")
 
   let is_folder resource =

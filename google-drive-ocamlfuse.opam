@@ -10,7 +10,7 @@ build: [
   ["dune" "runtest" "-p" name "-j" jobs] {with-test}
 ]
 depends: [
-  "ocaml" {>= "4.02.3"}
+  "ocaml" {>= "4.04.0"}
   "base-threads" {build}
   "camlidl" {build}
   "gapi-ocaml" {>= "0.4.2"}
@@ -20,6 +20,7 @@ depends: [
   "extlib"
   "ounit" {with-test}
   "sqlite3"
+  "tiny_httpd"
 ]
 synopsis: "A FUSE filesystem over Google Drive"
 description: """

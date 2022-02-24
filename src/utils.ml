@@ -6,19 +6,12 @@ exception Temporary_error
 
 (* Globals *)
 let start_time = Unix.gettimeofday ()
-
 let verbose = ref false
-
 let debug_buffers = ref false
-
 let log_channel = ref stdout
-
 let log_mutex = Mutex.create ()
-
 let max_retries = ref 10
-
 let mb = 1048576L
-
 let hashtable_initial_size = 64
 
 (* Threads *)
@@ -112,7 +105,6 @@ let with_lock m f =
  * otherwise the try/with will be ignored because f is only partially applied
  *)
 let try_with_m f handle_exception s = try f s with e -> handle_exception e s
-
 let raise_m e _ = raise e
 
 let try_finally_m f finally =

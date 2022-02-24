@@ -52,8 +52,6 @@ module MemoryBuffers : sig
     int
 
   val flush_blocks : string -> t -> unit
-
   val create_eviction_thread : t -> Thread.t
-
   val stop_eviction_thread : t -> unit
 end

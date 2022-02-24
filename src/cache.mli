@@ -13,9 +13,7 @@ module Resource : sig
     CacheData.t -> CacheData.Resource.State.t -> int64 -> int64 -> unit
 
   val delete_resource : CacheData.t -> CacheData.Resource.t -> unit
-
   val delete_not_found_resource_with_path : CacheData.t -> string -> unit
-
   val delete_resources : CacheData.t -> CacheData.Resource.t list -> unit
 
   val insert_resources :
@@ -26,19 +24,12 @@ module Resource : sig
     CacheData.Resource.t list
 
   val invalidate_resources : CacheData.t -> int64 list -> unit
-
   val invalidate_path : CacheData.t -> string -> unit
-
   val invalidate_all : CacheData.t -> unit
-
   val invalidate_trash_bin : CacheData.t -> unit
-
   val trash_resources : CacheData.t -> CacheData.Resource.t list -> unit
-
   val delete_all_with_parent_path : CacheData.t -> string -> bool -> unit
-
   val trash_all_with_parent_path : CacheData.t -> string -> unit
-
   val update_all_timestamps : CacheData.t -> float -> unit
 
   val select_resource_with_path :
@@ -67,9 +58,7 @@ end
 
 module Metadata : sig
   val insert_metadata : CacheData.t -> CacheData.Metadata.t -> unit
-
   val select_metadata : CacheData.t -> CacheData.Metadata.t option
-
   val update_cache_size : CacheData.t -> int64 -> unit
 end
 
@@ -91,13 +80,8 @@ module UploadQueue : sig
 end
 
 val get_content_path : CacheData.t -> CacheData.Resource.t -> string
-
 val delete_files_from_cache : CacheData.t -> CacheData.Resource.t list -> int64
-
 val setup_db : CacheData.t -> unit
-
 val clean_up_cache : CacheData.t -> unit
-
 val compute_cache_size : CacheData.t -> int64
-
 val flush : CacheData.t -> unit

@@ -11,13 +11,8 @@ end
 type t
 
 val create : pool_size:int -> buffer_size:int -> t
-
 val max_buffers : t -> int
-
 val pending_requests : t -> int
-
 val free_buffers : t -> int
-
 val acquire_buffer : Mutex.t -> Condition.t -> t -> Buffer.t
-
 val release_buffer : Buffer.t -> Condition.t -> t -> unit

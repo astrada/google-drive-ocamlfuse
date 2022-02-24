@@ -294,31 +294,31 @@ module Resource = struct
     ConcurrentMemoryCache.with_lock (fun () ->
         let result = ref None in
         let d = ConcurrentMemoryCache.get_no_lock () in
-        ( try
-            Hashtbl.iter
-              (fun _ r ->
-                if
-                  r.CacheData.Resource.path = path
-                  && r.CacheData.Resource.trashed = Some trashed
-                then (
-                  result := Some r;
-                  raise Exit ))
-              d.resources
-          with Exit -> () );
+        (try
+           Hashtbl.iter
+             (fun _ r ->
+               if
+                 r.CacheData.Resource.path = path
+                 && r.CacheData.Resource.trashed = Some trashed
+               then (
+                 result := Some r;
+                 raise Exit))
+             d.resources
+         with Exit -> ());
         !result)
 
   let select_first_resource_with_remote_id cache remote_id =
     ConcurrentMemoryCache.with_lock (fun () ->
         let result = ref None in
         let d = ConcurrentMemoryCache.get_no_lock () in
-        ( try
-            Hashtbl.iter
-              (fun _ r ->
-                if r.CacheData.Resource.remote_id = Some remote_id then (
-                  result := Some r;
-                  raise Exit ))
-              d.resources
-          with Exit -> () );
+        (try
+           Hashtbl.iter
+             (fun _ r ->
+               if r.CacheData.Resource.remote_id = Some remote_id then (
+                 result := Some r;
+                 raise Exit))
+             d.resources
+         with Exit -> ());
         !result)
 
   let select_resources_with_remote_id cache remote_id =
@@ -441,28 +441,28 @@ module UploadQueue = struct
         in
         let result = ref None in
         let d = ConcurrentMemoryCache.get_no_lock () in
-        ( try
-            Hashtbl.iter
-              (fun _ e ->
-                if e.CacheData.UploadEntry.state = to_upload then (
-                  result := Some e;
-                  raise Exit ))
-              d.upload_queue
-          with Exit -> () );
+        (try
+           Hashtbl.iter
+             (fun _ e ->
+               if e.CacheData.UploadEntry.state = to_upload then (
+                 result := Some e;
+                 raise Exit))
+             d.upload_queue
+         with Exit -> ());
         !result)
 
   let select_with_resource_id cache resource_id =
     ConcurrentMemoryCache.with_lock (fun () ->
         let result = ref None in
         let d = ConcurrentMemoryCache.get_no_lock () in
-        ( try
-            Hashtbl.iter
-              (fun _ e ->
-                if e.CacheData.UploadEntry.resource_id = resource_id then (
-                  result := Some e;
-                  raise Exit ))
-              d.upload_queue
-          with Exit -> () );
+        (try
+           Hashtbl.iter
+             (fun _ e ->
+               if e.CacheData.UploadEntry.resource_id = resource_id then (
+                 result := Some e;
+                 raise Exit))
+             d.upload_queue
+         with Exit -> ());
         !result)
 
   let delete_upload_entry cache upload_entry =
@@ -473,7 +473,7 @@ module UploadQueue = struct
   let update_entry_state cache state id =
     ConcurrentMemoryCache.update (fun d ->
         let upload_entry = Utils.safe_find d.upload_queue id in
-        ( match upload_entry with
+        (match upload_entry with
         | Some e ->
             let updated_entry =
               e
@@ -482,8 +482,7 @@ module UploadQueue = struct
             in
             Hashtbl.replace d.upload_queue id updated_entry
         | None ->
-            Utils.log_with_header "Cannot find upload entry with id=%Ld.\n%!" id
-        );
+            Utils.log_with_header "Cannot find upload entry with id=%Ld.\n%!" id);
         d |> dirty ^= true)
 
   let count_entries cache =
@@ -540,7 +539,7 @@ let flush_db cache =
     DbCache.Resource.flush_resources cache resources;
     let upload_queue = Hashtbl.fold (fun _ e es -> e :: es) d.upload_queue [] in
     DbCache.UploadQueue.flush_upload_queue cache upload_queue;
-    Utils.log_message "done\n%!" )
+    Utils.log_message "done\n%!")
   else ()
 
 let flush_db_thread cache =
@@ -565,7 +564,7 @@ let start_flush_db_thread cache =
     let thread = create_flush_db_thread cache in
     Utils.log_with_header "Starting flush DB thread (TID=%d, interval=%ds)\n%!"
       (Thread.id thread) cache.CacheData.autosaving_interval;
-    Context.update_ctx (Context.flush_db_thread ^= Some thread) )
+    Context.update_ctx (Context.flush_db_thread ^= Some thread))
   else ()
 
 let stop_flush_db_thread () =

@@ -6,7 +6,6 @@ exception Invalid_block
 
 module Block = struct
   type range = { offset : int64; length : int }
-
   type state = Empty | Writing | Full | Dirty | Error of exn
 
   let state_to_string = function
@@ -43,12 +42,12 @@ module Block = struct
     }
 
   let blit_to_arr dest_arr offset block =
-    ( match block.state with
+    (match block.state with
     | Empty | Writing | Error _ ->
         invalid_arg
           (Printf.sprintf "blit_to_arr (block state=%s)"
              (state_to_string block.state))
-    | Full | Dirty -> () );
+    | Full | Dirty -> ());
     let dest_len = Bigarray.Array1.dim dest_arr in
     let src_off = Int64.to_int (Int64.sub offset block.start_pos) in
     let src_len = block.size - src_off in
@@ -75,12 +74,12 @@ module Block = struct
     Bigarray.Array1.blit src_arr dest_arr
 
   let blit_from_arr src_arr offset block =
-    ( match block.state with
+    (match block.state with
     | Writing | Error _ ->
         invalid_arg
           (Printf.sprintf "blit_from_arr (block state=%s)"
              (state_to_string block.state))
-    | Empty | Full | Dirty -> () );
+    | Empty | Full | Dirty -> ());
     let src_len = Bigarray.Array1.dim src_arr in
     let dest_off = Int64.to_int (Int64.sub offset block.start_pos) in
     let dest_len = block.size - dest_off in
@@ -175,7 +174,7 @@ module MemoryBuffers = struct
         (Block.state_to_string block.Block.state);
       Hashtbl.remove buffers.blocks key;
       BufferPool.release_buffer block.Block.buffer buffers.condition
-        buffers.buffer_pool )
+        buffers.buffer_pool)
     else
       Utils.log_with_header
         "Cannot release memory buffer (remote id=%s, index=%d, buffer id=%d, \
@@ -186,7 +185,6 @@ module MemoryBuffers = struct
         (Block.state_to_string expected_state)
 
   let remove_full_block = remove_block Block.Full
-
   let remove_partial_block = remove_block Block.Writing
 
   let release_lru_buffer_if_needed check_condition buffers =
@@ -219,7 +217,7 @@ module MemoryBuffers = struct
         match lru_block with
         | None ->
             Utils.log_with_header "Cannot find a full buffer to remove\n%!"
-        | Some b -> remove_full_block lru_key b buffers )
+        | Some b -> remove_full_block lru_key b buffers)
 
   let release_lru_buffer_if_no_free_buffer_left buffers =
     release_lru_buffer_if_needed
@@ -311,7 +309,7 @@ module MemoryBuffers = struct
         match lru_block with
         | None ->
             Utils.log_with_header "Cannot find a full buffer to remove\n%!"
-        | Some b -> flush_block lru_key buffers )
+        | Some b -> flush_block lru_key buffers)
 
   let flush_lru_buffer_if_no_free_buffer_left buffers =
     flush_lru_buffer_if_needed (fun free_buffers _ -> free_buffers = 0) buffers
@@ -354,10 +352,9 @@ module MemoryBuffers = struct
         in
         Hashtbl.replace buffers.blocks (remote_id, block_index) b;
         add_file_index block_index;
-        ( match Utils.safe_find buffers.files remote_id with
+        (match Utils.safe_find buffers.files remote_id with
         | None -> Hashtbl.add buffers.files remote_id [ block_index ]
-        | Some bs -> Hashtbl.replace buffers.files remote_id (block_index :: bs)
-        );
+        | Some bs -> Hashtbl.replace buffers.files remote_id (block_index :: bs));
         Utils.log_with_header
           "END: Acquiring memory buffer (remote id=%s, index=%d, size=%d, \
            buffer id=%d)\n\
@@ -406,7 +403,7 @@ module MemoryBuffers = struct
         ( get_block_m block_index >>= fun block ->
           SessionM.return (block, block.Block.state) )
       >>= fun (block, state) ->
-      ( match state with
+      (match state with
       | Block.Empty | Block.Error _ ->
           (* Switch from global lock to block lock to allow concurrent
            * streaming. *)
@@ -447,7 +444,7 @@ module MemoryBuffers = struct
       | Block.Writing ->
           Utils.with_lock block.Block.buffer.BufferPool.Buffer.mutex (fun () ->
               wait_for_full_block block);
-          SessionM.return block )
+          SessionM.return block)
       >>= fun block ->
       Utils.with_lock_m buffers.mutex
         ( SessionM.return () >>= fun () ->
@@ -472,7 +469,7 @@ module MemoryBuffers = struct
         (Option.map_default
            (fun _ -> string_of_int dest_arr_size)
            "N/A" dest_arr);
-      raise Invalid_block );
+      raise Invalid_block);
     fill_and_blit start_block_index offset dest_arr >>= fun () ->
     if end_block_index <> start_block_index then
       let src_offset = get_block_start_pos end_block_index buffers in
@@ -499,8 +496,8 @@ module MemoryBuffers = struct
              src_offset=%Ld, dest_len=%d, resource_size=%Ld)\n\
              %!"
             remote_id end_block_index src_offset dest_len resource_size;
-          raise Invalid_block );
-        fill_and_blit end_block_index src_offset dest_arr )
+          raise Invalid_block);
+        fill_and_blit end_block_index src_offset dest_arr)
       else SessionM.return ()
     else SessionM.return ()
 
@@ -610,7 +607,7 @@ module MemoryBuffers = struct
          offset=%Ld, resource_size=%Ld, src_arr_size=%d)\n\
          %!"
         remote_id start_block_index offset resource_size src_arr_size;
-      raise Invalid_block );
+      raise Invalid_block);
     let start_block_bytes = write start_block_index offset src_arr in
     let end_block_bytes =
       if end_block_index <> start_block_index then
@@ -635,8 +632,8 @@ module MemoryBuffers = struct
                dest_offset=%Ld, src_len=%d, resource_size=%Ld)\n\
                %!"
               remote_id end_block_index dest_offset src_len resource_size;
-            raise Invalid_block );
-          write end_block_index dest_offset src_arr )
+            raise Invalid_block);
+          write end_block_index dest_offset src_arr)
         else 0
       else 0
     in

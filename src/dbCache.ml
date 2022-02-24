@@ -3,9 +3,7 @@ open GapiLens.Infix
 
 (* Helpers *)
 let fail rc = failwith ("Sqlite3 error: " ^ Sqlite3.Rc.to_string rc)
-
 let expect expected rc = if rc <> expected then fail rc
-
 let fail_if_not_ok = expect Sqlite3.Rc.OK
 
 let get_result rc result =
@@ -25,7 +23,6 @@ let wrap_exec db ?(callback = fun _ _ -> Some ()) sql =
   get_result rc result
 
 let reset_stmt stmt = Sqlite3.reset stmt |> fail_if_not_ok
-
 let finalize_stmt stmt = Sqlite3.finalize stmt |> fail_if_not_ok
 
 let final_step stmt =
@@ -44,11 +41,8 @@ let bind to_data stmt name value =
   |> fail_if_not_ok
 
 let bind_text = bind (fun v -> Sqlite3.Data.TEXT v)
-
 let bind_int = bind (fun v -> Sqlite3.Data.INT v)
-
 let bind_float = bind (fun v -> Sqlite3.Data.FLOAT v)
-
 let bind_bool = bind (fun v -> Sqlite3.Data.INT (if v then 1L else 0L))
 
 let data_to_int64 = function
@@ -97,7 +91,6 @@ let prepare_begin_tran_stmt db =
   Sqlite3.prepare db "BEGIN IMMEDIATE TRANSACTION;"
 
 let prepare_commit_tran_stmt db = Sqlite3.prepare db "COMMIT TRANSACTION;"
-
 let prepare_rollback_tran_stmt db = Sqlite3.prepare db "ROLLBACK TRANSACTION;"
 
 module ResourceStmts = struct
@@ -108,7 +101,6 @@ module ResourceStmts = struct
      resource_key, target_id, target_resource_key, "
 
   let app_properties_fields = "file_mode_bits, uid, gid, link_target, xattrs, "
-
   let app_fields = "parent_path, path, state, last_update"
 
   let fields_without_id =
@@ -294,9 +286,7 @@ module MetadataStmts = struct
     "display_name, storage_quota_limit, storage_quota_usage, start_page_token, "
 
   let app_fields = "cache_size, last_update, clean_shutdown"
-
   let fields_without_id = api_fields_without_id ^ app_fields
-
   let fields = "id, " ^ fields_without_id
 
   let prepare_insert_stmt db =
@@ -325,7 +315,6 @@ end
 
 module UploadQueueStmt = struct
   let fields_without_id = "resource_id, state, last_update"
-
   let fields = "id, " ^ fields_without_id
 
   let prepare_insert_stmt db =
@@ -909,5 +898,4 @@ let check_clean_shutdown cache =
     true db_metadata
 
 let set_clean_shutdown cache = Metadata.set_clean_shutdown cache true
-
 let reset_clean_shutdown cache = Metadata.set_clean_shutdown cache false

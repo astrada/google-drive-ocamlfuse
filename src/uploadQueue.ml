@@ -41,13 +41,13 @@ let upload_resource cache =
       entry_id resource_id;
     Cache.UploadQueue.update_entry_state cache
       CacheData.UploadEntry.State.Uploading entry_id;
-    ( try upload resource_id
-      with e ->
-        Utils.log_with_header "Upload failed for queued entry (id=%Ld).\n%!"
-          entry_id;
-        Cache.UploadQueue.update_entry_state cache
-          CacheData.UploadEntry.State.ToUpload entry_id;
-        raise e );
+    (try upload resource_id
+     with e ->
+       Utils.log_with_header "Upload failed for queued entry (id=%Ld).\n%!"
+         entry_id;
+       Cache.UploadQueue.update_entry_state cache
+         CacheData.UploadEntry.State.ToUpload entry_id;
+       raise e);
     Utils.log_with_header "Removing queued entry (id=%Ld).\n%!" entry_id;
     Cache.UploadQueue.delete_upload_entry cache e
   in
@@ -61,7 +61,7 @@ let poll_upload_queue cache =
     if d.stop_async_upload then (
       let entries = Cache.UploadQueue.count_entries cache in
       Utils.log_with_header "Waiting for pending uploads (%d)\n%!" entries;
-      if entries = 0 then raise Exit )
+      if entries = 0 then raise Exit)
   in
   try
     while true do
@@ -106,7 +106,7 @@ let queue_resource cache config resource =
       else (
         Utils.log_with_header "Pending uploads (%d) below the limit (%d)\n%!"
           entries max_length;
-        raise Exit )
+        raise Exit)
     in
     try
       while true do
