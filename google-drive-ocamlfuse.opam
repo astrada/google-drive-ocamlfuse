@@ -20,7 +20,7 @@ depends: [
   "extlib"
   "ounit2" {with-test}
   "sqlite3"
-  "tiny_httpd"
+  "tiny_httpd" {>= "0.6"}
 ]
 synopsis: "A FUSE filesystem over Google Drive"
 description: """
