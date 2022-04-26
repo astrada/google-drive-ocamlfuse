@@ -1,6 +1,6 @@
 (executable
  (flags :standard -w -3)
- (libraries threads google_drive_ocamlfuse oUnit)
+ (libraries threads google_drive_ocamlfuse ounit2)
  (name testSuite))
 
 (alias
