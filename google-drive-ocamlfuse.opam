@@ -18,7 +18,7 @@ depends: [
   "ocamlfuse" {>= "2.7.1-cvs6"}
   "cryptokit"
   "extlib"
-  "ounit" {with-test}
+  "ounit2" {with-test}
   "sqlite3"
   "tiny_httpd"
 ]
