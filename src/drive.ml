@@ -2810,6 +2810,8 @@ let rename path new_path =
         in
         let resource_with_new_path =
           updated_resource
+          |> CacheData.Resource.path ^= new_path_in_cache
+          |> CacheData.Resource.parent_path ^= new_parent_path
           |> CacheData.Resource.trashed ^= Some target_trashed
           |> CacheData.Resource.state
              ^=
