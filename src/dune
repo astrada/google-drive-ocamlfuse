@@ -2,4 +2,5 @@
  (name google_drive_ocamlfuse)
  (wrapped false)
  (flags :standard -w -3-27-32-58)
- (libraries cryptokit extlib gapi-ocaml ocamlfuse sqlite3 threads camlidl tiny_httpd))
+ (libraries cryptokit extlib gapi-ocaml gapi-ocaml.netsys-local ocamlfuse
+            sqlite3 threads camlidl tiny_httpd))

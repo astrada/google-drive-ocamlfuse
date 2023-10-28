@@ -2,7 +2,7 @@ open GapiUtils.Infix
 
 let map_filename_to_mime_type filename =
   let extension =
-    try GapiUtils.string_after_char '.' filename |> String.lowercase
+    try GapiUtils.string_after_char '.' filename |> String.lowercase_ascii
     with Not_found -> ""
   in
   match extension with
