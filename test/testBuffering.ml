@@ -5,7 +5,7 @@ let print_array arr =
   let len = Bigarray.Array1.dim arr in
   let r = Bytes.make len ' ' in
   for i = 0 to len - 1 do
-    r.[i] <- arr.{i}
+    Bytes.set r i arr.{i}
   done;
   Bytes.to_string r
 
