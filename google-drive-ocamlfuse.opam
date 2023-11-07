@@ -10,10 +10,10 @@ build: [
   ["dune" "runtest" "-p" name "-j" jobs] {with-test}
 ]
 depends: [
-  "ocaml" {>= "4.04.0"}
+  "ocaml" {>= "4.08.0"}
   "base-threads" {build}
   "camlidl" {build}
-  "gapi-ocaml" {>= "0.4.2"}
+  "gapi-ocaml" {>= "0.4.5"}
   "dune"
   "ocamlfuse" {>= "2.7.1-cvs6"}
   "cryptokit"
