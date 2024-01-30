@@ -24,7 +24,7 @@ Specifies whether to download Google Docs (these files are read-only, even if `r
 
     download_docs=true
 
-Text document [[export format|Exportable-formats#valid-download-formats-for-text-documents]]:
+Text document [export format](Exportable-formats.md#valid-download-formats-for-text-documents):
 
     document_format=desktop
 
@@ -32,7 +32,7 @@ If `document_format=desktop`, specifies the icon of the desktop link (default is
 
     document_icon=
 
-Drawings [[export format|Exportable-formats#valid-download-formats-for-drawings]]:
+Drawings [export format](Exportable-formats.md#valid-download-formats-for-drawings):
 
     drawing_format=desktop
 
@@ -40,7 +40,7 @@ If `drawing_format=desktop`, specifies the icon of the desktop link (default is 
 
     drawing_icon=
 
-Forms [[export format|Exportable-formats#valid-formats-for-spreadsheets]]:
+Forms [export format](Exportable-formats.md#valid-formats-for-spreadsheets):
 
     form_format=desktop
 
@@ -48,7 +48,7 @@ If `form_format=desktop`, specifies the icon of the desktop link (default is no 
 
     form_icon=
 
-Presentations [[export format|Exportable-formats#valid-formats-for-presentations]]:
+Presentations [export format](Exportable-formats.md#valid-formats-for-presentations):
 
     presentation_format=desktop
 
@@ -56,7 +56,7 @@ If `presentation_format=desktop`, specifies the icon of the desktop link (defaul
 
     presentation_icon=
 
-Spreadsheets [[export format|Exportable-formats#valid-formats-for-spreadsheets]]:
+Spreadsheets [export format](Exportable-formats.md#valid-formats-for-spreadsheets):
 
     spreadsheet_format=desktop
 
@@ -80,7 +80,7 @@ If `fusion_table_format=desktop`, specifies the icon of the desktop link (defaul
 
     fusion_table_icon=
 
-Google Apps Script [[export format|Exportable-formats#valid-formats-for-google-apps-scripts]]:
+Google Apps Script [export format](Exportable-formats.md#valid-formats-for-google-apps-scripts):
 
     apps_script_format=desktop
 
@@ -205,7 +205,7 @@ Path of the directory containing log files (if blank uses the default):
 
     root_folder=
 
-[Since 0.6.23] Specifies the Team Drive id, if you want to mount a [[Team Drive|Team Drives]]:
+[Since 0.6.23] Specifies the Team Drive id, if you want to mount a [Team Drive](Team-Drives.md):
 
     team_drive_id=
 
