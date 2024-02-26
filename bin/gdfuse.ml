@@ -2,9 +2,7 @@ open GapiUtils.Infix
 open GapiLens.Infix
 
 let default_fs_label = "default"
-
 let client_id = "564921029129.apps.googleusercontent.com"
-
 let redirect_uri = GaeProxy.gae_proxy_url ^ "/oauth2callback"
 
 (* Authorization *)
@@ -47,8 +45,8 @@ let generate_request_id () =
   Cryptokit.Random.string rng 32
   |> Utils.base64_encode
   |> ExtString.String.replace_chars (function
-      | '+' -> "-"
-      | c -> ExtString.String.of_char c)
+       | '+' -> "-"
+       | c -> ExtString.String.of_char c)
 
 let create_empty_state_store app_dir =
   let request_id = generate_request_id () in
@@ -118,16 +116,16 @@ let setup_application params =
       GaeProxy.start_server_polling ()
     with
     | GaeProxy.ServerError e ->
-      Utils.log_with_header "Removing invalid request_id=%s\n%!" request_id;
-      context
-      |> Context.request_id_lens ^= ""
-      |> Context.save_state_from_context;
-      Printf.eprintf "Cannot retrieve auth tokens: %s\n%!" e;
-      exit 1
+        Utils.log_with_header "Removing invalid request_id=%s\n%!" request_id;
+        context
+        |> Context.request_id_lens ^= ""
+        |> Context.save_state_from_context;
+        Printf.eprintf "Cannot retrieve auth tokens: %s\n%!" e;
+        exit 1
     | e ->
-      prerr_endline "Cannot retrieve auth tokens.";
-      Printexc.to_string e |> prerr_endline;
-      exit 1
+        prerr_endline "Cannot retrieve auth tokens.";
+        Printexc.to_string e |> prerr_endline;
+        exit 1
   in
 
   Utils.log_message "Starting application setup (label=%s, base_dir=%s).\n%!"
@@ -270,13 +268,13 @@ let setup_application params =
       let oauth2_config =
         match gapi_config |. GapiConfig.auth with
         | GapiConfig.OAuth2 oauth2 ->
-          oauth2
-          |> GapiConfig.refresh_access_token
-             ^= Some
-               (fun () ->
-                  GaeProxy.refresh_access_token ();
-                  Context.get_ctx () |. Context.state_lens
-                  |. State.last_access_token)
+            oauth2
+            |> GapiConfig.refresh_access_token
+               ^= Some
+                    (fun () ->
+                      GaeProxy.refresh_access_token ();
+                      Context.get_ctx () |. Context.state_lens
+                      |. State.last_access_token)
         | _ -> assert false
       in
       gapi_config |> GapiConfig.auth ^= GapiConfig.OAuth2 oauth2_config
@@ -386,29 +384,29 @@ let setup_application params =
 let handle_exception e label param =
   match e with
   | Drive.File_not_found ->
-    Utils.log_with_header "File not found: %s %s\n%!" label param;
-    raise (Unix.Unix_error (Unix.ENOENT, label, param))
+      Utils.log_with_header "File not found: %s %s\n%!" label param;
+      raise (Unix.Unix_error (Unix.ENOENT, label, param))
   | Drive.Permission_denied ->
-    Utils.log_with_header "Permission denied: %s %s\n%!" label param;
-    raise (Unix.Unix_error (Unix.EACCES, label, param))
+      Utils.log_with_header "Permission denied: %s %s\n%!" label param;
+      raise (Unix.Unix_error (Unix.EACCES, label, param))
   | Drive.Directory_not_empty ->
-    Utils.log_with_header "Directory not empty: %s %s\n%!" label param;
-    raise (Unix.Unix_error (Unix.ENOTEMPTY, label, param))
+      Utils.log_with_header "Directory not empty: %s %s\n%!" label param;
+      raise (Unix.Unix_error (Unix.ENOTEMPTY, label, param))
   | Drive.IO_error ->
-    Utils.log_with_header "Input/output error: %s %s\n%!" label param;
-    raise (Unix.Unix_error (Unix.EIO, label, param))
+      Utils.log_with_header "Input/output error: %s %s\n%!" label param;
+      raise (Unix.Unix_error (Unix.EIO, label, param))
   | Drive.No_attribute ->
-    raise (Unix.Unix_error (Unix.EUNKNOWNERR 61, label, param))
+      raise (Unix.Unix_error (Unix.EUNKNOWNERR 61, label, param))
   | Drive.Existing_attribute ->
-    raise (Unix.Unix_error (Unix.EEXIST, label, param))
+      raise (Unix.Unix_error (Unix.EEXIST, label, param))
   | Drive.Invalid_operation ->
-    raise (Unix.Unix_error (Unix.EINVAL, label, param))
+      raise (Unix.Unix_error (Unix.EINVAL, label, param))
   | Unix.Unix_error _ as e ->
-    Utils.log_exception e;
-    raise e
+      Utils.log_exception e;
+      raise e
   | e ->
-    Utils.log_exception e;
-    raise (Unix.Unix_error (Unix.EIO, label, param))
+      Utils.log_exception e;
+      raise (Unix.Unix_error (Unix.EIO, label, param))
 
 let init_filesystem () =
   Utils.log_with_header "init_filesystem\n%!";
@@ -627,11 +625,11 @@ let () =
     in
     List.iter
       (fun o ->
-         try
-           let _, bd = ExtString.String.split o "=" in
-           base_dir := bd
-         with ExtString.Invalid_string ->
-           failwith "Invalid mount option gdfroot")
+        try
+          let _, bd = ExtString.String.split o "=" in
+          base_dir := bd
+        with ExtString.Invalid_string ->
+          failwith "Invalid mount option gdfroot")
       base_dir_opt;
     let fuse_mount_opts =
       List.filter (fun o -> not (ExtString.String.starts_with o "gdfroot")) opts
@@ -650,9 +648,9 @@ let () =
         ( "-debug",
           Arg.Unit
             (fun () ->
-               debug := true;
-               Utils.verbose := true;
-               fuse_args := "-f" :: !fuse_args),
+              debug := true;
+              Utils.verbose := true;
+              fuse_args := "-f" :: !fuse_args),
           " enable debug mode (implies -verbose, -f). Default is false." );
         ( "-label",
           Arg.Set_string fs_label,
@@ -674,8 +672,8 @@ let () =
         ( "-s",
           Arg.Unit
             (fun _ ->
-               fuse_args := "-s" :: !fuse_args;
-               multi_threading := false),
+              fuse_args := "-s" :: !fuse_args;
+              multi_threading := false),
           " run in single-threaded mode." );
         ("-o", Arg.String parse_mount_options, " specify FUSE mount options.");
         ("-cc", Arg.Set clear_cache, " clear cache");
@@ -766,40 +764,40 @@ let () =
             Utils.log_with_header "Exiting.\n%!";
             let context = Context.get_ctx () in
             (match context.Context.buffer_eviction_thread with
-             | None -> ()
-             | Some buffer_eviction_thread ->
-               Utils.log_with_header
-                 "Stopping buffer eviction thread (TID=%d)...%!"
-                 (Thread.id buffer_eviction_thread);
-               Buffering.MemoryBuffers.stop_eviction_thread
-                 context.Context.memory_buffers;
-               Thread.join buffer_eviction_thread;
-               Utils.log_message "done\n%!");
+            | None -> ()
+            | Some buffer_eviction_thread ->
+                Utils.log_with_header
+                  "Stopping buffer eviction thread (TID=%d)...%!"
+                  (Thread.id buffer_eviction_thread);
+                Buffering.MemoryBuffers.stop_eviction_thread
+                  context.Context.memory_buffers;
+                Thread.join buffer_eviction_thread;
+                Utils.log_message "done\n%!");
             (match context.Context.flush_db_thread with
-             | None -> ()
-             | Some flush_db_thread ->
-               Utils.log_with_header "Stopping flush DB thread (TID=%d)...%!"
-                 (Thread.id flush_db_thread);
-               MemoryCache.stop_flush_db_thread ();
-               Thread.join flush_db_thread;
-               Utils.log_message "done\n%!");
+            | None -> ()
+            | Some flush_db_thread ->
+                Utils.log_with_header "Stopping flush DB thread (TID=%d)...%!"
+                  (Thread.id flush_db_thread);
+                MemoryCache.stop_flush_db_thread ();
+                Thread.join flush_db_thread;
+                Utils.log_message "done\n%!");
             (match context.Context.async_upload_thread with
-             | None -> ()
-             | Some async_upload_thread ->
-               Utils.log_with_header
-                 "Stopping async upload thread (TID=%d)\n%!"
-                 (Thread.id async_upload_thread);
-               UploadQueue.stop_async_upload_thread ();
-               Thread.join async_upload_thread);
+            | None -> ()
+            | Some async_upload_thread ->
+                Utils.log_with_header
+                  "Stopping async upload thread (TID=%d)\n%!"
+                  (Thread.id async_upload_thread);
+                UploadQueue.stop_async_upload_thread ();
+                Thread.join async_upload_thread);
             (match context.Context.folder_fetching_thread with
-             | None -> ()
-             | Some folder_fetching_thread ->
-               Utils.log_with_header
-                 "Stopping background folder fetching thread (TID=%d)...%!"
-                 (Thread.id folder_fetching_thread);
-               BackgroundFolderFetching.stop_folder_fetching_thread ();
-               Thread.join folder_fetching_thread;
-               Utils.log_message "done\n%!");
+            | None -> ()
+            | Some folder_fetching_thread ->
+                Utils.log_with_header
+                  "Stopping background folder fetching thread (TID=%d)...%!"
+                  (Thread.id folder_fetching_thread);
+                BackgroundFolderFetching.stop_folder_fetching_thread ();
+                Thread.join folder_fetching_thread;
+                Utils.log_message "done\n%!");
             Utils.log_with_header "Flushing cache...\n%!";
             Cache.flush context.Context.cache;
             Utils.log_with_header "Storing clean shutdown flag...%!";
@@ -815,7 +813,7 @@ let () =
     with
     | Failure error_message -> quit error_message
     | e ->
-      let error_message = Printexc.to_string e in
-      quit error_message
+        let error_message = Printexc.to_string e in
+        quit error_message
 
 (* END Main program *)
