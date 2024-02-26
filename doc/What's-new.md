@@ -1,3 +1,9 @@
+0.7.28
+======
+Add an option to start a local web server for OAuth2 flow.
+- `oauth2_loopback`: flag to start the local web server
+- `oauth2_loopback_port`: port of the local web server [defaults to 8080]
+
 0.7.21
 ======
 This version introduces a new config option: `background_folder_fetching`. If set to a `true` (the default is `false`), it starts a thread to fetch folder data in background, so accessing folders should be faster.
