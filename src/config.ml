@@ -657,7 +657,7 @@ let default =
     desktop_entry_as_html = false;
     async_upload_queue_max_length = 0;
     background_folder_fetching = false;
-    oauth2_loopback = false;
+    oauth2_loopback = true;
     oauth2_loopback_port = 8080;
   }
 
@@ -730,7 +730,7 @@ let default_debug =
     desktop_entry_as_html = false;
     async_upload_queue_max_length = 0;
     background_folder_fetching = false;
-    oauth2_loopback = false;
+    oauth2_loopback = true;
     oauth2_loopback_port = 8080;
   }
 
