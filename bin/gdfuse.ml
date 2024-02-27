@@ -4,6 +4,7 @@ open GapiLens.Infix
 let default_fs_label = "default"
 let client_id = "564921029129.apps.googleusercontent.com"
 let redirect_uri = GaeProxy.gae_proxy_url ^ "/oauth2callback"
+let gae_proxy_mode = "gaeproxy"
 
 (* Authorization *)
 let get_authorization_url request_id =
@@ -95,6 +96,7 @@ type application_params = {
   scope : string;
   redirect_uri : string;
   device : bool;
+  port : int;
 }
 
 let setup_application params =
@@ -189,6 +191,7 @@ let setup_application params =
     then 5000
     else current_config.Config.sqlite3_busy_timeout
   in
+  let oauth2_loopback_port = params.port in
   (* Check max_upload_chunk_size *)
   let max_upload_chunk_size = current_config.Config.max_upload_chunk_size in
   if max_upload_chunk_size <= 0 then
@@ -211,6 +214,7 @@ let setup_application params =
       log_to;
       scope;
       redirect_uri;
+      Config.oauth2_loopback_port;
     }
   in
   let config =
@@ -263,7 +267,8 @@ let setup_application params =
     in
     if
       service_account_credentials_path = ""
-      && (client_id = "" || client_secret = "")
+      && client_id = gae_proxy_mode
+      && client_secret = gae_proxy_mode
     then
       let oauth2_config =
         match gapi_config |. GapiConfig.auth with
@@ -360,15 +365,16 @@ let setup_application params =
   if config.Config.service_account_credentials_path = "" then
     let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
-      if client_id = "" || client_secret = "" then
-        if headless then
+      if client_id = gae_proxy_mode && client_secret = gae_proxy_mode then
+        get_auth_tokens_from_server ()
+      else if client_id = "" || client_secret = "" then
+        if device then
           failwith
-            "In headless mode, you should specify a client id and a client \
-             secret"
-        else if device then
+            "In device mode, you should specify a client id (-id) and a client \
+             secret (-secret)"
+        else
           failwith
-            "In device mode, you should specify a client id and a client secret"
-        else get_auth_tokens_from_server ()
+            "You should specify a client id (-id) and a client secret (-secret)"
       else Oauth2.get_access_token headless device params.browser
     else Utils.log_message "Refresh token already present.\n%!"
   else (
@@ -616,6 +622,7 @@ let () =
   let scope = ref "" in
   let redirect_uri = ref "" in
   let device = ref false in
+  let port = ref 8080 in
   let program = Filename.basename Sys.executable_name in
   let usage = Printf.sprintf "Usage: %s [options] [mountpoint]" program in
   let parse_mount_options opt_string =
@@ -715,6 +722,7 @@ let () =
           Arg.Set_string redirect_uri,
           " sets a custom Drive API redirect URI." );
         ("-device", Arg.Set device, " use OAuth2 for devices. Default is false.");
+        ("-port", Arg.Set_int port, " set loopback port. Default is 8080.");
       ]
   in
   let () = Arg.parse arg_specs (fun s -> mountpoint := s) usage in
@@ -754,6 +762,7 @@ let () =
           scope = !scope;
           redirect_uri = !redirect_uri;
           device = !device;
+          port = !port;
         }
       in
       if !mountpoint = "" then
