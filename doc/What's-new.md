@@ -1,3 +1,7 @@
+0.7.32
+======
+This version introduces a new command line option: `-port`, to specify a port for the embedded HTTP server, that will receive the verification code from Google during authorization. The default is 8080.
+
 0.7.21
 ======
 This version introduces a new config option: `background_folder_fetching`. If set to a `true` (the default is `false`), it starts a thread to fetch folder data in background, so accessing folders should be faster.
