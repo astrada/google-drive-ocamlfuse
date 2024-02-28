@@ -2,7 +2,7 @@ Here you can find instructions on how to install `google-drive-ocamlfuse`. You c
 
 ## PPA repository
 
-I've set up a [PPA repository](https://launchpad.net/~alessandro-strada/+archive/ppa) where I've uploaded  .deb packages for Ubuntu 14.04, 16.04, 17.04, and 17.10 (i386, amd64, armhf, and arm64). To install the software using this method, run the following commands:
+I've set up a [PPA repository](https://launchpad.net/~alessandro-strada/+archive/ppa) where I've uploaded .deb packages for Ubuntu. To install the software using this method, run the following commands:
 
     sudo add-apt-repository ppa:alessandro-strada/ppa
     sudo apt-get update
@@ -17,6 +17,7 @@ As of 2 November 2020, the PPAs seem to be offline, returning a 404 Not Found er
 - https://launchpad.net/~alessandro-strada/+archive/ubuntu/google-drive-ocamlfuse-beta/+packages for the beta versions.
 
 (If `apt` throws errors related to `libc6`, try changing the version of `google-drive-ocamlfuse` downloaded.)
+
 ## PPA repository (beta versions)
 
 This [PPA repository](https://launchpad.net/~alessandro-strada/+archive/ubuntu/google-drive-ocamlfuse-beta) hosts versions from [beta branch](https://github.com/astrada/google-drive-ocamlfuse/tree/beta). These are experimental versions, to test new functionalities. If you want to install them, run the following commands:
@@ -69,11 +70,6 @@ If you are using a different distribution or you want to build the package from 
 1. Update OPAM
 
         opam update
-
-1. Install the external dependencies:
-
-        opam install depext
-        opam depext google-drive-ocamlfuse
 
 1. Install `google-drive-ocamlfuse`
 
@@ -134,3 +130,26 @@ Installing with OPAM on Gentoo can be achieved, but there are issues. Give this 
     opam install google-drive-ocamlfuse  --destdir /usr/local/
     opam uninstall google-drive-ocamlfuse/
 
+### Installing with OPAM on Nobara Linux
+
+Tested on version 38, KDE edition. This may also work in Fedora Workstation.
+
+1. As root, install OPAM and google-drive-ocamlfuse dependencies:
+
+        sudo dnf install opam fuse-devel gmp-devel libcurl-devel sqlite-devel
+
+2. Initialise OPAM on your own user profile:
+
+        opam init
+
+You may be asked questions during initialisation, and will have to interact to continue.
+
+3. Install google-drive-ocamlfuse through opam
+
+        opam install google-drive-ocamlfuse
+
+4. Evaluate your environment to add your new install to your `$PATH`
+
+        eval $(opam env)
+
+You will now be able to run `google-drive-ocamlfuse`.

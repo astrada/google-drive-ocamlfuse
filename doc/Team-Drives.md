@@ -19,4 +19,8 @@ Then, mount the drive with:
 
 The team drive will be mounted there (instead of the usual *My Drive*).
 
+If you still get the contents of *My Drive* instead of the team drive, try to clear the cache by adding the option `-cc` to the mount.
+
+    google-drive-ocamlfuse -cc -label myTeamDrive /mountPoint
+
 Note: if you want to access the backups produced by [Backup & sync](https://www.google.com/drive/download/backup-and-sync/) that you can find under `Computers`, you should put the folder id of the computer you want to access in `root_folder` and leave `team_drive_id` blank.

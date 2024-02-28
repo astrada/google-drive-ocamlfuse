@@ -285,6 +285,14 @@ Path of the directory containing log files (if blank uses the default):
 
     background_folder_fetching=false
 
+[Since 0.7.28] Specifies whether to use a [local web server](https://developers.google.com/identity/protocols/oauth2/native-app#redirect-uri_loopback) to receive the OAuth2 authorization code:
+
+    oauth2_loopback=false
+
+[Since 0.7.28] Specifies the port of the local web server:
+
+    oauth2_loopback_port=8080
+
 ### Document export formats
 
 `desktop` format creates a shortcut to the document that will be opened in the web browser for edit. If `desktop_entry_as_html=true` instead of `.desktop` files you will get `.html` files.
