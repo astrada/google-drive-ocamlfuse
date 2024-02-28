@@ -6,7 +6,9 @@ These utilities get me started from a base Debian Jessie install:
 
 Then install project dependencies:
 
-    sudo apt-get install opam ocaml make fuse camlp4-extra build-essential pkg-config
+    sudo apt-get install opam ocaml make fuse-dev camlp4-extra build-essential pkg-config
+
+(Starting with debian 8, the /dev/fuse device is [world-writable by default](https://wiki.debian.org/SystemGroups#FUSE) so these next few steps are only necessary on Debian 7.)
 
 Create `fuse` group (if not already present):
 
@@ -30,3 +32,7 @@ Get the packages installed. I used the default on all installer prompts:
     opam depext google-drive-ocamlfuse
     opam install google-drive-ocamlfuse
     . /home/*user*/.opam/opam-init/init.sh > /dev/null 2> /dev/null || true
+
+Have fun!
+
+    google-drive-ocamlfuse ~/your/mount/point/here

@@ -74,3 +74,11 @@ https://accounts.google.com/signin/oauth/consent?....
 4. then the command will output "Access token retrieved correctly.", it works
 
 reference: http://moguno.hatenablog.jp/entry/2016/03/24/010502 (Japanese)
+
+Even simpler third way
+---------------
+Access the server using X-forwarding i.e.:
+```
+ssh -X user@server.ip
+```
+This will forward a graphical browser session to your local machine (provided the remote server has a browser).

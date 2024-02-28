@@ -1,3 +1,5 @@
+# Mount using fstab
+
 There is a way to automount the filesystem at boot, although it's not very straightforward. After completing the authorization process, you can follow the following steps, to enable mounting your Google Drive using the `mount` command. Be sure to replace `$USERNAME` with your actual username.
 
 1) Create a shell script named `gdfuse` in `/usr/bin` (as root) with this content:
@@ -34,7 +36,77 @@ If you have another account you can mount it specifying the label after the `#` 
 
     gdfuse#account2  /home/$USERNAME/gdrive2     fuse    uid=1000,gid=1000,_netdev     0       0
 
-## Mount using systemd
+# Mount using fstab with no password required
+
+The following is a variation of the above.
+
+As Linux shell scripts can't be set the SUID flag, while normal application can, a small C program can be written to a) determine the current username, b) become root, c) switch to the current user and mount the filesystem.
+
+Attached is the C source code: [google-drive-ocamlfuse-mounter.txt](https://github.com/astrada/google-drive-ocamlfuse/files/8602705/google-drive-ocamlfuse-mounter.txt).
+After renaming .txt to .c, compile and install with:
+```
+$ gcc google-drive-ocamlfuse-mounter.c
+$ sudo mv a.out /usr/bin/google-drive-ocamlfuse-mounter
+$ sudo chown root:root /usr/bin/google-drive-ocamlfuse-mounter
+$ sudo chmod 4755 /usr/bin/google-drive-ocamlfuse-mounter
+```
+
+Then create a mount directory with rw permissions for a specific user only:
+```
+$ sudo mkdir /mnt/google-drive-tony
+$ sudo chown tony:tony /mnt/google-drive-tony
+$ sudo chmod 0700 /mnt/google-drive-tony
+```
+
+Then edit /etc/fstab and add:
+```
+/usr/bin/google-drive-ocamlfuse-mounter#default  /mnt/google-drive-tony  fuse    uid=1000,gid=1000,user,_netdev,comment=x-gvfs-show  0       0
+```
+Fix the `uid` and `gid` parameters according to yours.
+The `comment=x-gvfs-show` option is there so Thunar (the default file manager in Xfce) can list this fstab entry, and mount / unmount it too.
+
+There shouldn't be any security issue with such a configuration, as users can only mount directories where they have filesystem permissions (so you could as well have another /etc/fstab entry pointing to /mnt/google-drive-john with proper permissions, etc.).
+
+# Mount using systemd
+
+## User Unit
+
+In systemd, a user unit can be created and managed by a non-priviledged user.
+
+1) Create the unit file as `nano ~/.config/systemd/user/google-drive-ocamlfuse.service` (be sure to replace instances of {label} and {mountpoint}):
+
+```bash
+[Unit]
+Description=FUSE filesystem over Google Drive
+After=network.target
+
+[Service]
+ExecStart=google-drive-ocamlfuse -label {label} {mountpoint}
+ExecStop=fusermount -u {mountpoint}
+Restart=always
+Type=forking
+
+[Install]
+WantedBy=default.target
+```
+
+
+2. To mount drive:
+```
+systemctl start --user google-drive-ocamlfuse.service
+```
+3. To unmount drive:
+```
+systemctl stop --user google-drive-ocamlfuse.service
+```
+4. To automount on boot:
+```
+systemctl enable --user google-drive-ocamlfuse.service
+```
+
+## System Unit
+
+System units must be managed by a privileged user.
 
 1) Create unit file `sudo nano /etc/systemd/system/google-drive-ocamlfuse.service` content (be sure to replace instances of {username}, {label}, and {mountpoint}):
 
@@ -67,7 +139,7 @@ WantedBy=multi-user.target
 ```
     sudo systemctl enable google-drive-ocamlfuse.service
 ```
-## Mount using pam_mount
+# Mount using pam_mount
 
 First go through the authorization process. Install the package `libpam-mount` or its equivalent. Edit the file `/etc/security/pam_mount.conf.xml` and uncomment the following line (as root):
 
@@ -99,7 +171,7 @@ By inserting the following line into ~/.profile the shell will test whether some
 
     $ mount | grep "${HOME}/GoogleDrive" >/dev/null || /usr/bin/google-drive-ocamlfuse "${HOME}/GoogleDrive"&
 
-## Mount when using WiFi
+# Mount when using WiFi
 
 When attempting automount when using WiFi, the mount will fail if using the procedures above since there is no internet connection.  As such, you must confirm a connection is present before automounting.
 
