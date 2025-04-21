@@ -16,7 +16,7 @@
           {
           };
       in {
-        legacyPackages = scope.overrideScope' overlay;
+        legacyPackages = scope.overrideScope overlay;
 
         packages.default = self.legacyPackages.${system}.${package};
       });
