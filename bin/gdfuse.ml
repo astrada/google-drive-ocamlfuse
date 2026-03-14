@@ -25,6 +25,7 @@ let get_config_store debug config_path =
   let result = ConfigStore.load_or_create ~debug config_path in
   if result.created then Utils.log_message "created.\n"
   else if result.migrated then Utils.log_message "migrated.\n"
+  else if result.upgraded then Utils.log_message "upgraded.\n"
   else Utils.log_message "done\n";
   result
 

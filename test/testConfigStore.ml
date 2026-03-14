@@ -68,6 +68,7 @@ let test_load_or_create_migrates_legacy_file () =
       let result = ConfigStore.load_or_create ~debug:false path in
       assert_equal ~printer:string_of_bool false result.created;
       assert_equal ~printer:string_of_bool true result.migrated;
+      assert_equal ~printer:string_of_bool false result.upgraded;
       assert_equal ~printer:string_of_int 61 result.store.data.Config.metadata_cache_time;
       assert_equal ~printer:string_of_bool true result.store.data.Config.read_only;
       assert_equal ~printer:(fun x -> x) "test-client"
@@ -105,6 +106,7 @@ let test_existing_toml_with_comments_is_not_rewritten () =
       let result = ConfigStore.load_or_create ~debug:false path in
       assert_equal ~printer:string_of_bool false result.created;
       assert_equal ~printer:string_of_bool false result.migrated;
+      assert_equal ~printer:string_of_bool false result.upgraded;
       assert_equal ~printer:(fun x -> x) "test-client"
         result.store.data.Config.client_id;
       assert_equal ~printer:(fun x -> x) contents (read_file path))
@@ -115,8 +117,33 @@ let test_grouped_toml_is_loaded () =
       write_file path
         "config_version = 1\n\n[auth]\nclient_id = \"client\"\n\n[mount]\nread_only = true\n";
       let result = ConfigStore.load_or_create ~debug:false path in
+      assert_equal ~printer:string_of_bool false result.upgraded;
       assert_equal ~printer:(fun x -> x) "client" result.store.data.Config.client_id;
       assert_equal ~printer:string_of_bool true result.store.data.Config.read_only)
+
+let test_unversioned_toml_is_upgraded () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path "[auth]\nclient_id = \"client\"\n";
+      let result = ConfigStore.load_or_create ~debug:false path in
+      assert_equal ~printer:string_of_bool false result.created;
+      assert_equal ~printer:string_of_bool false result.migrated;
+      assert_equal ~printer:string_of_bool true result.upgraded;
+      assert_equal ~printer:(fun x -> x) "client" result.store.data.Config.client_id;
+      let contents = read_file path in
+      assert_contains "config_version = 1" contents;
+      assert_contains "[auth]" contents)
+
+let test_future_config_version_is_rejected () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path "config_version = 99\n";
+      assert_raises
+        (ConfigStore.Parse_error
+           (Printf.sprintf
+              "Cannot parse configuration %s: unsupported config_version 99"
+              path))
+        (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
 let suite =
   "ConfigStore test"
@@ -130,4 +157,8 @@ let suite =
          "test_existing_toml_with_comments_is_not_rewritten"
          >:: test_existing_toml_with_comments_is_not_rewritten;
          "test_grouped_toml_is_loaded" >:: test_grouped_toml_is_loaded;
+         "test_unversioned_toml_is_upgraded"
+         >:: test_unversioned_toml_is_upgraded;
+         "test_future_config_version_is_rejected"
+         >:: test_future_config_version_is_rejected;
        ]

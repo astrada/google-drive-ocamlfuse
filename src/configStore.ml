@@ -1,5 +1,10 @@
 type t = { path : string; data : Config.t }
-type load_result = { store : t; created : bool; migrated : bool }
+type load_result = {
+  store : t;
+  created : bool;
+  migrated : bool;
+  upgraded : bool;
+}
 
 exception File_not_found
 exception Parse_error of string
@@ -206,6 +211,36 @@ let classify_file path =
 let parse_error path message =
   Parse_error (Printf.sprintf "Cannot parse configuration %s: %s" path message)
 
+let parse_config_version path entries =
+  let rec find_version = function
+    | [] -> None
+    | ("config_version", Otoml.TomlInteger version) :: _ -> Some version
+    | ("config_version", _) :: _ ->
+        raise (parse_error path "config_version must be an integer")
+    | _ :: rest -> find_version rest
+  in
+  match find_version entries with
+  | None -> 0
+  | Some version when version < 0 ->
+      raise (parse_error path "config_version must be >= 0")
+  | Some version -> version
+
+let rec upgrade_config path loaded_version config =
+  if loaded_version > config_version then
+    raise
+      (parse_error path
+         (Printf.sprintf "unsupported config_version %d" loaded_version));
+  match loaded_version with
+  | version when version = config_version -> (config, false)
+  | 0 ->
+      let upgraded_config = config in
+      let _, rewritten = upgrade_config path 1 upgraded_config in
+      (upgraded_config, true || rewritten)
+  | version ->
+      raise
+        (parse_error path
+           (Printf.sprintf "missing upgrade path from config_version %d" version))
+
 let load_legacy path =
   let table = Hashtbl.create 16 in
   let add_entry line_number key value =
@@ -283,8 +318,12 @@ let load_toml path =
     | Otoml.TomlTable entries -> entries
     | _ -> raise (parse_error path "top-level TOML value must be a table")
   in
+  let loaded_version = parse_config_version path entries in
   add_toml_entries path table entries;
-  try Config.of_table table
+  try
+    let config = Config.of_table table in
+    let upgraded_config, upgraded = upgrade_config path loaded_version config in
+    (upgraded_config, upgraded)
   with Failure message -> raise (parse_error path message)
 
 let load path =
@@ -292,7 +331,7 @@ let load path =
   let config =
     match classify_file path with
     | `Legacy -> load_legacy path
-    | `Toml -> load_toml path
+    | `Toml -> load_toml path |> fst
   in
   { path; data = config }
 
@@ -348,12 +387,16 @@ let create_default ~debug ~path =
 let load_or_create ~debug path =
   if not (Sys.file_exists path) then
     let store = create_default ~debug ~path in
-    { store; created = true; migrated = false }
+    { store; created = true; migrated = false; upgraded = false }
   else
     match classify_file path with
-    | `Toml -> { store = load path; created = false; migrated = false }
+    | `Toml ->
+        let data, upgraded = load_toml path in
+        let store = { path; data } in
+        if upgraded then save store;
+        { store; created = false; migrated = false; upgraded }
     | `Legacy ->
         let store = { path; data = load_legacy path } in
         backup_legacy_file path;
         save store;
-        { store; created = false; migrated = true }
+        { store; created = false; migrated = true; upgraded = false }
