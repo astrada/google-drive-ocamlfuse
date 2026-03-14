@@ -10,7 +10,7 @@ exception File_not_found
 exception Parse_error of string
 
 let config_version = 1
-let legacy_backup_suffix = ".legacy.bak"
+let backup_suffix = ".bak"
 
 let auth_table =
   [
@@ -368,15 +368,14 @@ let build_minimal_toml config =
 let save store =
   let dir = Filename.dirname store.path in
   let tmp_path = store.path ^ ".tmp" in
+  let backup_path = store.path ^ backup_suffix in
   Utils.safe_makedir dir;
   Utils.with_out_channel ~mode:[ Open_creat; Open_trunc; Open_wronly ] tmp_path
     (fun ch -> Otoml.Printer.to_channel ch (build_minimal_toml store.data));
+  if Sys.file_exists store.path then (
+    if Sys.file_exists backup_path then Sys.remove backup_path;
+    Sys.rename store.path backup_path);
   Sys.rename tmp_path store.path
-
-let backup_legacy_file path =
-  let backup_path = path ^ legacy_backup_suffix in
-  if Sys.file_exists backup_path then Sys.remove backup_path;
-  Sys.rename path backup_path
 
 let create_default ~debug ~path =
   let data = if debug then Config.default_debug else Config.default in
@@ -397,6 +396,5 @@ let load_or_create ~debug path =
         { store; created = false; migrated = false; upgraded }
     | `Legacy ->
         let store = { path; data = load_legacy path } in
-        backup_legacy_file path;
         save store;
         { store; created = false; migrated = true; upgraded = false }

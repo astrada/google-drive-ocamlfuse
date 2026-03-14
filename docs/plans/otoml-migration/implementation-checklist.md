@@ -43,7 +43,7 @@ away from it.
 These decisions are now part of the implementation contract:
 
 - keep the filename `config`
-- back up legacy config automatically during migration
+- keep the previous config version as `config.bak`, replacing any older backup
 - persist CLI overrides only for `-id` and `-secret`
 - reject duplicate keys
 - emit a minimal TOML file
@@ -263,7 +263,8 @@ state handling.
 ### New Behavior To Add
 
 - if the file is legacy, migrate it on startup
-- if migration succeeds, save TOML and create a backup automatically
+- if migration succeeds, save TOML and let the normal save path rotate the old
+  file to `config.bak`
 
 ### Expected Result
 
@@ -354,7 +355,7 @@ the whole file on every startup.
 
 - migrate legacy config to TOML on load
 - ensure migrated semantic values match legacy semantic values
-- ensure a backup is written automatically
+- ensure the previous file is written to `config.bak`
 - ensure second startup does not remigrate TOML
 
 #### Save Policy Tests
@@ -362,6 +363,7 @@ the whole file on every startup.
 - creating a missing config writes TOML
 - loading an existing TOML without migration does not rewrite it
 - comments survive a normal load path because no save occurs
+- saving over an existing config rotates the old file to `config.bak`
 - `-id` and `-secret` persistence still works
 - non-persistent CLI runtime overrides do not trigger a rewrite
 
@@ -418,7 +420,7 @@ The work is done when:
 - the app can start with an old `key=value` config
 - first startup migrates that file to TOML
 - duplicate keys are rejected
-- a backup of the old file is created automatically
+- the old file is rotated to `config.bak` on overwrite
 - existing semantics are preserved after migration
 - TOML config supports comments
 - normal startup does not remove comments

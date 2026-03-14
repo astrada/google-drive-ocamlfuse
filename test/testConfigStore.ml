@@ -80,7 +80,7 @@ let test_load_or_create_migrates_legacy_file () =
       assert_contains "read_only = true" migrated_contents;
       assert_contains "[auth]" migrated_contents;
       assert_contains "client_id = \"test-client\"" migrated_contents;
-      let backup_path = path ^ ".legacy.bak" in
+      let backup_path = path ^ ".bak" in
       assert_bool "Expected legacy backup to exist" (Sys.file_exists backup_path);
       let backup_contents = read_file backup_path in
       assert_contains "client_id=test-client" backup_contents)

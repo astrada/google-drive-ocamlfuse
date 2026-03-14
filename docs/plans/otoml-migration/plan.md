@@ -27,7 +27,8 @@ This plan is based on the current implementation in:
 The following design choices are now fixed:
 
 1. Keep the filename `config`.
-2. Back up legacy config automatically during migration.
+2. Keep the previous config version automatically as `config.bak`, replacing
+   any older backup.
 3. Persist CLI overrides for `-id` and `-secret`.
 4. Reject duplicate keys.
 5. Emit a minimal TOML file rather than a large commented full dump.
@@ -87,6 +88,8 @@ Instead:
   keys or rewrite deprecated keys
 - avoid writing the file for ephemeral runtime-only overrides unless that
   persistence is intentional
+- when overwriting an existing config file, move the previous version to
+  `config.bak`, replacing any older backup
 
 This is the key policy change that preserves comments in normal operation.
 
@@ -285,12 +288,11 @@ Recommended policy:
 
 For legacy files:
 
-- preserve the original file by renaming it to something like
-  `config.legacy.bak` before writing TOML, or
-- write TOML to `config`, and keep `config.bak`
+- write TOML to `config`
+- let the normal save path move the previous file to `config.bak`
 
-This is now a fixed requirement: keep a backup of the legacy file
-automatically.
+This is now a fixed requirement, and it is handled by the normal save path
+rather than by a migration-only backup rule.
 
 ### Compatibility Decisions To Make
 
@@ -399,7 +401,7 @@ Hook it into:
 
 - legacy file is migrated to TOML on startup load
 - migrated config preserves semantic values
-- backup file is created automatically
+- the previous file is written to `config.bak`
 - startup does not remigrate already-migrated TOML
 
 #### Save Policy
@@ -430,6 +432,7 @@ Document:
 - migration behavior
 - whether CLI overrides persist or are runtime-only
 - backup-file behavior during migration
+- backup rotation to `config.bak` on overwrite
 
 ## Detailed Design Recommendations
 
@@ -491,8 +494,7 @@ The main decisions are now settled. The remaining implementation choices are
 smaller, such as:
 
 1. exact TOML table grouping
-2. exact backup filename convention
-3. whether TOML unknown keys are warnings or hard errors
+2. whether TOML unknown keys are warnings or hard errors
 
 ## Recommended Execution Order
 
@@ -511,7 +513,7 @@ The migration is successful when all of these are true:
 - existing legacy configs still start the application
 - first startup migrates them to TOML
 - duplicate keys are rejected with a precise error
-- a legacy backup file is written automatically
+- the previous config file is written to `config.bak` on overwrite
 - TOML config supports comments
 - normal startup does not destroy comments
 - `-id` and `-secret` still persist
