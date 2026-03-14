@@ -1,10 +1,6 @@
 type t = { path : string; data : Config.t }
-type load_result = {
-  store : t;
-  created : bool;
-  migrated : bool;
-  upgraded : bool;
-}
+type load_state = Loaded | Created | Migrated | Upgraded
+type load_result = { store : t; load_state : load_state }
 
 exception File_not_found
 exception Parse_error of string

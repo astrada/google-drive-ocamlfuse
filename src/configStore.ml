@@ -1,10 +1,6 @@
 type t = { path : string; data : Config.t }
-type load_result = {
-  store : t;
-  created : bool;
-  migrated : bool;
-  upgraded : bool;
-}
+type load_state = Loaded | Created | Migrated | Upgraded
+type load_result = { store : t; load_state : load_state }
 
 exception File_not_found
 exception Parse_error of string
@@ -402,15 +398,15 @@ let create_default ~debug ~path =
 let load_or_create ~debug path =
   if not (Sys.file_exists path) then
     let store = create_default ~debug ~path in
-    { store; created = true; migrated = false; upgraded = false }
+    { store; load_state = Created }
   else
     match classify_file path with
     | `Toml ->
         let data, upgraded = load_toml path in
         let store = { path; data } in
         if upgraded then save store;
-        { store; created = false; migrated = false; upgraded }
+        { store; load_state = if upgraded then Upgraded else Loaded }
     | `Legacy ->
         let store = { path; data = load_legacy path } in
         save store;
-        { store; created = false; migrated = true; upgraded = false }
+        { store; load_state = Migrated }

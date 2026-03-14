@@ -3,9 +3,7 @@ open OUnit
 let default_inputs () =
   {
     ConfigRuntime.persisted = Config.default;
-    created = false;
-    migrated = false;
-    upgraded = false;
+    load_state = ConfigStore.Loaded;
     cli_client_id = "";
     cli_client_secret = "";
     cli_service_account_credentials_path = "";

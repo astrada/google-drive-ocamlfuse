@@ -1,8 +1,6 @@
 type inputs = {
   persisted : Config.t;
-  created : bool;
-  migrated : bool;
-  upgraded : bool;
+  load_state : ConfigStore.load_state;
   cli_client_id : string;
   cli_client_secret : string;
   cli_service_account_credentials_path : string;
@@ -122,7 +120,9 @@ let resolve inputs =
     }
   in
   let should_persist =
-    inputs.created || inputs.migrated || inputs.upgraded
+    (match inputs.load_state with
+    | ConfigStore.Created | ConfigStore.Migrated | ConfigStore.Upgraded -> true
+    | ConfigStore.Loaded -> false)
     || persisted_config.Config.client_id <> persisted.Config.client_id
     || persisted_config.Config.client_secret <> persisted.Config.client_secret
   in

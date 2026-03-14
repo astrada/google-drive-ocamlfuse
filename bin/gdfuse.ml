@@ -23,10 +23,11 @@ let rng =
 let get_config_store debug config_path =
   Utils.log_with_header "Loading configuration from %s..." config_path;
   let result = ConfigStore.load_or_create ~debug config_path in
-  if result.created then Utils.log_message "created.\n"
-  else if result.migrated then Utils.log_message "migrated.\n"
-  else if result.upgraded then Utils.log_message "upgraded.\n"
-  else Utils.log_message "done\n";
+  (match result.ConfigStore.load_state with
+  | ConfigStore.Created -> Utils.log_message "created.\n"
+  | ConfigStore.Migrated -> Utils.log_message "migrated.\n"
+  | ConfigStore.Upgraded -> Utils.log_message "upgraded.\n"
+  | ConfigStore.Loaded -> Utils.log_message "done\n");
   result
 
 (* END Application configuration *)
@@ -151,9 +152,7 @@ let setup_application params =
     ConfigRuntime.resolve
       {
         ConfigRuntime.persisted = current_config;
-        created = config_store_result.created;
-        migrated = config_store_result.migrated;
-        upgraded = config_store_result.upgraded;
+        load_state = config_store_result.load_state;
         cli_client_id = params.client_id;
         cli_client_secret = params.client_secret;
         cli_service_account_credentials_path =
