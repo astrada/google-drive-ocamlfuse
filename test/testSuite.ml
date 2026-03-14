@@ -4,6 +4,7 @@ let _ =
   let suite =
     "google-drive-ocamlfuse test suite"
     >::: [
+           TestConfigStore.suite;
            TestBuffering.suite;
            TestThreadPool.suite;
            TestBufferPool.suite;

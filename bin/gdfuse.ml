@@ -20,24 +20,13 @@ let rng =
   string dev_rng 20 |> pseudo_rng
 
 (* Application configuration *)
-let create_default_config_store debug path =
-  let data = if debug then Config.default_debug else Config.default in
-  (* Save configuration file *)
-  let config_store = { Context.ConfigFileStore.path; data } in
-  let config_dir = Filename.dirname path in
-  Utils.safe_makedir config_dir;
-  Context.save_config_store config_store;
-  config_store
-
 let get_config_store debug config_path =
-  try
-    Utils.log_with_header "Loading configuration from %s..." config_path;
-    let config_store = Context.ConfigFileStore.load config_path in
-    Utils.log_message "done\n";
-    config_store
-  with KeyValueStore.File_not_found ->
-    Utils.log_message "not found.\n";
-    create_default_config_store debug config_path
+  Utils.log_with_header "Loading configuration from %s..." config_path;
+  let result = ConfigStore.load_or_create ~debug config_path in
+  if result.created then Utils.log_message "created.\n"
+  else if result.migrated then Utils.log_message "migrated.\n"
+  else Utils.log_message "done\n";
+  result
 
 (* END Application configuration *)
 
@@ -136,7 +125,8 @@ let setup_application params =
     AppDir.get_config_path params.config_path params.xdg_base_directory
       params.base_dir params.filesystem_label
   in
-  let config_store = get_config_store params.debug config_path in
+  let config_store_result = get_config_store params.debug config_path in
+  let config_store = config_store_result.ConfigStore.store in
   let current_config = config_store.Context.ConfigFileStore.data in
   let app_dir =
     AppDir.create current_config params.config_path params.base_dir
@@ -257,8 +247,25 @@ let setup_application params =
       failwith ("Unsupported docsmode: " ^ params.docs_mode)
     else config_without_docs_mode
   in
-  let config_store = config_store |> Context.ConfigFileStore.data ^= config in
-  Context.save_config_store config_store;
+  let persisted_config =
+    {
+      current_config with
+      Config.client_id;
+      client_secret;
+    }
+  in
+  let should_persist_config =
+    config_store_result.created
+    || config_store_result.migrated
+    || persisted_config.Config.client_id <> current_config.Config.client_id
+    || persisted_config.Config.client_secret <> current_config.Config.client_secret
+  in
+  if should_persist_config then
+    Context.save_config_store
+      (config_store |> Context.ConfigFileStore.data ^= persisted_config);
+  let runtime_config_store =
+    config_store |> Context.ConfigFileStore.data ^= config
+  in
   Utils.max_retries := config.Config.max_retries;
   let gapi_config =
     let gapi_config =
@@ -331,7 +338,7 @@ let setup_application params =
   let context =
     {
       Context.app_dir;
-      config_store;
+      config_store = runtime_config_store;
       gapi_config;
       state_store;
       cache;

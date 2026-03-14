@@ -3,4 +3,4 @@
  (wrapped false)
  (flags :standard -w -3-6-27-32-58)
  (libraries cryptokit extlib gapi-ocaml gapi-ocaml.netsys-local ocamlfuse
-            sqlite3 threads camlidl tiny_httpd))
+            sqlite3 threads camlidl tiny_httpd otoml))

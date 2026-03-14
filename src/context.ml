@@ -1,5 +1,5 @@
 open GapiLens.Infix
-module ConfigFileStore = KeyValueStore.MakeFileStore (Config)
+module ConfigFileStore = ConfigStore
 module StateFileStore = KeyValueStore.MakeFileStore (State)
 
 type t = {
