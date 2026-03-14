@@ -13,6 +13,9 @@ Important behavior:
 - duplicate keys are rejected
 - when an existing config file is rewritten, the previous version is kept as `config.bak`
 
+A full commented reference file is available at
+[`docs/wiki/full-config.example.toml`](./full-config.example.toml).
+
 ### Example
 
 ```toml

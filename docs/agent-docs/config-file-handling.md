@@ -37,6 +37,9 @@ Current grouped layout:
 - `[async]`
 - `[logging]`
 
+A full commented reference file lives at
+[`docs/wiki/full-config.example.toml`](../wiki/full-config.example.toml).
+
 Example:
 
 ```toml
