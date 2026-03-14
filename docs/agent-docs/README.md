@@ -8,6 +8,7 @@ Read these files in order:
 1. `repo-map.md`
 2. `architecture.md`
 3. `workflows.md`
+4. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in
