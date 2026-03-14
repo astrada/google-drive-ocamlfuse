@@ -154,20 +154,10 @@ Recommended shape:
   - `to_toml`
   - `validate`
 
-Suggested TOML layout:
+Recommended TOML layout:
 
 ```toml
-metadata_cache_time = 60
-read_only = false
-umask = "0o002"
-sqlite3_busy_timeout = 5000
-
-[docs]
-download_docs = true
-document_format = "desktop"
-drawing_format = "desktop"
-presentation_format = "desktop"
-spreadsheet_format = "desktop"
+config_version = 1
 
 [auth]
 client_id = ""
@@ -177,16 +167,98 @@ scope = ""
 redirect_uri = ""
 oauth2_loopback = true
 oauth2_loopback_port = 8080
+service_account_credentials_path = ""
+service_account_user_to_impersonate = ""
+
+[mount]
+metadata_cache_time = 60
+read_only = false
+umask = "0o002"
+root_folder = ""
+team_drive_id = ""
+lost_and_found = false
+disable_trash = false
+keep_duplicates = false
+mv_keep_target = false
+
+[docs]
+download_docs = true
+docs_file_extension = true
+document_format = "desktop"
+drawing_format = "desktop"
+form_format = "desktop"
+presentation_format = "desktop"
+spreadsheet_format = "desktop"
+map_format = "desktop"
+fusion_table_format = "desktop"
+apps_script_format = "desktop"
+document_icon = ""
+drawing_icon = ""
+form_icon = ""
+presentation_icon = ""
+spreadsheet_icon = ""
+map_icon = ""
+fusion_table_icon = ""
+apps_script_icon = ""
+desktop_entry_exec = ""
+desktop_entry_as_html = false
 
 [cache]
 max_cache_size_mb = 512
 metadata_memory_cache = true
 metadata_memory_cache_saving_interval = 30
+sqlite3_busy_timeout = 5000
+data_directory = ""
+cache_directory = ""
+log_directory = ""
+
+[io]
+stream_large_files = false
+large_file_threshold_mb = 16
+large_file_read_only = false
+memory_buffer_size = 1048576
+max_memory_cache_size = 10485760
+read_ahead_buffers = 3
 write_buffers = false
+max_upload_chunk_size = 1099511627776
+autodetect_mime = true
+acknowledge_abuse = false
+
+[network]
+connect_timeout_ms = 5000
+max_download_speed = "0"
+max_upload_speed = "0"
+low_speed_limit = 0
+low_speed_time = 0
+max_retries = 8
+curl_debug_off = false
+
+[async]
+async_upload_queue = false
+async_upload_threads = 10
+async_upload_queue_max_length = 0
+background_folder_fetching = false
+
+[logging]
+log_to = ""
+debug_buffers = false
 ```
 
-The exact grouping is flexible, but the emitted file should stay minimal. The
-serializer should avoid dumping every possible option by default.
+This grouping is now the recommended target shape.
+
+Rationale:
+
+- `auth`: OAuth and credential settings
+- `mount`: exposed filesystem semantics
+- `docs`: Google Docs export behavior
+- `cache`: local persistence and metadata cache settings
+- `io`: buffering, streaming, upload chunking, MIME handling
+- `network`: retries, timeouts, and bandwidth controls
+- `async`: background workers and queueing
+- `logging`: logging destination and buffer-debugging
+
+The emitted file should still stay minimal. The serializer should avoid dumping
+every possible option by default.
 
 ### Compatibility Note
 

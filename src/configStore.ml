@@ -7,6 +7,114 @@ exception Parse_error of string
 let config_version = 1
 let legacy_backup_suffix = ".legacy.bak"
 
+let auth_table =
+  [
+    "client_id";
+    "client_secret";
+    "verification_code";
+    "scope";
+    "redirect_uri";
+    "oauth2_loopback";
+    "oauth2_loopback_port";
+    "service_account_credentials_path";
+    "service_account_user_to_impersonate";
+  ]
+
+let mount_table =
+  [
+    "metadata_cache_time";
+    "read_only";
+    "umask";
+    "root_folder";
+    "team_drive_id";
+    "lost_and_found";
+    "disable_trash";
+    "keep_duplicates";
+    "mv_keep_target";
+  ]
+
+let docs_table =
+  [
+    "download_docs";
+    "docs_file_extension";
+    "document_format";
+    "drawing_format";
+    "form_format";
+    "presentation_format";
+    "spreadsheet_format";
+    "map_format";
+    "fusion_table_format";
+    "apps_script_format";
+    "document_icon";
+    "drawing_icon";
+    "form_icon";
+    "presentation_icon";
+    "spreadsheet_icon";
+    "map_icon";
+    "fusion_table_icon";
+    "apps_script_icon";
+    "desktop_entry_exec";
+    "desktop_entry_as_html";
+  ]
+
+let cache_table =
+  [
+    "max_cache_size_mb";
+    "metadata_memory_cache";
+    "metadata_memory_cache_saving_interval";
+    "sqlite3_busy_timeout";
+    "data_directory";
+    "cache_directory";
+    "log_directory";
+  ]
+
+let io_table =
+  [
+    "stream_large_files";
+    "large_file_threshold_mb";
+    "large_file_read_only";
+    "memory_buffer_size";
+    "max_memory_cache_size";
+    "read_ahead_buffers";
+    "write_buffers";
+    "max_upload_chunk_size";
+    "autodetect_mime";
+    "acknowledge_abuse";
+  ]
+
+let network_table =
+  [
+    "connect_timeout_ms";
+    "max_download_speed";
+    "max_upload_speed";
+    "low_speed_limit";
+    "low_speed_time";
+    "max_retries";
+    "curl_debug_off";
+  ]
+
+let async_table =
+  [
+    "async_upload_queue";
+    "async_upload_threads";
+    "async_upload_queue_max_length";
+    "background_folder_fetching";
+  ]
+
+let logging_table = [ "log_to"; "debug_buffers" ]
+
+let grouped_tables =
+  [
+    ("auth", auth_table);
+    ("mount", mount_table);
+    ("docs", docs_table);
+    ("cache", cache_table);
+    ("io", io_table);
+    ("network", network_table);
+    ("async", async_table);
+    ("logging", logging_table);
+  ]
+
 let path =
   {
     GapiLens.get = (fun x -> x.path);
@@ -146,6 +254,24 @@ let string_of_toml_value path key = function
         (parse_error path
            (Printf.sprintf "unsupported TOML value for key '%s'" key))
 
+let add_toml_entry path table key value =
+  if Hashtbl.mem table key then
+    raise (parse_error path (Printf.sprintf "duplicate key '%s'" key))
+  else Hashtbl.add table key (string_of_toml_value path key value)
+
+let rec add_toml_entries path table = function
+  | [] -> ()
+  | (key, value) :: rest -> (
+      match value with
+      | Otoml.TomlTable entries ->
+          List.iter
+            (fun (nested_key, nested_value) ->
+              add_toml_entry path table nested_key nested_value)
+            entries
+      | _ when key = "config_version" -> ()
+      | _ -> add_toml_entry path table key value);
+      add_toml_entries path table rest
+
 let load_toml path =
   let toml =
     try Utils.with_in_channel path (fun ch -> Otoml.Parser.from_channel ch)
@@ -157,13 +283,7 @@ let load_toml path =
     | Otoml.TomlTable entries -> entries
     | _ -> raise (parse_error path "top-level TOML value must be a table")
   in
-  List.iter
-    (fun (key, value) ->
-      if key <> "config_version" then
-        if Hashtbl.mem table key then
-          raise (parse_error path (Printf.sprintf "duplicate key '%s'" key))
-        else Hashtbl.add table key (string_of_toml_value path key value))
-    entries;
+  add_toml_entries path table entries;
   try Config.of_table table
   with Failure message -> raise (parse_error path message)
 
@@ -176,25 +296,35 @@ let load path =
   in
   { path; data = config }
 
+let toml_value_of_key key value =
+  if is_member key bool_keys then Otoml.TomlBoolean (bool_of_string value)
+  else if is_member key int_keys then Otoml.TomlInteger (int_of_string value)
+  else if is_member key stringified_numeric_keys then Otoml.TomlString value
+  else Otoml.TomlString value
+
 let build_minimal_toml config =
   let current = Config.to_table config in
   let defaults = Config.to_table Config.default in
-  let entries = ref [ ("config_version", Otoml.TomlInteger config_version) ] in
+  let changed_keys = Hashtbl.create 16 in
   let add_if_needed key value =
-    let default_value = Utils.safe_find defaults key in
-    if default_value <> Some value then
-      let toml_value =
-        if is_member key bool_keys then Otoml.TomlBoolean (bool_of_string value)
-        else if is_member key int_keys then
-          Otoml.TomlInteger (int_of_string value)
-        else if is_member key stringified_numeric_keys then
-          Otoml.TomlString value
-        else Otoml.TomlString value
-      in
-      entries := (key, toml_value) :: !entries
+    if Utils.safe_find defaults key <> Some value then Hashtbl.add changed_keys key value
   in
   Hashtbl.iter add_if_needed current;
-  Otoml.TomlTable (List.rev !entries)
+  let build_group (table_name, keys) =
+    let entries =
+      List.fold_left
+        (fun acc key ->
+          match Utils.safe_find changed_keys key with
+          | None -> acc
+          | Some value -> (key, toml_value_of_key key value) :: acc)
+        [] keys
+      |> List.rev
+    in
+    match entries with [] -> None | _ -> Some (table_name, Otoml.TomlTable entries)
+  in
+  let group_entries = List.filter_map build_group grouped_tables in
+  Otoml.TomlTable
+    (("config_version", Otoml.TomlInteger config_version) :: group_entries)
 
 let save store =
   let dir = Filename.dirname store.path in

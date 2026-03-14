@@ -121,16 +121,22 @@ The repo can parse both formats, but startup behavior may still be unchanged.
 
 ### Checklist
 
-- Decide TOML structure:
-  - flat keys only, or
-  - grouped tables such as `[auth]`, `[cache]`, `[docs]`
+- Implement the recommended grouped TOML structure:
+  - `[auth]`
+  - `[mount]`
+  - `[docs]`
+  - `[cache]`
+  - `[io]`
+  - `[network]`
+  - `[async]`
+  - `[logging]`
 - Implement TOML decode into `Config.t`
 - Implement TOML encode from `Config.t`
 - Add support for human-readable comments in newly generated files
 
 ### Recommendation
 
-Use grouped tables for readability, but keep `Config.t` flat.
+Use the recommended grouped tables for readability, but keep `Config.t` flat.
 
 ### Design Rule
 
@@ -142,6 +148,71 @@ Do not make `Config.t` nested during this refactor.
   - string like `"0o002"`; recommended for preserving intent
   - or integer; less readable
 - generate a minimal TOML file, not an exhaustive dump
+
+### Table Mapping To Implement
+
+- `[auth]`
+  - `client_id`
+  - `client_secret`
+  - `verification_code`
+  - `scope`
+  - `redirect_uri`
+  - `oauth2_loopback`
+  - `oauth2_loopback_port`
+  - `service_account_credentials_path`
+  - `service_account_user_to_impersonate`
+- `[mount]`
+  - `metadata_cache_time`
+  - `read_only`
+  - `umask`
+  - `root_folder`
+  - `team_drive_id`
+  - `lost_and_found`
+  - `disable_trash`
+  - `keep_duplicates`
+  - `mv_keep_target`
+- `[docs]`
+  - `download_docs`
+  - `docs_file_extension`
+  - document, drawing, form, presentation, spreadsheet, map, fusion-table, and
+    apps-script formats/icons
+  - `desktop_entry_exec`
+  - `desktop_entry_as_html`
+- `[cache]`
+  - `max_cache_size_mb`
+  - `metadata_memory_cache`
+  - `metadata_memory_cache_saving_interval`
+  - `sqlite3_busy_timeout`
+  - `data_directory`
+  - `cache_directory`
+  - `log_directory`
+- `[io]`
+  - `stream_large_files`
+  - `large_file_threshold_mb`
+  - `large_file_read_only`
+  - `memory_buffer_size`
+  - `max_memory_cache_size`
+  - `read_ahead_buffers`
+  - `write_buffers`
+  - `max_upload_chunk_size`
+  - `autodetect_mime`
+  - `acknowledge_abuse`
+- `[network]`
+  - `connect_timeout_ms`
+  - `max_download_speed`
+  - `max_upload_speed`
+  - `low_speed_limit`
+  - `low_speed_time`
+  - `max_retries`
+  - `curl_debug_off`
+- `[async]`
+  - `async_upload_queue`
+  - `async_upload_threads`
+  - `async_upload_queue_max_length`
+  - `background_folder_fetching`
+- `[logging]`
+  - `log_to`
+  - `debug_buffers`
 
 ### Expected Result
 
