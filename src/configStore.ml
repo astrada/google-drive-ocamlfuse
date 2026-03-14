@@ -308,8 +308,8 @@ let add_toml_entry path table key value =
 
 let rec add_toml_entries path table = function
   | [] -> ()
-  | (key, value) :: rest -> (
-      match value with
+  | (key, value) :: rest ->
+      (match value with
       | Otoml.TomlTable entries ->
           List.iter
             (fun (nested_key, nested_value) ->
@@ -359,7 +359,8 @@ let build_minimal_toml config =
   let defaults = Config.to_table Config.default in
   let changed_keys = Hashtbl.create 16 in
   let add_if_needed key value =
-    if Utils.safe_find defaults key <> Some value then Hashtbl.add changed_keys key value
+    if Utils.safe_find defaults key <> Some value then
+      Hashtbl.add changed_keys key value
   in
   Hashtbl.iter add_if_needed current;
   let build_group (table_name, keys) =
@@ -372,7 +373,9 @@ let build_minimal_toml config =
         [] keys
       |> List.rev
     in
-    match entries with [] -> None | _ -> Some (table_name, Otoml.TomlTable entries)
+    match entries with
+    | [] -> None
+    | _ -> Some (table_name, Otoml.TomlTable entries)
   in
   let group_entries = List.filter_map build_group grouped_tables in
   Otoml.TomlTable
@@ -406,7 +409,7 @@ let load_or_create ~debug path =
         let data, upgraded = load_toml path in
         let store = { path; data } in
         if upgraded then save store;
-        { store; load_state = if upgraded then Upgraded else Loaded }
+        { store; load_state = (if upgraded then Upgraded else Loaded) }
     | `Legacy ->
         let store = { path; data = load_legacy path } in
         save store;

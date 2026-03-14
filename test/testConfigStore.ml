@@ -3,7 +3,8 @@ open OUnit
 let with_temp_dir f =
   let rec make_dir n =
     let path =
-      Filename.concat (Filename.get_temp_dir_name ())
+      Filename.concat
+        (Filename.get_temp_dir_name ())
         (Printf.sprintf "gdfuse-configstore-%d-%06d" (Unix.getpid ()) n)
     in
     if Sys.file_exists path then make_dir (n + 1)
@@ -14,7 +15,9 @@ let with_temp_dir f =
   let dir = make_dir 0 in
   let finally () =
     if Sys.file_exists dir then
-      Array.iter (fun name -> Sys.remove (Filename.concat dir name)) (Sys.readdir dir);
+      Array.iter
+        (fun name -> Sys.remove (Filename.concat dir name))
+        (Sys.readdir dir);
     if Sys.file_exists dir then Unix.rmdir dir
   in
   Utils.try_finally (fun () -> f dir) finally
@@ -76,10 +79,7 @@ let test_mount_option_is_emitted_in_grouped_toml () =
         {
           store with
           ConfigStore.data =
-            {
-              store.data with
-              Config.delete_forever_in_trash_folder = true;
-            };
+            { store.data with Config.delete_forever_in_trash_folder = true };
         }
       in
       ConfigStore.save updated_store;
@@ -101,7 +101,8 @@ let test_save_rotates_previous_version_to_bak () =
       in
       ConfigStore.save updated_store;
       let backup_path = path ^ ".bak" in
-      assert_bool "Expected backup to exist after save" (Sys.file_exists backup_path);
+      assert_bool "Expected backup to exist after save"
+        (Sys.file_exists backup_path);
       assert_equal ~printer:(fun x -> x) original (read_file backup_path);
       assert_contains "client_id = \"rotated-client\"" (read_file path))
 
@@ -112,10 +113,13 @@ let test_load_or_create_migrates_legacy_file () =
         "metadata_cache_time=61\nread_only=true\nclient_id=test-client\n";
       let result = ConfigStore.load_or_create ~debug:false path in
       assert_equal ConfigStore.Migrated result.load_state;
-      assert_equal ~printer:string_of_int 61 result.store.data.Config.metadata_cache_time;
-      assert_equal ~printer:string_of_bool true result.store.data.Config.read_only;
-      assert_equal ~printer:(fun x -> x) "test-client"
-        result.store.data.Config.client_id;
+      assert_equal ~printer:string_of_int 61
+        result.store.data.Config.metadata_cache_time;
+      assert_equal ~printer:string_of_bool true
+        result.store.data.Config.read_only;
+      assert_equal
+        ~printer:(fun x -> x)
+        "test-client" result.store.data.Config.client_id;
       let migrated_contents = read_file path in
       assert_contains "config_version = 1" migrated_contents;
       assert_contains "[mount]" migrated_contents;
@@ -124,7 +128,8 @@ let test_load_or_create_migrates_legacy_file () =
       assert_contains "[auth]" migrated_contents;
       assert_contains "client_id = \"test-client\"" migrated_contents;
       let backup_path = path ^ ".bak" in
-      assert_bool "Expected legacy backup to exist" (Sys.file_exists backup_path);
+      assert_bool "Expected legacy backup to exist"
+        (Sys.file_exists backup_path);
       let backup_contents = read_file backup_path in
       assert_contains "client_id=test-client" backup_contents)
 
@@ -134,11 +139,14 @@ let test_legacy_missing_keys_fall_back_to_defaults () =
       write_file path "read_only=true\n";
       let result = ConfigStore.load_or_create ~debug:false path in
       assert_equal ConfigStore.Migrated result.load_state;
-      assert_equal ~printer:string_of_bool true result.store.data.Config.read_only;
-      assert_equal ~printer:string_of_int Config.default.Config.metadata_cache_time
+      assert_equal ~printer:string_of_bool true
+        result.store.data.Config.read_only;
+      assert_equal ~printer:string_of_int
+        Config.default.Config.metadata_cache_time
         result.store.data.Config.metadata_cache_time;
-      assert_equal ~printer:(fun x -> x) Config.default.Config.client_id
-        result.store.data.Config.client_id)
+      assert_equal
+        ~printer:(fun x -> x)
+        Config.default.Config.client_id result.store.data.Config.client_id)
 
 let test_duplicate_legacy_keys_are_rejected () =
   with_temp_dir (fun dir ->
@@ -147,7 +155,8 @@ let test_duplicate_legacy_keys_are_rejected () =
       assert_raises
         (ConfigStore.Parse_error
            (Printf.sprintf
-              "Cannot parse configuration %s: duplicate key 'read_only' at line 2"
+              "Cannot parse configuration %s: duplicate key 'read_only' at \
+               line 2"
               path))
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
@@ -158,7 +167,9 @@ let test_legacy_empty_values_are_allowed () =
       let result = ConfigStore.load_or_create ~debug:false path in
       assert_equal ConfigStore.Migrated result.load_state;
       assert_equal ~printer:(fun x -> x) "" result.store.data.Config.client_id;
-      assert_equal ~printer:(fun x -> x) "" result.store.data.Config.redirect_uri)
+      assert_equal
+        ~printer:(fun x -> x)
+        "" result.store.data.Config.redirect_uri)
 
 let test_unknown_legacy_key_is_rejected () =
   with_temp_dir (fun dir ->
@@ -175,31 +186,42 @@ let test_malformed_legacy_line_is_rejected () =
       let path = Filename.concat dir "config" in
       write_file path "read_only true\n";
       assert_parse_error_contains
-        (Printf.sprintf "Cannot parse configuration %s:" path)
-        (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
+        (Printf.sprintf "Cannot parse configuration %s:" path) (fun () ->
+          ignore (ConfigStore.load_or_create ~debug:false path)))
 
 let test_existing_toml_with_comments_is_not_rewritten () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
       let contents =
-        "# keep this comment\nconfig_version = 1\n\n[auth]\nclient_id = \"test-client\"\n"
+        "# keep this comment\n\
+         config_version = 1\n\n\
+         [auth]\n\
+         client_id = \"test-client\"\n"
       in
       write_file path contents;
       let result = ConfigStore.load_or_create ~debug:false path in
       assert_equal ConfigStore.Loaded result.load_state;
-      assert_equal ~printer:(fun x -> x) "test-client"
-        result.store.data.Config.client_id;
+      assert_equal
+        ~printer:(fun x -> x)
+        "test-client" result.store.data.Config.client_id;
       assert_equal ~printer:(fun x -> x) contents (read_file path))
 
 let test_grouped_toml_is_loaded () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
       write_file path
-        "config_version = 1\n\n[auth]\nclient_id = \"client\"\n\n[mount]\nread_only = true\n";
+        "config_version = 1\n\n\
+         [auth]\n\
+         client_id = \"client\"\n\n\
+         [mount]\n\
+         read_only = true\n";
       let result = ConfigStore.load_or_create ~debug:false path in
       assert_equal ConfigStore.Loaded result.load_state;
-      assert_equal ~printer:(fun x -> x) "client" result.store.data.Config.client_id;
-      assert_equal ~printer:string_of_bool true result.store.data.Config.read_only)
+      assert_equal
+        ~printer:(fun x -> x)
+        "client" result.store.data.Config.client_id;
+      assert_equal ~printer:string_of_bool true
+        result.store.data.Config.read_only)
 
 let test_unversioned_toml_is_upgraded () =
   with_temp_dir (fun dir ->
@@ -207,7 +229,9 @@ let test_unversioned_toml_is_upgraded () =
       write_file path "[auth]\nclient_id = \"client\"\n";
       let result = ConfigStore.load_or_create ~debug:false path in
       assert_equal ConfigStore.Upgraded result.load_state;
-      assert_equal ~printer:(fun x -> x) "client" result.store.data.Config.client_id;
+      assert_equal
+        ~printer:(fun x -> x)
+        "client" result.store.data.Config.client_id;
       let contents = read_file path in
       assert_contains "config_version = 1" contents;
       assert_contains "[auth]" contents)
@@ -240,7 +264,8 @@ let test_wrong_toml_type_is_rejected () =
       assert_raises
         (ConfigStore.Parse_error
            (Printf.sprintf
-              "Cannot parse configuration %s: unsupported TOML value for key 'read_only'"
+              "Cannot parse configuration %s: unsupported TOML value for key \
+               'read_only'"
               path))
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
@@ -251,7 +276,8 @@ let test_invalid_memory_buffer_size_is_rejected () =
       assert_raises
         (ConfigStore.Parse_error
            (Printf.sprintf
-              "Cannot parse configuration %s: memory_buffer_size should be >= 131072 (128k)"
+              "Cannot parse configuration %s: memory_buffer_size should be >= \
+               131072 (128k)"
               path))
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
@@ -259,11 +285,15 @@ let test_invalid_max_memory_cache_size_is_rejected () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
       write_file path
-        "config_version = 1\n\n[io]\nmemory_buffer_size = 131072\nmax_memory_cache_size = 131071\n";
+        "config_version = 1\n\n\
+         [io]\n\
+         memory_buffer_size = 131072\n\
+         max_memory_cache_size = 131071\n";
       assert_raises
         (ConfigStore.Parse_error
            (Printf.sprintf
-              "Cannot parse configuration %s: max_memory_cache_size should be >= memory_buffer_size"
+              "Cannot parse configuration %s: max_memory_cache_size should be \
+               >= memory_buffer_size"
               path))
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
@@ -274,7 +304,8 @@ let test_invalid_max_upload_chunk_size_is_rejected () =
       assert_raises
         (ConfigStore.Parse_error
            (Printf.sprintf
-              "Cannot parse configuration %s: max_upload_chunk_size should be > 0"
+              "Cannot parse configuration %s: max_upload_chunk_size should be \
+               > 0"
               path))
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
@@ -284,8 +315,7 @@ let test_invalid_umask_representation_is_rejected () =
       write_file path "config_version = 1\n\n[mount]\numask = \"nope\"\n";
       assert_raises
         (ConfigStore.Parse_error
-           (Printf.sprintf
-              "Cannot parse configuration %s: int_of_string" path))
+           (Printf.sprintf "Cannot parse configuration %s: int_of_string" path))
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
 let suite =
@@ -318,8 +348,7 @@ let suite =
          >:: test_future_config_version_is_rejected;
          "test_unknown_toml_key_is_rejected"
          >:: test_unknown_toml_key_is_rejected;
-         "test_wrong_toml_type_is_rejected"
-         >:: test_wrong_toml_type_is_rejected;
+         "test_wrong_toml_type_is_rejected" >:: test_wrong_toml_type_is_rejected;
          "test_invalid_memory_buffer_size_is_rejected"
          >:: test_invalid_memory_buffer_size_is_rejected;
          "test_invalid_max_memory_cache_size_is_rejected"

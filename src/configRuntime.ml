@@ -55,8 +55,7 @@ let apply_docs_mode docs_mode config =
       spreadsheet_format = "desktop";
       apps_script_format = "desktop";
     }
-  else if docs_mode = "off" then
-    { config with Config.download_docs = false }
+  else if docs_mode = "off" then { config with Config.download_docs = false }
   else if docs_mode <> "" then failwith ("Unsupported docsmode: " ^ docs_mode)
   else config
 
@@ -90,11 +89,12 @@ let resolve inputs =
     else inputs.cli_redirect_uri
   in
   let log_to =
-    if inputs.cli_log_to = "" then persisted.Config.log_to else inputs.cli_log_to
+    if inputs.cli_log_to = "" then persisted.Config.log_to
+    else inputs.cli_log_to
   in
   let sqlite3_busy_timeout =
-    if inputs.multi_threading && persisted.Config.sqlite3_busy_timeout = 500 then
-      5000
+    if inputs.multi_threading && persisted.Config.sqlite3_busy_timeout = 500
+    then 5000
     else persisted.Config.sqlite3_busy_timeout
   in
   let base_runtime_config =
@@ -111,20 +111,19 @@ let resolve inputs =
       oauth2_loopback_port = inputs.cli_port;
     }
   in
-  let runtime_config = apply_docs_mode inputs.cli_docs_mode base_runtime_config |> Config.validate in
-  let persisted_config =
-    {
-      persisted with
-      Config.client_id;
-      client_secret;
-    }
+  let runtime_config =
+    apply_docs_mode inputs.cli_docs_mode base_runtime_config |> Config.validate
   in
+  let persisted_config = { persisted with Config.client_id; client_secret } in
   let should_persist =
     (match inputs.load_state with
-    | ConfigStore.Created | ConfigStore.Migrated | ConfigStore.Upgraded -> true
-    | ConfigStore.Loaded -> false)
+      | ConfigStore.Created | ConfigStore.Migrated | ConfigStore.Upgraded ->
+          true
+      | ConfigStore.Loaded -> false)
     || persisted_config.Config.client_id <> persisted.Config.client_id
     || persisted_config.Config.client_secret <> persisted.Config.client_secret
   in
-  let clear_cache = inputs.cli_docs_mode <> "" && base_runtime_config <> runtime_config in
+  let clear_cache =
+    inputs.cli_docs_mode <> "" && base_runtime_config <> runtime_config
+  in
   { runtime_config; persisted_config; should_persist; clear_cache }
