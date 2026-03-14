@@ -50,6 +50,14 @@ let assert_not_contains needle haystack =
        false
      with Not_found -> true)
 
+let assert_parse_error_contains needle f =
+  try
+    f ();
+    assert_failure (Printf.sprintf "Expected Parse_error containing %S" needle)
+  with
+  | ConfigStore.Parse_error message -> assert_contains needle message
+  | exn -> raise exn
+
 let test_create_default_writes_minimal_toml () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
@@ -120,6 +128,18 @@ let test_load_or_create_migrates_legacy_file () =
       let backup_contents = read_file backup_path in
       assert_contains "client_id=test-client" backup_contents)
 
+let test_legacy_missing_keys_fall_back_to_defaults () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path "read_only=true\n";
+      let result = ConfigStore.load_or_create ~debug:false path in
+      assert_equal ConfigStore.Migrated result.load_state;
+      assert_equal ~printer:string_of_bool true result.store.data.Config.read_only;
+      assert_equal ~printer:string_of_int Config.default.Config.metadata_cache_time
+        result.store.data.Config.metadata_cache_time;
+      assert_equal ~printer:(fun x -> x) Config.default.Config.client_id
+        result.store.data.Config.client_id)
+
 let test_duplicate_legacy_keys_are_rejected () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
@@ -131,6 +151,15 @@ let test_duplicate_legacy_keys_are_rejected () =
               path))
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
+let test_legacy_empty_values_are_allowed () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path "client_id=\nredirect_uri=\n";
+      let result = ConfigStore.load_or_create ~debug:false path in
+      assert_equal ConfigStore.Migrated result.load_state;
+      assert_equal ~printer:(fun x -> x) "" result.store.data.Config.client_id;
+      assert_equal ~printer:(fun x -> x) "" result.store.data.Config.redirect_uri)
+
 let test_unknown_legacy_key_is_rejected () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
@@ -139,6 +168,14 @@ let test_unknown_legacy_key_is_rejected () =
         (ConfigStore.Parse_error
            (Printf.sprintf
               "Cannot parse configuration %s: unknown key 'unknown_key'" path))
+        (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
+
+let test_malformed_legacy_line_is_rejected () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path "read_only true\n";
+      assert_parse_error_contains
+        (Printf.sprintf "Cannot parse configuration %s:" path)
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
 let test_existing_toml_with_comments_is_not_rewritten () =
@@ -196,6 +233,17 @@ let test_unknown_toml_key_is_rejected () =
               "Cannot parse configuration %s: unknown key 'unknown_key'" path))
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
+let test_wrong_toml_type_is_rejected () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path "config_version = 1\n\n[mount]\nread_only = [true]\n";
+      assert_raises
+        (ConfigStore.Parse_error
+           (Printf.sprintf
+              "Cannot parse configuration %s: unsupported TOML value for key 'read_only'"
+              path))
+        (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
+
 let test_invalid_memory_buffer_size_is_rejected () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
@@ -251,10 +299,16 @@ let suite =
          >:: test_save_rotates_previous_version_to_bak;
          "test_load_or_create_migrates_legacy_file"
          >:: test_load_or_create_migrates_legacy_file;
+         "test_legacy_missing_keys_fall_back_to_defaults"
+         >:: test_legacy_missing_keys_fall_back_to_defaults;
          "test_duplicate_legacy_keys_are_rejected"
          >:: test_duplicate_legacy_keys_are_rejected;
+         "test_legacy_empty_values_are_allowed"
+         >:: test_legacy_empty_values_are_allowed;
          "test_unknown_legacy_key_is_rejected"
          >:: test_unknown_legacy_key_is_rejected;
+         "test_malformed_legacy_line_is_rejected"
+         >:: test_malformed_legacy_line_is_rejected;
          "test_existing_toml_with_comments_is_not_rewritten"
          >:: test_existing_toml_with_comments_is_not_rewritten;
          "test_grouped_toml_is_loaded" >:: test_grouped_toml_is_loaded;
@@ -264,6 +318,8 @@ let suite =
          >:: test_future_config_version_is_rejected;
          "test_unknown_toml_key_is_rejected"
          >:: test_unknown_toml_key_is_rejected;
+         "test_wrong_toml_type_is_rejected"
+         >:: test_wrong_toml_type_is_rejected;
          "test_invalid_memory_buffer_size_is_rejected"
          >:: test_invalid_memory_buffer_size_is_rejected;
          "test_invalid_max_memory_cache_size_is_rejected"
