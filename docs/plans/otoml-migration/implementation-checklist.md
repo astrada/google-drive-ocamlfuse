@@ -132,7 +132,8 @@ The repo can parse both formats, but startup behavior may still be unchanged.
   - `[logging]`
 - Implement TOML decode into `Config.t`
 - Implement TOML encode from `Config.t`
-- Add support for human-readable comments in newly generated files
+- Keep generated TOML minimal; comments are supported in the format, but not
+  emitted automatically
 
 ### Recommendation
 
@@ -397,11 +398,6 @@ Inside `test/testConfigStore.ml`, add small helpers for:
   - one-time legacy migration
   - whether `.bak` files are created
   - whether CLI overrides persist
-
-### Optional
-
-- Add a small commented TOML example to `docs/`, but keep generated config
-  files minimal
 
 ## Suggested Commit Sequence
 

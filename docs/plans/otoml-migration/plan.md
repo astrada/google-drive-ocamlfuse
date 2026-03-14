@@ -494,8 +494,7 @@ Avoid changing semantics of config keys in the same change.
 The main decisions are now settled. The remaining implementation choices are
 smaller, such as:
 
-1. exact TOML table grouping
-2. future schema evolution details beyond the current `config_version = 1`
+1. future schema evolution details beyond the current `config_version = 1`
 
 ## Recommended Execution Order
 
