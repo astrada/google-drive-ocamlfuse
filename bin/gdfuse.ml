@@ -145,120 +145,45 @@ let setup_application params =
   Utils.log_channel := log_channel;
   Utils.log_with_header "Setting up %s filesystem...\n%!"
     params.filesystem_label;
-  let client_id =
-    if params.client_id = "" then current_config |. Config.client_id
-    else params.client_id
-  in
-  let client_secret =
-    if params.client_secret = "" then current_config |. Config.client_secret
-    else params.client_secret
-  in
-  let service_account_credentials_path =
-    if params.service_account_credentials_path = "" then
-      current_config |. Config.service_account_credentials_path
-    else params.service_account_credentials_path
-  in
-  let service_account_user_to_impersonate =
-    if params.service_account_user_to_impersonate = "" then
-      current_config |. Config.service_account_user_to_impersonate
-    else params.service_account_user_to_impersonate
-  in
-  let scope =
-    if params.device then Drive.device_scope
-    else if params.scope = "" then current_config |. Config.scope
-    else params.scope
-  in
-  let redirect_uri =
-    if params.redirect_uri = "" then current_config |. Config.redirect_uri
-    else params.redirect_uri
-  in
   let headless = params.headless in
   let device = params.device in
-  let sqlite3_busy_timeout =
-    (* Previously default timeout was 500ms that's too low for multi-threading.
-     * Update default value to 5000ms *)
-    if
-      params.multi_threading && current_config.Config.sqlite3_busy_timeout = 500
-    then 5000
-    else current_config.Config.sqlite3_busy_timeout
-  in
-  let oauth2_loopback_port = params.port in
-  Utils.debug_buffers := current_config.Config.debug_buffers;
-  let config_without_docs_mode =
-    {
-      current_config with
-      Config.client_id;
-      client_secret;
-      sqlite3_busy_timeout;
-      service_account_credentials_path;
-      service_account_user_to_impersonate;
-      log_to;
-      scope;
-      redirect_uri;
-      Config.oauth2_loopback_port;
-    }
-  in
-  let config =
-    if params.docs_mode = "libreoffice" then
+  let config_resolution =
+    ConfigRuntime.resolve
       {
-        config_without_docs_mode with
-        Config.download_docs = true;
-        document_format = "odt";
-        drawing_format = "png";
-        form_format = "zip";
-        presentation_format = "odp";
-        spreadsheet_format = "ods";
-        apps_script_format = "json";
+        ConfigRuntime.persisted = current_config;
+        created = config_store_result.created;
+        migrated = config_store_result.migrated;
+        upgraded = config_store_result.upgraded;
+        cli_client_id = params.client_id;
+        cli_client_secret = params.client_secret;
+        cli_service_account_credentials_path =
+          params.service_account_credentials_path;
+        cli_service_account_user_to_impersonate =
+          params.service_account_user_to_impersonate;
+        cli_log_to = params.log_to;
+        cli_scope = params.scope;
+        cli_redirect_uri = params.redirect_uri;
+        cli_docs_mode = params.docs_mode;
+        cli_port = params.port;
+        device = params.device;
+        multi_threading = params.multi_threading;
       }
-    else if params.docs_mode = "msoffice" then
-      {
-        config_without_docs_mode with
-        Config.download_docs = true;
-        document_format = "docx";
-        drawing_format = "png";
-        form_format = "zip";
-        presentation_format = "pptx";
-        spreadsheet_format = "xlsx";
-        apps_script_format = "json";
-      }
-    else if params.docs_mode = "desktop" then
-      {
-        config_without_docs_mode with
-        Config.download_docs = true;
-        document_format = "desktop";
-        drawing_format = "desktop";
-        form_format = "desktop";
-        presentation_format = "desktop";
-        spreadsheet_format = "desktop";
-        apps_script_format = "desktop";
-      }
-    else if params.docs_mode = "off" then
-      { config_without_docs_mode with Config.download_docs = false }
-    else if params.docs_mode <> "" then
-      failwith ("Unsupported docsmode: " ^ params.docs_mode)
-    else config_without_docs_mode
   in
-  let config = Config.validate config in
-  let persisted_config =
-    {
-      current_config with
-      Config.client_id;
-      client_secret;
-    }
-  in
-  let should_persist_config =
-    config_store_result.created
-    || config_store_result.migrated
-    || persisted_config.Config.client_id <> current_config.Config.client_id
-    || persisted_config.Config.client_secret <> current_config.Config.client_secret
-  in
-  if should_persist_config then
+  let config = config_resolution.ConfigRuntime.runtime_config in
+  let persisted_config = config_resolution.ConfigRuntime.persisted_config in
+  Utils.debug_buffers := config.Config.debug_buffers;
+  if config_resolution.ConfigRuntime.should_persist then
     Context.save_config_store
       (config_store |> Context.ConfigFileStore.data ^= persisted_config);
   let runtime_config_store =
     config_store |> Context.ConfigFileStore.data ^= config
   in
   Utils.max_retries := config.Config.max_retries;
+  let client_id = config.Config.client_id in
+  let client_secret = config.Config.client_secret in
+  let service_account_credentials_path =
+    config.Config.service_account_credentials_path
+  in
   let gapi_config =
     let gapi_config =
       Config.create_gapi_config config params.debug app_dir.AppDir.curl_log_path
@@ -289,7 +214,7 @@ let setup_application params =
   let saved_version = state_store |. Context.saved_version_lens in
   Utils.log_message "Current version: %s\n%!" Config.version;
   let clear_cache =
-    if config_without_docs_mode <> config then (
+    if config_resolution.ConfigRuntime.clear_cache then (
       Utils.log_message "Docs mode changed to %s%!\n" params.docs_mode;
       true)
     else (
