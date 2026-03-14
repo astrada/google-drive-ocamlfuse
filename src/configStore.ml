@@ -30,6 +30,7 @@ let mount_table =
     "team_drive_id";
     "lost_and_found";
     "disable_trash";
+    "delete_forever_in_trash_folder";
     "keep_duplicates";
     "mv_keep_target";
   ]

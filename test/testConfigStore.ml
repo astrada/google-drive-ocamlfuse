@@ -60,6 +60,25 @@ let test_create_default_writes_minimal_toml () =
       assert_not_contains "read_only" contents;
       assert_not_contains "client_id" contents)
 
+let test_mount_option_is_emitted_in_grouped_toml () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      let store = ConfigStore.create_default ~debug:false ~path in
+      let updated_store =
+        {
+          store with
+          ConfigStore.data =
+            {
+              store.data with
+              Config.delete_forever_in_trash_folder = true;
+            };
+        }
+      in
+      ConfigStore.save updated_store;
+      let contents = read_file path in
+      assert_contains "[mount]" contents;
+      assert_contains "delete_forever_in_trash_folder = true" contents)
+
 let test_save_rotates_previous_version_to_bak () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
@@ -226,6 +245,8 @@ let suite =
   >::: [
          "test_create_default_writes_minimal_toml"
          >:: test_create_default_writes_minimal_toml;
+         "test_mount_option_is_emitted_in_grouped_toml"
+         >:: test_mount_option_is_emitted_in_grouped_toml;
          "test_save_rotates_previous_version_to_bak"
          >:: test_save_rotates_previous_version_to_bak;
          "test_load_or_create_migrates_legacy_file"
