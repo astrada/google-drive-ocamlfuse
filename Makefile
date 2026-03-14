@@ -1,10 +1,13 @@
-.PHONY: build clean test doc
+.PHONY: build clean test doc format
 
 build:
 	dune build @install
 
 test:
 	dune runtest
+
+format:
+	tools/format_ocaml
 
 install:
 	dune install
@@ -14,4 +17,3 @@ uninstall:
 
 clean:
 	dune clean
-
