@@ -1,0 +1,5 @@
+{
+  "ocaml.sandbox": {
+    "kind": "global"
+  }
+}
