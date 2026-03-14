@@ -340,6 +340,7 @@ the whole file on every startup.
 - load minimal legacy config
 - load legacy config with missing keys
 - reject legacy config with duplicate keys
+- reject legacy config with unknown keys
 - load legacy config with empty values
 - reject malformed legacy config
 
@@ -348,6 +349,7 @@ the whole file on every startup.
 - load minimal TOML config
 - load TOML with grouped tables
 - load TOML containing comments
+- reject TOML with unknown keys
 - reject TOML with wrong types
 - reject TOML with invalid field values
 

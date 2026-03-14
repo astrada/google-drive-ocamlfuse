@@ -211,6 +211,20 @@ let classify_file path =
 let parse_error path message =
   Parse_error (Printf.sprintf "Cannot parse configuration %s: %s" path message)
 
+let known_keys =
+  let table = Hashtbl.create 128 in
+  Hashtbl.iter
+    (fun key _ -> Hashtbl.replace table key ())
+    (Config.to_table Config.default);
+  table
+
+let validate_known_keys path table =
+  Hashtbl.iter
+    (fun key _ ->
+      if not (Hashtbl.mem known_keys key) then
+        raise (parse_error path (Printf.sprintf "unknown key '%s'" key)))
+    table
+
 let parse_config_version path entries =
   let rec find_version = function
     | [] -> None
@@ -276,6 +290,7 @@ let load_legacy path =
                    (Printf.sprintf "invalid line %d: %s" !line_number line))
         done
       with End_of_file -> ());
+  validate_known_keys path table;
   try Config.of_table table
   with Failure message -> raise (parse_error path message)
 
@@ -320,6 +335,7 @@ let load_toml path =
   in
   let loaded_version = parse_config_version path entries in
   add_toml_entries path table entries;
+  validate_known_keys path table;
   try
     let config = Config.of_table table in
     let upgraded_config, upgraded = upgrade_config path loaded_version config in

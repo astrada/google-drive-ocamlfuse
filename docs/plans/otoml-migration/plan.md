@@ -395,6 +395,7 @@ Hook it into:
 - parse grouped TOML tables
 - comments are tolerated
 - whitespace/layout variations do not change semantics
+- unknown keys fail with a useful error
 - invalid types fail with a useful error
 
 #### Migration
@@ -494,7 +495,7 @@ The main decisions are now settled. The remaining implementation choices are
 smaller, such as:
 
 1. exact TOML table grouping
-2. whether TOML unknown keys are warnings or hard errors
+2. future schema evolution details beyond the current `config_version = 1`
 
 ## Recommended Execution Order
 
@@ -513,6 +514,7 @@ The migration is successful when all of these are true:
 - existing legacy configs still start the application
 - first startup migrates them to TOML
 - duplicate keys are rejected with a precise error
+- unknown keys are rejected with a precise error
 - the previous config file is written to `config.bak` on overwrite
 - TOML config supports comments
 - normal startup does not destroy comments

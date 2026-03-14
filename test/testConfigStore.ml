@@ -96,6 +96,16 @@ let test_duplicate_legacy_keys_are_rejected () =
               path))
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
+let test_unknown_legacy_key_is_rejected () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path "unknown_key=true\n";
+      assert_raises
+        (ConfigStore.Parse_error
+           (Printf.sprintf
+              "Cannot parse configuration %s: unknown key 'unknown_key'" path))
+        (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
+
 let test_existing_toml_with_comments_is_not_rewritten () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
@@ -145,6 +155,16 @@ let test_future_config_version_is_rejected () =
               path))
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
+let test_unknown_toml_key_is_rejected () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path "config_version = 1\nunknown_key = true\n";
+      assert_raises
+        (ConfigStore.Parse_error
+           (Printf.sprintf
+              "Cannot parse configuration %s: unknown key 'unknown_key'" path))
+        (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
+
 let suite =
   "ConfigStore test"
   >::: [
@@ -154,6 +174,8 @@ let suite =
          >:: test_load_or_create_migrates_legacy_file;
          "test_duplicate_legacy_keys_are_rejected"
          >:: test_duplicate_legacy_keys_are_rejected;
+         "test_unknown_legacy_key_is_rejected"
+         >:: test_unknown_legacy_key_is_rejected;
          "test_existing_toml_with_comments_is_not_rewritten"
          >:: test_existing_toml_with_comments_is_not_rewritten;
          "test_grouped_toml_is_loaded" >:: test_grouped_toml_is_loaded;
@@ -161,4 +183,6 @@ let suite =
          >:: test_unversioned_toml_is_upgraded;
          "test_future_config_version_is_rejected"
          >:: test_future_config_version_is_rejected;
+         "test_unknown_toml_key_is_rejected"
+         >:: test_unknown_toml_key_is_rejected;
        ]
