@@ -183,16 +183,6 @@ let setup_application params =
     else current_config.Config.sqlite3_busy_timeout
   in
   let oauth2_loopback_port = params.port in
-  (* Check max_upload_chunk_size *)
-  let max_upload_chunk_size = current_config.Config.max_upload_chunk_size in
-  if max_upload_chunk_size <= 0 then
-    failwith "max_upload_chunk_size should be > 0";
-  if current_config.Config.memory_buffer_size < 128 * 1024 then
-    failwith "memory_buffer_size should be >= 131072 (128k)";
-  if
-    current_config.Config.max_memory_cache_size
-    < current_config.Config.memory_buffer_size
-  then failwith "max_memory_cache_size should be >= memory_buffer_size";
   Utils.debug_buffers := current_config.Config.debug_buffers;
   let config_without_docs_mode =
     {
@@ -248,6 +238,7 @@ let setup_application params =
       failwith ("Unsupported docsmode: " ^ params.docs_mode)
     else config_without_docs_mode
   in
+  let config = Config.validate config in
   let persisted_config =
     {
       current_config with

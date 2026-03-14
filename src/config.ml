@@ -934,6 +934,15 @@ let to_table data =
   add "oauth2_loopback_port" (data.oauth2_loopback_port |> string_of_int);
   table
 
+let validate data =
+  if data.max_upload_chunk_size <= 0 then
+    failwith "max_upload_chunk_size should be > 0";
+  if data.memory_buffer_size < 128 * 1024 then
+    failwith "memory_buffer_size should be >= 131072 (128k)";
+  if data.max_memory_cache_size < data.memory_buffer_size then
+    failwith "max_memory_cache_size should be >= memory_buffer_size";
+  data
+
 let debug_print out_ch start_time curl info_type info =
   let time = Unix.gettimeofday () in
   let timestamp = time -. start_time in

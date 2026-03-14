@@ -291,7 +291,7 @@ let load_legacy path =
         done
       with End_of_file -> ());
   validate_known_keys path table;
-  try Config.of_table table
+  try Config.of_table table |> Config.validate
   with Failure message -> raise (parse_error path message)
 
 let string_of_toml_value path key = function
@@ -337,7 +337,7 @@ let load_toml path =
   add_toml_entries path table entries;
   validate_known_keys path table;
   try
-    let config = Config.of_table table in
+    let config = Config.of_table table |> Config.validate in
     let upgraded_config, upgraded = upgrade_config path loaded_version config in
     (upgraded_config, upgraded)
   with Failure message -> raise (parse_error path message)

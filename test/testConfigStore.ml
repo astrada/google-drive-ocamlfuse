@@ -60,6 +60,24 @@ let test_create_default_writes_minimal_toml () =
       assert_not_contains "read_only" contents;
       assert_not_contains "client_id" contents)
 
+let test_save_rotates_previous_version_to_bak () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      let store = ConfigStore.create_default ~debug:false ~path in
+      let original = read_file path in
+      let updated_store =
+        {
+          store with
+          ConfigStore.data =
+            { store.data with Config.client_id = "rotated-client" };
+        }
+      in
+      ConfigStore.save updated_store;
+      let backup_path = path ^ ".bak" in
+      assert_bool "Expected backup to exist after save" (Sys.file_exists backup_path);
+      assert_equal ~printer:(fun x -> x) original (read_file backup_path);
+      assert_contains "client_id = \"rotated-client\"" (read_file path))
+
 let test_load_or_create_migrates_legacy_file () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
@@ -165,11 +183,57 @@ let test_unknown_toml_key_is_rejected () =
               "Cannot parse configuration %s: unknown key 'unknown_key'" path))
         (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
 
+let test_invalid_memory_buffer_size_is_rejected () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path "config_version = 1\n\n[io]\nmemory_buffer_size = 1\n";
+      assert_raises
+        (ConfigStore.Parse_error
+           (Printf.sprintf
+              "Cannot parse configuration %s: memory_buffer_size should be >= 131072 (128k)"
+              path))
+        (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
+
+let test_invalid_max_memory_cache_size_is_rejected () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path
+        "config_version = 1\n\n[io]\nmemory_buffer_size = 131072\nmax_memory_cache_size = 131071\n";
+      assert_raises
+        (ConfigStore.Parse_error
+           (Printf.sprintf
+              "Cannot parse configuration %s: max_memory_cache_size should be >= memory_buffer_size"
+              path))
+        (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
+
+let test_invalid_max_upload_chunk_size_is_rejected () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path "config_version = 1\n\n[io]\nmax_upload_chunk_size = 0\n";
+      assert_raises
+        (ConfigStore.Parse_error
+           (Printf.sprintf
+              "Cannot parse configuration %s: max_upload_chunk_size should be > 0"
+              path))
+        (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
+
+let test_invalid_umask_representation_is_rejected () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      write_file path "config_version = 1\n\n[mount]\numask = \"nope\"\n";
+      assert_raises
+        (ConfigStore.Parse_error
+           (Printf.sprintf
+              "Cannot parse configuration %s: int_of_string" path))
+        (fun () -> ignore (ConfigStore.load_or_create ~debug:false path)))
+
 let suite =
   "ConfigStore test"
   >::: [
          "test_create_default_writes_minimal_toml"
          >:: test_create_default_writes_minimal_toml;
+         "test_save_rotates_previous_version_to_bak"
+         >:: test_save_rotates_previous_version_to_bak;
          "test_load_or_create_migrates_legacy_file"
          >:: test_load_or_create_migrates_legacy_file;
          "test_duplicate_legacy_keys_are_rejected"
@@ -185,4 +249,12 @@ let suite =
          >:: test_future_config_version_is_rejected;
          "test_unknown_toml_key_is_rejected"
          >:: test_unknown_toml_key_is_rejected;
+         "test_invalid_memory_buffer_size_is_rejected"
+         >:: test_invalid_memory_buffer_size_is_rejected;
+         "test_invalid_max_memory_cache_size_is_rejected"
+         >:: test_invalid_max_memory_cache_size_is_rejected;
+         "test_invalid_max_upload_chunk_size_is_rejected"
+         >:: test_invalid_max_upload_chunk_size_is_rejected;
+         "test_invalid_umask_representation_is_rejected"
+         >:: test_invalid_umask_representation_is_rejected;
        ]
