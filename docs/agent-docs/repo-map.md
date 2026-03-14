@@ -11,6 +11,7 @@ The codebase is mostly one executable plus a flat OCaml library in `src/`.
 
 - Build: `dune build @install`
 - Test: `dune runtest`
+- Format OCaml sources: `make format`
 - Install locally: `dune install`
 - Clean: `dune clean`
 
@@ -24,7 +25,8 @@ The `Makefile` is only a small wrapper around these dune commands.
 - `test/`: OUnit unit tests. Current tests cover support modules, not full FUSE
   or Google Drive integration.
 - `docs/wiki/`: user-facing documentation imported from the project wiki.
-- `tools/`: helper scripts, currently minimal.
+- `tools/`: helper scripts, currently minimal. Includes `tools/format_ocaml`
+  for running `ocamlformat` over tracked `.ml` and `.mli` files in the repo.
 - `google-drive-ocamlfuse.opam`: package metadata and dependencies.
 - `flake.nix`: Nix setup.
 
