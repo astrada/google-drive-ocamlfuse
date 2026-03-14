@@ -116,11 +116,7 @@ let resolve inputs =
   in
   let persisted_config = { persisted with Config.client_id; client_secret } in
   let should_persist =
-    (match inputs.load_state with
-      | ConfigStore.Created | ConfigStore.Migrated | ConfigStore.Upgraded ->
-          true
-      | ConfigStore.Loaded -> false)
-    || persisted_config.Config.client_id <> persisted.Config.client_id
+    persisted_config.Config.client_id <> persisted.Config.client_id
     || persisted_config.Config.client_secret <> persisted.Config.client_secret
   in
   let clear_cache =

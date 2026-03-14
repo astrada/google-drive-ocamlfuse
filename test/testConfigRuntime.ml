@@ -78,6 +78,27 @@ let test_no_changes_do_not_persist () =
   assert_equal ~printer:string_of_bool false result.ConfigRuntime.should_persist;
   assert_equal ~printer:string_of_bool false result.ConfigRuntime.clear_cache
 
+let test_migrated_config_is_not_persisted_again () =
+  let defaults = default_inputs () in
+  let result =
+    ConfigRuntime.resolve { defaults with load_state = ConfigStore.Migrated }
+  in
+  assert_equal ~printer:string_of_bool false result.ConfigRuntime.should_persist
+
+let test_created_config_is_not_persisted_again () =
+  let defaults = default_inputs () in
+  let result =
+    ConfigRuntime.resolve { defaults with load_state = ConfigStore.Created }
+  in
+  assert_equal ~printer:string_of_bool false result.ConfigRuntime.should_persist
+
+let test_upgraded_config_is_not_persisted_again () =
+  let defaults = default_inputs () in
+  let result =
+    ConfigRuntime.resolve { defaults with load_state = ConfigStore.Upgraded }
+  in
+  assert_equal ~printer:string_of_bool false result.ConfigRuntime.should_persist
+
 let suite =
   "ConfigRuntime test"
   >::: [
@@ -89,4 +110,10 @@ let suite =
          "test_docs_mode_requests_cache_clear"
          >:: test_docs_mode_requests_cache_clear;
          "test_no_changes_do_not_persist" >:: test_no_changes_do_not_persist;
+         "test_migrated_config_is_not_persisted_again"
+         >:: test_migrated_config_is_not_persisted_again;
+         "test_created_config_is_not_persisted_again"
+         >:: test_created_config_is_not_persisted_again;
+         "test_upgraded_config_is_not_persisted_again"
+         >:: test_upgraded_config_is_not_persisted_again;
        ]

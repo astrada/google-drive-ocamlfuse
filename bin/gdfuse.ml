@@ -171,7 +171,13 @@ let setup_application params =
   let config = config_resolution.ConfigRuntime.runtime_config in
   let persisted_config = config_resolution.ConfigRuntime.persisted_config in
   Utils.debug_buffers := config.Config.debug_buffers;
-  if config_resolution.ConfigRuntime.should_persist then
+  let should_persist_config =
+    (match config_store_result.load_state with
+    | ConfigStore.Created | ConfigStore.Migrated | ConfigStore.Upgraded -> true
+    | ConfigStore.Loaded -> false)
+    || config_resolution.ConfigRuntime.should_persist
+  in
+  if should_persist_config then
     Context.save_config_store
       (config_store |> Context.ConfigFileStore.data ^= persisted_config);
   let runtime_config_store =

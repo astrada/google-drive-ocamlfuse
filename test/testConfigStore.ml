@@ -109,8 +109,10 @@ let test_save_rotates_previous_version_to_bak () =
 let test_load_or_create_migrates_legacy_file () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
-      write_file path
-        "metadata_cache_time=61\nread_only=true\nclient_id=test-client\n";
+      let legacy_contents =
+        "metadata_cache_time=61\nread_only=true\nclient_id=test-client\n"
+      in
+      write_file path legacy_contents;
       let result = ConfigStore.load_or_create ~debug:false path in
       assert_equal ConfigStore.Migrated result.load_state;
       assert_equal ~printer:string_of_int 61
@@ -120,6 +122,21 @@ let test_load_or_create_migrates_legacy_file () =
       assert_equal
         ~printer:(fun x -> x)
         "test-client" result.store.data.Config.client_id;
+      assert_equal ~printer:(fun x -> x) legacy_contents (read_file path);
+      let backup_path = path ^ ".bak" in
+      assert_bool "Did not expect backup to exist before an explicit save"
+        (not (Sys.file_exists backup_path)))
+
+let test_save_after_migration_writes_toml_and_rotates_legacy_to_bak () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      let legacy_contents =
+        "metadata_cache_time=61\nread_only=true\nclient_id=test-client\n"
+      in
+      write_file path legacy_contents;
+      let result = ConfigStore.load_or_create ~debug:false path in
+      assert_equal ConfigStore.Migrated result.load_state;
+      ConfigStore.save result.store;
       let migrated_contents = read_file path in
       assert_contains "config_version = 1" migrated_contents;
       assert_contains "[mount]" migrated_contents;
@@ -128,10 +145,16 @@ let test_load_or_create_migrates_legacy_file () =
       assert_contains "[auth]" migrated_contents;
       assert_contains "client_id = \"test-client\"" migrated_contents;
       let backup_path = path ^ ".bak" in
-      assert_bool "Expected legacy backup to exist"
+      assert_bool "Expected legacy backup to exist after explicit save"
         (Sys.file_exists backup_path);
-      let backup_contents = read_file backup_path in
-      assert_contains "client_id=test-client" backup_contents)
+      assert_equal ~printer:(fun x -> x) legacy_contents (read_file backup_path))
+
+let test_load_or_create_missing_file_does_not_persist () =
+  with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config" in
+      let result = ConfigStore.load_or_create ~debug:false path in
+      assert_equal ConfigStore.Created result.load_state;
+      assert_equal ~printer:string_of_bool false (Sys.file_exists path))
 
 let test_legacy_missing_keys_fall_back_to_defaults () =
   with_temp_dir (fun dir ->
@@ -226,15 +249,14 @@ let test_grouped_toml_is_loaded () =
 let test_unversioned_toml_is_upgraded () =
   with_temp_dir (fun dir ->
       let path = Filename.concat dir "config" in
-      write_file path "[auth]\nclient_id = \"client\"\n";
+      let contents = "[auth]\nclient_id = \"client\"\n" in
+      write_file path contents;
       let result = ConfigStore.load_or_create ~debug:false path in
       assert_equal ConfigStore.Upgraded result.load_state;
       assert_equal
         ~printer:(fun x -> x)
         "client" result.store.data.Config.client_id;
-      let contents = read_file path in
-      assert_contains "config_version = 1" contents;
-      assert_contains "[auth]" contents)
+      assert_equal ~printer:(fun x -> x) contents (read_file path))
 
 let test_future_config_version_is_rejected () =
   with_temp_dir (fun dir ->
@@ -329,6 +351,10 @@ let suite =
          >:: test_save_rotates_previous_version_to_bak;
          "test_load_or_create_migrates_legacy_file"
          >:: test_load_or_create_migrates_legacy_file;
+         "test_save_after_migration_writes_toml_and_rotates_legacy_to_bak"
+         >:: test_save_after_migration_writes_toml_and_rotates_legacy_to_bak;
+         "test_load_or_create_missing_file_does_not_persist"
+         >:: test_load_or_create_missing_file_does_not_persist;
          "test_legacy_missing_keys_fall_back_to_defaults"
          >:: test_legacy_missing_keys_fall_back_to_defaults;
          "test_duplicate_legacy_keys_are_rejected"

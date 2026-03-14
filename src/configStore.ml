@@ -393,24 +393,23 @@ let save store =
     Sys.rename store.path backup_path);
   Sys.rename tmp_path store.path
 
+let default_data ~debug = if debug then Config.default_debug else Config.default
+
 let create_default ~debug ~path =
-  let data = if debug then Config.default_debug else Config.default in
+  let data = default_data ~debug in
   let store = { path; data } in
   save store;
   store
 
 let load_or_create ~debug path =
   if not (Sys.file_exists path) then
-    let store = create_default ~debug ~path in
+    let store = { path; data = default_data ~debug } in
     { store; load_state = Created }
   else
     match classify_file path with
     | `Toml ->
         let data, upgraded = load_toml path in
         let store = { path; data } in
-        if upgraded then save store;
         { store; load_state = (if upgraded then Upgraded else Loaded) }
     | `Legacy ->
-        let store = { path; data = load_legacy path } in
-        save store;
-        { store; load_state = Migrated }
+        { store = { path; data = load_legacy path }; load_state = Migrated }
