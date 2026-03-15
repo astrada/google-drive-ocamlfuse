@@ -1,3 +1,12 @@
+0.8.0
+=====
+This version introduces breaking changes:
+- The configuration format now is TOML. The old format migration is performed
+  automatically at startup. A backup file is kept in the config directory.
+- If compiled with OCaml 5 or later (e.g. since Ubuntu plucky 25.04), the
+  process is always kept in foreground (the `-f` option is always passed to
+  `libfuse`).
+
 0.7.32
 ======
 This version introduces a new command line option: `-port`, to specify a port for the embedded HTTP server, that will receive the verification code from Google during authorization. The default is 8080.

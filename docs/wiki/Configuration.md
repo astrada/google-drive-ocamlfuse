@@ -1,6 +1,6 @@
 By default the configuration file is first created in `~/.gdfuse/default/config` (or `~/.gdfuse/label/config` if a label was specified on the command line). If the program is launched with the `-xdgbd` flag, however, the file is instead created in `~/.config/gdfuse/default/config` or `~/.config/gdfuse/label/config`; see [Configuration path priority](#configuration-path-priority) for more details.
 
-Since version 0.7.33, the configuration format is TOML.
+Since version 0.8.0, the configuration format is TOML.
 
 Important behavior:
 

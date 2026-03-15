@@ -123,13 +123,14 @@ Create the mount point, if it doesn't exists:
 
     mkdir ~/GoogleDrive
 
-Then, you can mount the filesystem:
+Then, you can mount the filesystem (append `&` to the command, if you want to
+run it in background):
 
-    google-drive-ocamlfuse ~/GoogleDrive
+    google-drive-ocamlfuse ~/GoogleDrive &
 
 If you have more than one account, you can run:
 
-    google-drive-ocamlfuse -label [label] ~/GoogleDrive
+    google-drive-ocamlfuse -label [label] ~/GoogleDrive &
 
 Using `label` to distinguish different accounts. The program will use the
 directory `~/.gdfuse/[label]` to host the configuration, the application
