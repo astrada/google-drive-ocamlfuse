@@ -24,10 +24,10 @@ let get_config_store debug config_path =
   Utils.log_with_header "Loading configuration from %s..." config_path;
   let result = ConfigStore.load_or_create ~debug config_path in
   (match result.ConfigStore.load_state with
-  | ConfigStore.Created -> Utils.log_message "created.\n"
-  | ConfigStore.Migrated -> Utils.log_message "migrated.\n"
-  | ConfigStore.Upgraded -> Utils.log_message "upgraded.\n"
-  | ConfigStore.Loaded -> Utils.log_message "done\n");
+  | ConfigStore.Created -> Utils.log_message "created.\n%!"
+  | ConfigStore.Migrated -> Utils.log_message "migrated.\n%!"
+  | ConfigStore.Upgraded -> Utils.log_message "upgraded.\n%!"
+  | ConfigStore.Loaded -> Utils.log_message "done\n%!");
   result
 
 (* END Application configuration *)
@@ -173,8 +173,9 @@ let setup_application params =
   Utils.debug_buffers := config.Config.debug_buffers;
   let should_persist_config =
     (match config_store_result.load_state with
-    | ConfigStore.Created | ConfigStore.Migrated | ConfigStore.Upgraded -> true
-    | ConfigStore.Loaded -> false)
+      | ConfigStore.Created | ConfigStore.Migrated | ConfigStore.Upgraded ->
+          true
+      | ConfigStore.Loaded -> false)
     || config_resolution.ConfigRuntime.should_persist
   in
   if should_persist_config then
