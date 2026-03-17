@@ -171,14 +171,14 @@ let xattr_flags_to_string = function
 let start_browser browser url =
   let start_process browser =
     let command = Printf.sprintf "%s \"%s\"" browser url in
-    log_with_header "BEGIN: Starting web browser with command: %s\n" command;
+    log_with_header "BEGIN: Starting web browser with command: %s\n%!" command;
     let ch = Unix.open_process_in command in
     let status = Unix.close_process_in ch in
     if status = Unix.WEXITED 0 then (
-      log_with_header "END: Starting web browser with command: %s\n" command;
+      log_with_header "END: Starting web browser with command: %s\n%!" command;
       true)
     else (
-      log_with_header "FAIL: Starting web browser with command: %s\n" command;
+      log_with_header "FAIL: Starting web browser with command: %s\n%!" command;
       false)
   in
   let browsers =

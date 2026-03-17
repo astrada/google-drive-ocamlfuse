@@ -4,7 +4,6 @@ open GapiLens.Infix
 let default_fs_label = "default"
 let client_id = "564921029129.apps.googleusercontent.com"
 let redirect_uri = GaeProxy.gae_proxy_url ^ "/oauth2callback"
-let gae_proxy_mode = "gaeproxy"
 
 (* Authorization *)
 let get_authorization_url request_id =
@@ -190,6 +189,10 @@ let setup_application params =
   let service_account_credentials_path =
     config.Config.service_account_credentials_path
   in
+  let gae_proxy_refresh_access_token () =
+    GaeProxy.refresh_access_token ();
+    Context.get_ctx () |. Context.state_lens |. State.last_access_token
+  in
   let gapi_config =
     let gapi_config =
       Config.create_gapi_config config params.debug app_dir.AppDir.curl_log_path
@@ -197,19 +200,15 @@ let setup_application params =
     in
     if
       service_account_credentials_path = ""
-      && client_id = gae_proxy_mode
-      && client_secret = gae_proxy_mode
+      && client_id = GaeProxy.gae_proxy_mode
+      && client_secret = GaeProxy.gae_proxy_mode
     then
       let oauth2_config =
         match gapi_config |. GapiConfig.auth with
         | GapiConfig.OAuth2 oauth2 ->
             oauth2
             |> GapiConfig.refresh_access_token
-               ^= Some
-                    (fun () ->
-                      GaeProxy.refresh_access_token ();
-                      Context.get_ctx () |. Context.state_lens
-                      |. State.last_access_token)
+               ^= Some gae_proxy_refresh_access_token
         | _ -> assert false
       in
       gapi_config |> GapiConfig.auth ^= GapiConfig.OAuth2 oauth2_config
@@ -292,11 +291,13 @@ let setup_application params =
       Cache.setup_db cache;
       Utils.log_message "done\n...%!"))
   else DbCache.reset_clean_shutdown cache;
-  if config.Config.service_account_credentials_path = "" then
+  begin if config.Config.service_account_credentials_path = "" then
     let refresh_token = context |. Context.refresh_token_lens in
     if refresh_token = "" then
-      if client_id = gae_proxy_mode && client_secret = gae_proxy_mode then
-        get_auth_tokens_from_server ()
+      if
+        client_id = GaeProxy.gae_proxy_mode
+        && client_secret = GaeProxy.gae_proxy_mode
+      then get_auth_tokens_from_server ()
       else if client_id = "" || client_secret = "" then
         if device then
           failwith
@@ -313,6 +314,24 @@ let setup_application params =
     if config.Config.service_account_user_to_impersonate <> "" then
       Utils.log_message "Impersonating user: %s.\n%!"
         config.Config.service_account_user_to_impersonate)
+  end;
+  let refresh_access_token () =
+    if
+      client_id = GaeProxy.gae_proxy_mode
+      && client_secret = GaeProxy.gae_proxy_mode
+    then gae_proxy_refresh_access_token () |> ignore
+    else if config.Config.service_account_credentials_path = "" then
+      Oauth2.refresh_access_token () |> ignore
+    else ()
+  in
+  try refresh_access_token () with
+  | Oauth2.InvalidRefreshToken ->
+      prerr_endline "Invalid refresh token. Quitting.";
+      exit 1
+  | e ->
+      prerr_endline "Cannot refresh access token. Quitting.";
+      Printexc.to_string e |> prerr_endline;
+      exit 1
 
 (* END setup *)
 
@@ -340,6 +359,7 @@ let handle_exception e label param =
   | Unix.Unix_error _ as e ->
       Utils.log_exception e;
       raise e
+  | Oauth2.InvalidRefreshToken as e -> raise e
   | e ->
       Utils.log_exception e;
       raise (Unix.Unix_error (Unix.EIO, label, param))

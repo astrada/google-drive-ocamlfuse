@@ -3,6 +3,8 @@ open GapiLens.Infix
 open GapiMonad
 open GapiMonad.SessionM.Infix
 
+exception InvalidRefreshToken
+
 let scope = [ GapiDriveV2Service.Scope.drive ]
 
 (* Gapi request wrapper *)
@@ -66,9 +68,22 @@ let do_request go =
         else (
           Utils.log_with_header "Giving up\n%!";
           raise e)
+    | GapiOAuth2.InvalidGrant _ | GapiOAuth2.InvalidRequest _
+    | GapiOAuth2.DeletedClient _ ->
+        (* These errors indicate that the refresh token is no longer valid, so we should not retry. *)
+        Utils.log_with_header "Invalid refresh token\n%!";
+        raise InvalidRefreshToken
     | GapiRequest.Unauthorized _ | GapiRequest.RefreshTokenFailed _ ->
-        if n > 0 then
-          failwith "Cannot access resource: Refreshing token was not enough";
+        let context = Context.get_ctx () in
+        let config_lens = context |. Context.config_lens in
+        let client_id = config_lens |. Config.client_id in
+        let client_secret = config_lens |. Config.client_secret in
+        if
+          n > 0
+          || not
+               (client_id = GaeProxy.gae_proxy_mode
+               && client_secret = GaeProxy.gae_proxy_mode)
+        then failwith "Cannot access resource: Refreshing token was not enough";
         GaeProxy.refresh_access_token ();
         (* Retry with refreshed token *)
         try_request (n + 1)
@@ -190,3 +205,39 @@ let get_access_token headless device browser =
     prerr_endline "Cannot retrieve auth tokens.";
     Printexc.to_string e |> prerr_endline;
     exit 1
+
+let refresh_access_token () =
+  Utils.log_with_header "BEGIN: Refreshing access token\n%!";
+  let context = Context.get_ctx () in
+  let client_id = context |. Context.config_lens |. Config.client_id in
+  if client_id = GaeProxy.gae_proxy_mode || client_id = "" then
+    failwith "Cannot refresh access token: Client ID is not set";
+  let client_secret = context |. Context.config_lens |. Config.client_secret in
+  if client_secret = GaeProxy.gae_proxy_mode || client_secret = "" then
+    failwith "Cannot refresh access token: Client secret is not set";
+  let refresh_token = context |. Context.refresh_token_lens in
+  if refresh_token = "" then
+    failwith "Cannot refresh access token: No refresh token available";
+  let refresh_access_token =
+    GapiOAuth2.refresh_access_token ~client_id ~client_secret ~refresh_token
+  in
+  let response, _ = do_request refresh_access_token in
+  let oauth2_access_token_option =
+    response |. GapiAuthResponse.oauth2_access_token
+  in
+  let oauth2_access_token = oauth2_access_token_option |. GapiLens.option_get in
+  let access_token =
+    oauth2_access_token |. GapiAuthResponse.OAuth2.access_token
+  in
+  let access_token_date = GapiDate.now () in
+  let current_state = context |. Context.state_lens in
+  context
+  |> Context.state_lens
+     ^= {
+          current_state with
+          last_access_token = access_token;
+          access_token_date;
+        }
+  |> Context.save_state_from_context;
+  Utils.log_with_header "END: Refreshing access token\n%!";
+  access_token

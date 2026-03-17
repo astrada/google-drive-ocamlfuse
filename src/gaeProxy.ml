@@ -4,6 +4,7 @@ open GapiLens.Infix
 exception ServerError of string
 
 let gae_proxy_url = "https://gd-ocaml-auth.appspot.com"
+let gae_proxy_mode = "gaeproxy"
 
 let gae_proxy_request page query_string =
   let context = Context.get_ctx () in
@@ -83,6 +84,7 @@ let get_tokens () =
 
 let start_server_polling () =
   let rec loop n =
+    Utils.log_with_header "Polling for tokens from GAE proxy (attempt %d)\n%!" n;
     if n = 24 then failwith "Cannot retrieve auth tokens: Timeout expired";
     try
       get_tokens ();
@@ -94,7 +96,7 @@ let start_server_polling () =
   loop 0
 
 let refresh_access_token () =
-  Utils.log_with_header "BEGIN: Refreshing access token\n";
+  Utils.log_with_header "BEGIN: Refreshing access token\n%!";
   let context = Context.get_ctx () in
   let token = context |. Context.refresh_token_lens in
   let query_string =
@@ -118,4 +120,5 @@ let refresh_access_token () =
           State.last_access_token = get_string "access_token";
           access_token_date = get_string "refresh_date" |> GapiDate.of_string;
         }
-  |> Context.save_state_from_context
+  |> Context.save_state_from_context;
+  Utils.log_with_header "END: Refreshing access token\n%!"
