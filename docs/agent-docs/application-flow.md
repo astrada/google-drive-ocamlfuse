@@ -1,78 +1,68 @@
-# Application Flow (`bin/gdfuse.ml`)
+# Application Flow (`bin/gdfuse*.ml`)
 
 ## Purpose
 
-`bin/gdfuse.ml` is the executable entrypoint. It owns:
+The `gdfuse` executable is split across a small set of files under `bin/`:
 
-- CLI parsing
-- config/state/bootstrap sequencing
-- OAuth bootstrap and token refresh validation
-- installation of the global `Context`
-- registration of FUSE callbacks
-- process shutdown cleanup
+- `bin/gdfuse.ml`: top-level entrypoint and mode dispatch
+- `bin/gdfuseCli.ml`: CLI parsing and `application_params` construction
+- `bin/gdfuseSetup.ml`: config/state/bootstrap, auth, and `Context` setup
+- `bin/gdfuseFuse.ml`: FUSE callback wrappers and exception mapping
+- `bin/gdfuseShutdown.ml`: `at_exit` cleanup
+- `bin/gdfuseCommon.ml`: shared constants, request-id generation, config/state
+  helpers
 
-It does not implement the filesystem semantics itself. Almost every mounted
-filesystem operation is delegated to `Drive`.
+The executable does not implement filesystem semantics itself.
+Mounted operations are delegated to `Drive`.
 
 ## Flow At A Glance
 
-1. Parse CLI options and mount options.
+1. Parse CLI options and mount options in `GdfuseCli.parse`.
 2. If `-version` is set, print version information and exit.
-3. Build an `application_params` record from parsed refs.
-4. If no mountpoint was passed, run `setup_application` with `"."` only and
+3. Build an `application_params` record.
+4. If no mountpoint was passed, run `GdfuseSetup.setup_application` with `"."`
+   only and
    return.
-5. Otherwise run `setup_application`.
-6. Register `at_exit` cleanup.
-7. Enter `Fuse.main`.
+5. Otherwise run `GdfuseSetup.setup_application`.
+6. Register `GdfuseShutdown.shutdown` via `at_exit`.
+7. Enter `GdfuseFuse.start_filesystem`.
 8. Let FUSE callbacks forward requests to `Drive`.
 
 The "no mountpoint" branch is important: it performs setup and authorization
 without starting the FUSE loop. That is effectively a bootstrap/auth-only mode.
 
-## Main Program Structure
+## Module Responsibilities
 
-### CLI parsing
+### `bin/gdfuse.ml`
 
-The main block starts at [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L552).
+The entrypoint is intentionally thin:
 
-Key parsing behavior:
+- `quit_with_error`
+- `run_bootstrap_only`
+- `run_mount_mode`
+- `let () = ...` dispatch
 
-- `fuse_args` starts with `-obig_writes`.
-- `-debug` implies `Utils.verbose := true` and adds `-f`.
-- `-s` forces single-threaded FUSE and clears the app-level
-  `multi_threading` flag.
-- `-m` only affects the app-level `multi_threading` flag.
-- `-o` is split by commas in `parse_mount_options`.
-- `gdfroot=...` is treated specially and stored in `base_dir`.
-- all other `-o` entries are forwarded back into the FUSE argv.
+See [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L1).
 
-See:
+### `bin/gdfuseCli.ml`
 
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L578)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L598)
+`GdfuseCli.parse` owns all command-line key parsing behavior:
 
-### Dispatch after parsing
+- `fuse_args` starts with `-obig_writes`
+- `-debug` implies `Utils.verbose := true` and adds `-f`
+- `-s` forces single-threaded FUSE and clears app-level `multi_threading`
+- `-m` only affects app-level `multi_threading`
+- `-o` is split by commas
+- `gdfroot=...` is handled specially and stored in `base_dir`
+- all remaining mount options are forwarded into the FUSE argv
 
-After `Arg.parse`:
+See [bin/gdfuseCli.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseCli.ml#L15).
 
-- `quit` prints `Error: ...` and exits with code `1`.
-- `-version` prints `Config.version` and exits.
-- otherwise the code builds `application_params` and chooses one of two paths:
-  - no mountpoint: call `setup_application { params with mountpoint = "." }`
-  - mountpoint present: call `setup_application params`, register cleanup,
-    then call `start_filesystem`
+## `GdfuseSetup.setup_application`
 
-See:
-
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L678)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L684)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L718)
-
-## `setup_application`
-
-`setup_application` starts at
-[bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L92). It
-performs all runtime bootstrap before FUSE starts.
+`setup_application` lives in
+[bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L266).
+It performs all runtime bootstrap before FUSE starts.
 
 ### 1. Validate mountpoint
 
@@ -82,8 +72,8 @@ directory. Failure raises `Failure`, which is converted by the outer `try` into
 
 ### 2. Prepare the authorization helper
 
-`get_auth_tokens_from_server` is a nested helper used only for legacy
-GAE-proxy auth mode.
+`get_auth_tokens_from_server` is a top-level helper in `GdfuseSetup` and is
+used only for legacy GAE-proxy auth mode.
 
 Its sequence is:
 
@@ -100,7 +90,7 @@ request id is cleared from state before the process exits.
 
 See:
 
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L96)
+- [bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L8)
 
 ### 3. Resolve config location and load persisted config
 
@@ -118,10 +108,7 @@ At this point logging is fully switched to the configured destination.
 
 See:
 
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L123)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L129)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L132)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L138)
+- [bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L30)
 
 ### 4. Resolve runtime config and optionally persist upgrades
 
@@ -148,8 +135,7 @@ Then it stores the runtime-only config into the in-memory `Context` copy.
 
 See:
 
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L150)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L173)
+- [bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L59)
 
 ### 5. Build GAPI auth config
 
@@ -164,8 +150,8 @@ while the actual refresh behavior is replaced for this mode.
 
 See:
 
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L192)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L196)
+- [bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L103)
+- [bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L107)
 
 ### 6. Load state and initialize cache
 
@@ -185,10 +171,7 @@ State/cache bootstrap happens next:
 
 See:
 
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L217)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L221)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L235)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L251)
+- [bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L165)
 
 ### 7. Install global `Context`
 
@@ -212,8 +195,8 @@ context exists.
 
 See:
 
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L260)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L283)
+- [bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L186)
+- [bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L280)
 
 ### 8. Recover from dirty shutdown
 
@@ -229,7 +212,7 @@ This keeps stale metadata from surviving a crash or forced unmount.
 
 See:
 
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L284)
+- [bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L210)
 
 ### 9. Acquire credentials
 
@@ -256,13 +239,13 @@ If refresh fails, startup aborts immediately.
 
 See:
 
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L294)
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L318)
+- [bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L222)
+- [bin/gdfuseSetup.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseSetup.ml#L247)
 
 ## FUSE Boundary
 
-The FUSE adapter layer starts at
-[bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L338).
+The FUSE adapter layer lives in
+[bin/gdfuseFuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseFuse.ml#L1).
 
 ### Exception mapping
 
@@ -303,7 +286,7 @@ Two callbacks are effectively no-ops in this file and only log:
 
 ### Hand-off to `Fuse.main`
 
-`start_filesystem` builds the argv passed to FUSE as:
+`start_filesystem` in `GdfuseFuse` builds the argv passed to FUSE as:
 
 - executable name
 - accumulated `fuse_args`
@@ -313,12 +296,12 @@ Then it installs the callback table and enters `Fuse.main`.
 
 See:
 
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L511)
+- [bin/gdfuseFuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseFuse.ml#L172)
 
 ## Shutdown Flow
 
-The cleanup handler is registered only in the mounted-filesystem path, right
-before `start_filesystem`.
+The cleanup handler is registered only in the mounted-filesystem path in
+`bin/gdfuse.ml`, but the actual logic lives in `GdfuseShutdown.shutdown`.
 
 On process exit it:
 
@@ -334,28 +317,31 @@ On process exit it:
 
 See:
 
-- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L722)
+- [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L8)
+- [bin/gdfuseShutdown.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuseShutdown.ml#L62)
 
 ## Practical Reading Guide
 
 When changing startup behavior, read these sections in order:
 
 1. `let () =` main block
-2. `setup_application`
-3. `start_filesystem`
-4. `Drive.init_filesystem` in `src/drive.ml`
+2. `GdfuseCli.parse`
+3. `GdfuseSetup.setup_application`
+4. `GdfuseFuse.start_filesystem`
+5. `Drive.init_filesystem` in `src/drive.ml`
 
 When debugging auth issues, focus on:
 
 - `get_authorization_url`
 - `get_auth_tokens_from_server`
-- the credential branch inside `setup_application`
+- the credential branch inside `GdfuseSetup.setup_application`
 - `src/oauth2.ml`
 - `src/gaeProxy.ml`
 
 When debugging mount/runtime issues, focus on:
 
 - context creation in `setup_application`
+- shutdown behavior in `GdfuseShutdown`
 - dirty-shutdown recovery
 - `handle_exception`
 - the specific `Drive.*` callback being exercised
