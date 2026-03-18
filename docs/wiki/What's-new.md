@@ -3,9 +3,8 @@
 This version introduces breaking changes:
 - The configuration format now is TOML. The old format migration is performed
   automatically at startup. A backup file is kept in the config directory.
-- If compiled with OCaml 5 or later (e.g. since Ubuntu plucky 25.04), the
-  process is always kept in foreground (the `-f` option is always passed to
-  `libfuse`).
+- Now the process is always kept in foreground (the `-f` option is always
+  passed to `libfuse`).
 
 0.7.32
 ======

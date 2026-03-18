@@ -48,8 +48,12 @@ See [bin/gdfuse.ml](/home/alex/src/google-drive-ocamlfuse/bin/gdfuse.ml#L1).
 
 `GdfuseCli.parse` owns all command-line key parsing behavior:
 
-- `fuse_args` starts with `-obig_writes`
-- `-debug` implies `Utils.verbose := true` and adds `-f`
+- `fuse_args` starts with `-f` and `-obig_writes`
+- foreground mode is forced unconditionally
+- this is intentional: on OCaml 5+, calling `fork()` after `caml_main()` is not
+  safe, so the old daemonizing path should not be relied on
+- there is no separate `-f` CLI option anymore
+- `-debug` implies `Utils.verbose := true`
 - `-s` forces single-threaded FUSE and clears app-level `multi_threading`
 - `-m` only affects app-level `multi_threading`
 - `-o` is split by commas

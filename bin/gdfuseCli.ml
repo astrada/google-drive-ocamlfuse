@@ -15,7 +15,7 @@ let print_version () =
 let parse () =
   let fs_label = ref GdfuseCommon.default_fs_label in
   let mountpoint = ref "" in
-  let fuse_args = ref [ "-obig_writes" ] in
+  let fuse_args = ref [ "-f"; "-obig_writes" ] in
   let show_version = ref false in
   let debug = ref false in
   let client_id = ref "" in
@@ -68,9 +68,8 @@ let parse () =
           Arg.Unit
             (fun () ->
               debug := true;
-              Utils.verbose := true;
-              fuse_args := "-f" :: !fuse_args),
-          " enable debug mode (implies -verbose, -f). Default is false." );
+              Utils.verbose := true),
+          " enable debug mode (implies -verbose). Default is false." );
         ( "-label",
           Arg.Set_string fs_label,
           " use a specific label to identify the filesystem. Default is \
@@ -79,12 +78,9 @@ let parse () =
         ( "-secret",
           Arg.Set_string client_secret,
           " provide OAuth2 client secret." );
-        ( "-f",
-          Arg.Unit (fun _ -> fuse_args := "-f" :: !fuse_args),
-          " keep the process in foreground." );
         ( "-d",
           Arg.Unit (fun _ -> fuse_args := "-d" :: !fuse_args),
-          " enable FUSE debug output (implies -f)." );
+          " enable FUSE debug output." );
         ( "-m",
           Arg.Unit (fun _ -> multi_threading := true),
           " run in multi-threaded mode (default)." );
