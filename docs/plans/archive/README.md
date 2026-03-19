@@ -6,3 +6,6 @@
   execution checklist for implementing the TOML migration.
 - `gdfuse-readability-refactor/plan.md`: archived plan for splitting
   `bin/gdfuse.ml` into smaller helper modules and simplifying the entrypoint.
+- `gdfuse-flow-testing-refactor/plan.md`: archived plan for moving the
+  application flow into the library and making it unit testable with faked
+  external dependencies.

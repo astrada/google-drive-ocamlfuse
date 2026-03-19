@@ -12,7 +12,8 @@ let print_version () =
      License MIT\n"
     Config.version
 
-let parse () =
+let parse_argv argv =
+  let argv = if Array.length argv = 0 then [| "gdfuse" |] else argv in
   let fs_label = ref GdfuseCommon.default_fs_label in
   let mountpoint = ref "" in
   let fuse_args = ref [ "-f"; "-obig_writes" ] in
@@ -36,7 +37,7 @@ let parse () =
   let redirect_uri = ref "" in
   let device = ref false in
   let port = ref 8080 in
-  let program = Filename.basename Sys.executable_name in
+  let program = Filename.basename argv.(0) in
   let usage = Printf.sprintf "Usage: %s [options] [mountpoint]" program in
   let parse_mount_options opt_string =
     let opts = Str.split (Str.regexp " *, *") opt_string in
@@ -133,7 +134,7 @@ let parse () =
         ("-port", Arg.Set_int port, " set loopback port. Default is 8080.");
       ]
   in
-  Arg.parse arg_specs (fun s -> mountpoint := s) usage;
+  ignore (Arg.parse_argv ~current:(ref 0) argv arg_specs (fun s -> mountpoint := s) usage);
   let params =
     {
       GdfuseCommon.debug = !debug;
@@ -165,3 +166,5 @@ let parse () =
     params;
     fuse_args = !fuse_args;
   }
+
+let parse () = parse_argv Sys.argv

@@ -4,7 +4,8 @@
 
 For most changes, inspect these files first:
 
-- `bin/gdfuse.ml`
+- `src/gdfuseCli.ml`
+- `src/gdfuseFlow.ml`
 - `src/drive.ml`
 - `src/context.ml`
 - `src/cacheData.ml`
@@ -20,7 +21,10 @@ assumptions are risky.
 
 Edit:
 
-- `bin/gdfuse.ml`
+- `src/gdfuseCli.ml`
+- `src/gdfuseFlow.ml`
+- `bin/gdfuseRuntimeDeps.ml`
+- `bin/gdfuseFuse.ml`
 
 Typical examples:
 
@@ -28,12 +32,17 @@ Typical examples:
 - changing setup order
 - adjusting shutdown cleanup
 - changing which background threads start
+- changing how production side effects are wired into `GdfuseFlow.Make`
+
+Only edit `bin/gdfuse.ml` if the top-level executable dispatch itself changes.
 
 ### Config schema or defaults
 
 Edit:
 
 - `src/config.ml`
+- `src/configStore.ml`
+- `src/configRuntime.ml`
 - possibly `src/appDir.ml`
 - relevant wiki docs in `docs/wiki/Configuration.md`
 
@@ -42,9 +51,10 @@ Be careful to update:
 - record type
 - lenses
 - defaults
-- parsing from key/value store
+- TOML parsing/grouping in `ConfigStore`
 - serialization back to file
-- any runtime validation in `setup_application`
+- runtime validation in `Config.validate`
+- runtime override/persistence policy in `ConfigRuntime.resolve`
 
 ### Filesystem semantics
 
@@ -93,9 +103,11 @@ Check both queue persistence and the upload state machine.
 
 Edit:
 
+- `src/gdfuseFlow.ml`
 - `src/oauth2.ml`
 - `src/loopbackServer.ml`
 - `src/gaeProxy.ml`
+- `bin/gdfuseRuntimeDeps.ml`
 
 ## Practical Rules
 
@@ -134,7 +146,7 @@ that mapping usually break trash/shared behavior.
 ### Rule 4: Preserve error translation
 
 Internal exceptions like `File_not_found` and `Permission_denied` are part of
-the contract between `Drive` and the FUSE wrapper in `bin/gdfuse.ml`.
+the contract between `Drive` and the FUSE wrapper in `bin/gdfuseFuse.ml`.
 
 If you add a new failure path, either:
 
@@ -159,7 +171,8 @@ Relevant shutdown steps:
 
 ## What Exists
 
-- unit tests for buffering, buffer pool, thread pool, and utils
+- unit tests for buffering, buffer pool, thread pool, utils, config store,
+  config runtime, `gdfuse` CLI parsing, and `gdfuse` application flow
 
 ## What Does Not Exist
 
@@ -185,8 +198,10 @@ Manual testing matters for:
 ## Known Structural Constraints
 
 - `src/drive.ml` is large and central; many changes are cross-cutting.
-- The codebase relies on mutable global context instead of dependency
-  injection.
+- The codebase still relies on mutable global `Context` for runtime state.
+- Application startup/shutdown now has a narrow dependency-injection boundary
+  through `GdfuseFlow.Make`, but the rest of the filesystem path is still
+  largely concrete.
 - A lot of metadata is mirrored both in cache and in Drive app properties.
 - Threading is real; this is not a purely single-threaded FUSE wrapper.
 
@@ -196,8 +211,10 @@ Manual testing matters for:
 
 Read:
 
-- `bin/gdfuse.ml`
+- `src/gdfuseCli.ml`
+- `src/gdfuseFlow.ml`
 - `src/config.ml`
+- `src/configRuntime.ml`
 - `src/appDir.ml`
 
 ### Fixing wrong file metadata or directory listings
@@ -222,11 +239,13 @@ Read:
 
 Read:
 
+- `src/gdfuseFlow.ml`
 - `src/oauth2.ml`
 - `src/loopbackServer.ml`
 - `src/gaeProxy.ml`
 - `src/context.ml`
 - `src/state.ml`
+- `bin/gdfuseRuntimeDeps.ml`
 
 ### Fixing cache corruption / stale state bugs
 
@@ -236,4 +255,4 @@ Read:
 - `src/dbCache.ml`
 - `src/memoryCache.ml`
 - `src/cacheData.ml`
-- shutdown flow in `bin/gdfuse.ml`
+- shutdown flow in `src/gdfuseFlow.ml`

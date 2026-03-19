@@ -13,21 +13,39 @@ The executable mounts a FUSE filesystem whose operations are implemented in
 The design is stateful. A global `Context.t` stores the current config, state,
 cache handle, memory buffers, locks, and background threads.
 
+Startup/shutdown orchestration is library-visible in `src/gdfuseFlow.ml`.
+The executable in `bin/gdfuse.ml` is mostly a thin wrapper that parses CLI
+arguments, instantiates `GdfuseFlow.Make(GdfuseRuntimeDeps)`, and dispatches
+into bootstrap-only or mount mode.
+
 ## Runtime Boot Sequence
 
-Startup is driven by `bin/gdfuse.ml`:
+Startup is split across:
+
+- `src/gdfuseCli.ml`: CLI parsing
+- `src/gdfuseFlow.ml`: orchestration
+- `bin/gdfuseRuntimeDeps.ml`: production side-effect wiring
+- `bin/gdfuseFuse.ml`: FUSE callback registration
+
+The production boot sequence is:
 
 1. Parse CLI arguments.
-2. Resolve config path using `AppDir.get_config_path`.
-3. Load or create config and state files.
-4. Build application directories with `AppDir.create`.
-5. Open log output and initialize GAPI/CURL config.
-6. Create the cache handle with `Cache.create_cache`.
-7. Optionally clear cache or rebuild it on version mismatch / dirty shutdown.
-8. Initialize `Buffering.MemoryBuffers`.
-9. Populate and install global `Context`.
-10. Ensure OAuth credentials are available.
-11. Enter `Fuse.main`, with callbacks delegated to `Drive`.
+2. Instantiate `GdfuseFlow.Make(GdfuseRuntimeDeps)`.
+3. Resolve config path using `AppDir.get_config_path`.
+4. Load or create config and state files.
+5. Build application directories with `AppDir.create`.
+6. Open log output through injected system deps.
+7. Resolve runtime config and build GAPI/CURL config.
+8. Create the cache handle with injected cache deps.
+9. Optionally clear cache or rebuild it on version mismatch / dirty shutdown.
+10. Initialize `Buffering.MemoryBuffers`.
+11. Populate and install global `Context`.
+12. Ensure OAuth credentials are available.
+13. In mount mode, register shutdown through injected `register_exit`.
+14. Enter `Fuse.main`, with callbacks delegated to `Drive`.
+
+The no-mountpoint branch runs startup/auth/bootstrap without
+entering the FUSE loop.
 
 At FUSE init time, `Drive.init_filesystem` starts background services:
 
@@ -35,9 +53,10 @@ At FUSE init time, `Drive.init_filesystem` starts background services:
 - async upload thread pool, if enabled
 - background folder prefetching thread, if enabled
 
-Shutdown happens in `at_exit` in `bin/gdfuse.ml`, which stops threads, flushes
-cache state, marks clean shutdown in SQLite, performs CURL cleanup, and clears
-the global context.
+Shutdown logic lives in `GdfuseFlow.shutdown`, and the production executable
+registers it through `GdfuseRuntimeDeps.System.register_exit`. Shutdown
+stops threads, flushes cache state, marks clean shutdown in SQLite, performs
+CURL cleanup, and clears the global context.
 
 ## Persistent State Layout
 
@@ -136,7 +155,7 @@ Retry handling is split:
 - permanent API failures are mapped to repository-specific exceptions such as
   `File_not_found` or `Permission_denied`
 
-`bin/gdfuse.ml` converts those exceptions into Unix/FUSE errors.
+`bin/gdfuseFuse.ml` converts those exceptions into Unix/FUSE errors.
 
 ## Directory And Metadata Fetching
 
@@ -252,6 +271,26 @@ Main modules:
 - `src/gaeProxy.ml`
 
 The current default config enables OAuth loopback on port `8080`.
+
+The orchestration around those modes lives in `GdfuseFlow`, while the real
+browser/auth side effects are supplied by `GdfuseRuntimeDeps`.
+
+## Flow Testability
+
+The application flow is now unit testable from `test/` because it was moved
+from executable-private modules under `bin/` into library modules under `src/`.
+
+The testing approach is intentionally mixed:
+
+- real `AppDir`
+- real `ConfigStore`
+- real `Context.StateFileStore`
+- real in-memory `Context`
+- fake browser/auth/CURL/FUSE/`exit`/`at_exit` deps through
+  `GdfuseFlow.Make(FakeDeps)`
+
+This gives good coverage of startup/shutdown sequencing without requiring live
+Drive access or a mounted FUSE filesystem.
 
 ## Concurrency Model
 

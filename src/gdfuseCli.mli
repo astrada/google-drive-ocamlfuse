@@ -6,4 +6,5 @@ type parsed = {
 }
 
 val print_version : unit -> unit
+val parse_argv : string array -> parsed
 val parse : unit -> parsed

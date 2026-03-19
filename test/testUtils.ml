@@ -1,6 +1,15 @@
 open OUnit
 
 let with_temp_dir f =
+  let rec remove_path path =
+    if Sys.file_exists path then
+      match (Unix.lstat path).Unix.st_kind with
+      | Unix.S_DIR ->
+          Sys.readdir path
+          |> Array.iter (fun name -> remove_path (Filename.concat path name));
+          Unix.rmdir path
+      | _ -> Sys.remove path
+  in
   let rec make_dir n =
     let path =
       Filename.concat
@@ -13,13 +22,7 @@ let with_temp_dir f =
       path)
   in
   let dir = make_dir 0 in
-  let finally () =
-    if Sys.file_exists dir then
-      Array.iter
-        (fun name -> Sys.remove (Filename.concat dir name))
-        (Sys.readdir dir);
-    if Sys.file_exists dir then Unix.rmdir dir
-  in
+  let finally () = remove_path dir in
   Utils.try_finally (fun () -> f dir) finally
 
 let read_file path =

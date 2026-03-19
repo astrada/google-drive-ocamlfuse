@@ -10,14 +10,21 @@ The current implementation is split across:
 - `src/configRuntime.ml`
 - `src/config.ml`
 - `src/appDir.ml`
-- `bin/gdfuse.ml`
+- `src/gdfuseCommon.ml`
+- `src/gdfuseFlow.ml`
 
-The state file still uses the old key/value store. Only config moved to the new
-path.
+`bin/gdfuse.ml` is only a thin executable entrypoint.
+
+The state file uses the old key/value store through
+`Context.StateFileStore = KeyValueStore.MakeFileStore(State)` in
+`src/context.ml`. Only config moved to the TOML-backed `ConfigStore` path.
 
 ## Persistent Format
 
-The config filename remains `config`.
+The default config filename remains `config`.
+
+`AppDir.get_config_path` may still point startup at a custom path when `-config`
+is used.
 
 The persisted format is TOML, with:
 
@@ -59,22 +66,28 @@ new files are intentionally minimal.
 
 ## Load Pipeline
 
-At startup:
+At startup, `GdfuseFlow.setup_application` orchestrates config handling:
 
-1. `AppDir.get_config_path` resolves the path.
-2. `ConfigStore.load_or_create` decides whether the file is:
+1. `resolve_paths_and_logging` resolves the config path with
+   `AppDir.get_config_path`.
+2. `GdfuseCommon.get_config_store` wraps `ConfigStore.load_or_create`, which
+   classifies the file as:
    - missing
    - legacy `key=value`
    - TOML
-3. Legacy files are parsed, migrated to TOML, and rewritten.
-4. TOML files are parsed and optionally upgraded through explicit
-   `config_version` hooks.
-5. The resulting `Config.t` is passed into `ConfigRuntime.resolve`, which
-   computes:
+3. `ConfigStore` parses legacy or TOML input into `Config.t`, and reports a
+   `load_state` of `Created`, `Migrated`, `Upgraded`, or `Loaded`.
+4. `ConfigRuntime.resolve` computes:
    - `runtime_config`
    - `persisted_config`
    - `should_persist`
    - `clear_cache`
+5. `GdfuseFlow.resolve_runtime_config` decides whether to persist the config
+   store:
+   - always for `Created`, `Migrated`, or `Upgraded`
+   - also when `ConfigRuntime.should_persist` is true
+6. `GdfuseCommon.get_state_store` then loads or creates the separate key/value
+   `state` file used for OAuth tokens and the saved application version.
 
 ## Legacy Migration
 
@@ -86,7 +99,8 @@ Current migration behavior:
 - duplicate keys are rejected
 - unknown keys are rejected
 - missing keys fall back to defaults
-- successful migration rewrites the file as TOML
+- successful migration reports `load_state = Migrated`, and startup rewrites the
+  file as TOML during the normal config save step
 - the previous file is rotated to `config.bak`
 
 The old first-wins duplicate behavior is gone.
@@ -126,12 +140,15 @@ overwrite.
 
 ## Persistence Policy
 
-Config persistence policy is now encoded in `ConfigRuntime.resolve`.
+Config persistence policy is split between `ConfigRuntime.resolve` and
+`GdfuseFlow.resolve_runtime_config`.
 
 Important current rules:
 
 - `-id` and `-secret` persist
 - other CLI overrides are runtime-only
+- `Created`, `Migrated`, and `Upgraded` config loads force a save even if the
+  persisted values did not otherwise change
 - docs-mode changes affect runtime config and may request cache clear
 - normal startup does not rewrite the config file unless:
   - it was created
@@ -173,14 +190,20 @@ Current behavior:
 - `src/configStore.ml`
 - `src/configRuntime.ml`
 - `src/config.ml`
-- `bin/gdfuse.ml`
+- `src/gdfuseCommon.ml`
+- `src/gdfuseFlow.ml`
+- `src/context.ml`
 - `test/testConfigStore.ml`
 - `test/testConfigRuntime.ml`
+- `test/testGdfuseFlow.ml`
 
 ## Common Change Risks
 
 - adding a new config key but forgetting to register it in TOML grouping
 - adding a new key but forgetting `known_keys` validation coverage
-- changing CLI persistence policy in `gdfuse.ml` instead of `ConfigRuntime`
+- assuming `ConfigStore.load_or_create` writes the config file immediately when
+  it only reports `Created`/`Migrated`/`Upgraded`
+- changing CLI persistence policy in `GdfuseFlow.resolve_runtime_config`
+  instead of `ConfigRuntime.resolve`, or vice versa
 - changing save behavior and breaking comment preservation
 - changing versioned upgrade behavior without updating tests

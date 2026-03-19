@@ -6,6 +6,8 @@ let _ =
     >::: [
            TestConfigRuntime.suite;
            TestConfigStore.suite;
+           TestGdfuseCli.suite;
+           TestGdfuseFlow.suite;
            TestBuffering.suite;
            TestThreadPool.suite;
            TestBufferPool.suite;
