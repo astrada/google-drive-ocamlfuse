@@ -52,8 +52,8 @@ let generate_request_id () =
   Cryptokit.Random.string rng 32
   |> Utils.base64_encode
   |> ExtString.String.replace_chars (function
-       | '+' -> "-"
-       | c -> ExtString.String.of_char c)
+    | '+' -> "-"
+    | c -> ExtString.String.of_char c)
 
 let create_empty_state_store app_dir =
   let request_id = generate_request_id () in

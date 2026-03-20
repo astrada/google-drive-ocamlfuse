@@ -5,10 +5,7 @@ module System = struct
   let start_browser = Utils.start_browser
   let register_exit = at_exit
   let curl_init = GapiCurl.global_init
-
-  let curl_cleanup curl_state =
-    ignore (GapiCurl.global_cleanup curl_state)
-
+  let curl_cleanup curl_state = ignore (GapiCurl.global_cleanup curl_state)
   let exit = exit
 end
 

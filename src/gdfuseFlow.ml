@@ -36,8 +36,7 @@ end
 module Make (D : DEPS) = struct
   let validate_mountpoint mountpoint =
     if not (Sys.file_exists mountpoint && Sys.is_directory mountpoint) then
-      failwith
-        ("Mountpoint " ^ mountpoint ^ " should be an existing directory.")
+      failwith ("Mountpoint " ^ mountpoint ^ " should be an existing directory.")
 
   let get_auth_tokens_from_server params =
     let context = Context.get_ctx () in
@@ -96,7 +95,8 @@ module Make (D : DEPS) = struct
       params.filesystem_label;
     (config_store_result, config_store, current_config, app_dir, log_to)
 
-  let resolve_runtime_config params config_store_result config_store current_config =
+  let resolve_runtime_config params config_store_result config_store
+      current_config =
     let config_resolution =
       ConfigRuntime.resolve
         {
@@ -122,8 +122,9 @@ module Make (D : DEPS) = struct
     Utils.debug_buffers := config.Config.debug_buffers;
     let should_persist_config =
       (match config_store_result.ConfigStore.load_state with
-      | ConfigStore.Created | ConfigStore.Migrated | ConfigStore.Upgraded -> true
-      | ConfigStore.Loaded -> false)
+        | ConfigStore.Created | ConfigStore.Migrated | ConfigStore.Upgraded ->
+            true
+        | ConfigStore.Loaded -> false)
       || config_resolution.ConfigRuntime.should_persist
     in
     if should_persist_config then
@@ -135,7 +136,8 @@ module Make (D : DEPS) = struct
     Utils.max_retries := config.Config.max_retries;
     (config_resolution, config, runtime_config_store)
 
-  let is_gae_proxy_mode client_id client_secret service_account_credentials_path =
+  let is_gae_proxy_mode client_id client_secret service_account_credentials_path
+      =
     service_account_credentials_path = ""
     && client_id = GaeProxy.gae_proxy_mode
     && client_secret = GaeProxy.gae_proxy_mode
@@ -154,7 +156,8 @@ module Make (D : DEPS) = struct
     in
     let gapi_config =
       if
-        is_gae_proxy_mode client_id client_secret service_account_credentials_path
+        is_gae_proxy_mode client_id client_secret
+          service_account_credentials_path
       then
         let oauth2_config =
           match gapi_config |. GapiConfig.auth with
@@ -171,7 +174,8 @@ module Make (D : DEPS) = struct
 
   let resolve_clear_cache params config_resolution =
     if config_resolution.ConfigRuntime.clear_cache then (
-      Utils.log_message "Docs mode changed to %s%!\n" params.GdfuseCommon.docs_mode;
+      Utils.log_message "Docs mode changed to %s%!\n"
+        params.GdfuseCommon.docs_mode;
       true)
     else (
       Utils.log_message "Docs mode not changed!\n";
@@ -184,7 +188,8 @@ module Make (D : DEPS) = struct
     Utils.log_message "done\n%!";
     Printf.printf "done\n%!"
 
-  let update_state_for_version_mismatch clear_cache cache state_store saved_version =
+  let update_state_for_version_mismatch clear_cache cache state_store
+      saved_version =
     if saved_version <> Config.version then (
       Utils.log_message "Version mismatch (saved=%s, current=%s)%!\n"
         saved_version Config.version;
@@ -225,7 +230,7 @@ module Make (D : DEPS) = struct
   let build_context params app_dir runtime_config_store gapi_config state_store
       cache curl_state memory_buffers =
     {
-      Context.app_dir = app_dir;
+      Context.app_dir;
       config_store = runtime_config_store;
       gapi_config;
       state_store;
@@ -310,7 +315,8 @@ module Make (D : DEPS) = struct
       resolve_paths_and_logging params
     in
     let config_resolution, config, runtime_config_store =
-      resolve_runtime_config params config_store_result config_store current_config
+      resolve_runtime_config params config_store_result config_store
+        current_config
     in
     let gapi_config, client_id, client_secret =
       build_gapi_config params config app_dir log_to

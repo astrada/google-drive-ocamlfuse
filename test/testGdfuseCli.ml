@@ -1,7 +1,6 @@
 open OUnit
 
-let reset_cli_globals () =
-  Utils.verbose := false
+let reset_cli_globals () = Utils.verbose := false
 
 let with_clean_cli_globals f =
   Utils.try_finally
@@ -19,9 +18,7 @@ let test_parse_argv_forces_foreground () =
 
 let test_parse_argv_debug_sets_verbose_without_extra_f_flag () =
   with_clean_cli_globals (fun () ->
-      let parsed =
-        GdfuseCli.parse_argv [| "gdfuse"; "-debug"; "/tmp/mnt" |]
-      in
+      let parsed = GdfuseCli.parse_argv [| "gdfuse"; "-debug"; "/tmp/mnt" |] in
       assert_equal ~printer:(String.concat ",") [ "-f"; "-obig_writes" ]
         parsed.fuse_args;
       assert_equal ~printer:string_of_bool true !Utils.verbose;
@@ -33,8 +30,9 @@ let test_parse_argv_mount_options_extract_gdfroot () =
         GdfuseCli.parse_argv
           [| "gdfuse"; "-o"; "allow_other,gdfroot=/tmp/root"; "/tmp/mnt" |]
       in
-      assert_equal ~printer:(fun x -> x) "/tmp/root"
-        parsed.params.GdfuseCommon.base_dir;
+      assert_equal
+        ~printer:(fun x -> x)
+        "/tmp/root" parsed.params.GdfuseCommon.base_dir;
       assert_equal ~printer:(String.concat ",")
         [ "-oallow_other"; "-f"; "-obig_writes" ]
         parsed.fuse_args)

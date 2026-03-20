@@ -27,10 +27,10 @@ let handle_exception e label param =
       raise (Unix.Unix_error (Unix.EIO, label, param))
 
 let with_drive_op ?(log_exception = false) ~label ~param f =
-  try f () with
-  | e ->
-      if log_exception then Utils.log_exception e;
-      handle_exception e label param
+  try f ()
+  with e ->
+    if log_exception then Utils.log_exception e;
+    handle_exception e label param
 
 let drive_path_op ~name ?(label = name) path op =
   Utils.log_with_header "%s %s\n%!" name path;
@@ -45,7 +45,8 @@ let statfs path =
   Utils.log_with_header "statfs %s\n%!" path;
   with_drive_op ~log_exception:true ~label:"statfs" ~param:path Drive.statfs
 
-let getattr path = drive_path_op ~name:"getattr" ~label:"stat" path Drive.get_attr
+let getattr path =
+  drive_path_op ~name:"getattr" ~label:"stat" path Drive.get_attr
 
 let readdir path hnd =
   Utils.log_with_header "readdir %s %d\n%!" path hnd;
@@ -56,7 +57,8 @@ let readdir path hnd =
 
 let opendir path flags =
   Utils.log_with_header "opendir %s %s\n%!" path (Utils.flags_to_string flags);
-  with_drive_op ~label:"opendir" ~param:path (fun () -> Drive.opendir path flags)
+  with_drive_op ~label:"opendir" ~param:path (fun () ->
+      Drive.opendir path flags)
 
 let releasedir path flags _hnd =
   Utils.log_with_header "releasedir %s %s\n%!" path
@@ -84,8 +86,7 @@ let read path buf offset file_descr =
   in
   if !Utils.debug_buffers then
     Utils.log_buffer
-      (Printf.sprintf "read %s [%d bytes] %Ld %d" path buf_len offset
-         file_descr)
+      (Printf.sprintf "read %s [%d bytes] %Ld %d" path buf_len offset file_descr)
       buf result;
   result
 
@@ -114,7 +115,8 @@ let rmdir path = drive_path_op ~name:"rmdir" path Drive.rmdir
 
 let rename path new_path =
   Utils.log_with_header "rename %s %s\n%!" path new_path;
-  with_drive_op ~label:"rename" ~param:path (fun () -> Drive.rename path new_path)
+  with_drive_op ~label:"rename" ~param:path (fun () ->
+      Drive.rename path new_path)
 
 let truncate path size =
   Utils.log_with_header "truncate %s %Ld\n%!" path size;

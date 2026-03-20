@@ -9,7 +9,6 @@ module FakeDeps = struct
   let registered_exit = ref None
   let cache_clean_shutdown = ref true
   let invalid_refresh_token = ref false
-
   let record event = trace := !trace @ [ event ]
 
   module System = struct
@@ -17,8 +16,7 @@ module FakeDeps = struct
       record "open_log";
       stdout
 
-    let start_browser browser _url =
-      record ("start_browser:" ^ browser)
+    let start_browser browser _url = record ("start_browser:" ^ browser)
 
     let register_exit callback =
       record "register_exit";
@@ -34,10 +32,12 @@ module FakeDeps = struct
 
   module Auth = struct
     let gae_start_server_polling () = record "gae_poll"
-    let gae_refresh_access_token () = record "gae_refresh"; "fake-access-token"
 
-    let get_access_token _headless _device _browser =
-      record "get_access_token"
+    let gae_refresh_access_token () =
+      record "gae_refresh";
+      "fake-access-token"
+
+    let get_access_token _headless _device _browser = record "get_access_token"
 
     let refresh_access_token () =
       record "refresh_access_token";
@@ -143,7 +143,8 @@ let test_bootstrap_only_does_not_start_fuse () =
           Flow.run_bootstrap_only params;
           assert_bool "FUSE should not start in bootstrap-only mode"
             (List.for_all
-               (fun event -> not (String.starts_with ~prefix:"start_filesystem:" event))
+               (fun event ->
+                 not (String.starts_with ~prefix:"start_filesystem:" event))
                !FakeDeps.trace);
           assert_bool "Expected context to be initialized"
             (try
@@ -157,12 +158,20 @@ let test_mount_mode_registers_shutdown_and_starts_fuse () =
           let params = default_params ~base_dir:dir ~mountpoint:dir in
           Flow.run_mount_mode params [ "-f"; "-obig_writes" ];
           assert_bool "Expected shutdown callback to be registered"
-            (Option.is_some !(FakeDeps.registered_exit));
+            (Option.is_some !FakeDeps.registered_exit);
           assert_equal ~printer:(String.concat ";")
-            [ "open_log"; "create_cache"; "setup_db"; "curl_init";
-              "check_clean_shutdown"; "reset_clean_shutdown";
-              "get_access_token"; "refresh_access_token"; "register_exit";
-              "start_filesystem:" ^ dir ]
+            [
+              "open_log";
+              "create_cache";
+              "setup_db";
+              "curl_init";
+              "check_clean_shutdown";
+              "reset_clean_shutdown";
+              "get_access_token";
+              "refresh_access_token";
+              "register_exit";
+              "start_filesystem:" ^ dir;
+            ]
             !FakeDeps.trace))
 
 let test_existing_refresh_token_skips_interactive_auth () =
@@ -208,7 +217,9 @@ let test_version_mismatch_updates_state_and_cleans_cache () =
           write_state app_dir state;
           Flow.setup_application params;
           let updated_state = read_state app_dir in
-          assert_equal ~printer:(fun x -> x) Config.version
+          assert_equal
+            ~printer:(fun x -> x)
+            Config.version
             updated_state.Context.StateFileStore.data.State.saved_version;
           assert_bool "Expected cache cleanup on version mismatch"
             (List.mem "clean_up_cache" !FakeDeps.trace)))
@@ -226,8 +237,7 @@ let test_missing_credentials_fails () =
           assert_raises
             (Failure
                "You should specify a client id (-id) and a client secret \
-                (-secret)")
-            (fun () -> Flow.setup_application params)))
+                (-secret)") (fun () -> Flow.setup_application params)))
 
 let test_shutdown_flushes_and_cleans_up_in_order () =
   with_temp_dir (fun dir ->
@@ -242,7 +252,7 @@ let test_shutdown_flushes_and_cleans_up_in_order () =
           write_state app_dir state;
           Flow.run_mount_mode params [ "-f"; "-obig_writes" ];
           let shutdown =
-            match !(FakeDeps.registered_exit) with
+            match !FakeDeps.registered_exit with
             | Some callback -> callback
             | None -> failwith "Expected shutdown callback"
           in

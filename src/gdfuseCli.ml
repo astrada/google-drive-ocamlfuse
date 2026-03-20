@@ -134,7 +134,10 @@ let parse_argv argv =
         ("-port", Arg.Set_int port, " set loopback port. Default is 8080.");
       ]
   in
-  ignore (Arg.parse_argv ~current:(ref 0) argv arg_specs (fun s -> mountpoint := s) usage);
+  ignore
+    (Arg.parse_argv ~current:(ref 0) argv arg_specs
+       (fun s -> mountpoint := s)
+       usage);
   let params =
     {
       GdfuseCommon.debug = !debug;
