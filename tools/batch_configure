@@ -1,100 +1,532 @@
-#!/bin/bash
-# Author: boonedoggle
+#!/usr/bin/env python3
 
-display_usage() {
-    echo "Usage: update_config_all [options]"
-    echo "This script will update the parameters in every config file for ocamlfuse"
-    echo ""
-    echo -e "Program Options:"
-    echo -e "  -h                     Display this help message"
-    echo -e "  -d [gdfuse directory]  Path to .gdfuse (default=$GDFUSEPATH)"
-    echo -e "  -p [parameter]         Parameter to change"
-    echo -e "  -v [value]             Value to set (use \"\" for no setting). If no"
-    echo -e "                         -v paramter is passed, function will display"
-    echo -e "                         the current values. Note: passing no arguments"
-    echo -e "                         at all will display the all settings for all labels"
-    echo -e ""
-    echo "For parameter configuration, see the GitHub page:"
-    echo "    https://github.com/astrada/google-drive-ocamlfuse/wiki/Configuration"
-    }
+from __future__ import annotations
 
-check_current_setting() {
-    if [ ! -f "$1" ]; then
-        tput setaf 1
-        echo "    $1 file not found. Did you specify the correct .gdfuse directory?"
-        exit 1
-    fi
-    echo "Found label config file: $1"
-    PARAMETERFOUND=0
-    while read p; do
-        if echo "$p" | grep -q "$2"; then
-            PARAMETERFOUND=1
-            echo "    Current setting: $p"
-        fi
-    done <$1
-    if [ $PARAMETERFOUND -eq "0" ]; then
-        tput setaf 1
-        echo "    $2 parameter not found in configuration files. Exiting"
-        exit 1
-    fi
-    }
+import argparse
+import json
+import re
+import shutil
+import sys
+from pathlib import Path
 
-function set_config_val(){
-    # Change the value of the parameter using sed
-    sed -i "s/^\($2\s*=\s*\).*\$/\1$3/" $1
+CONFIG_NAME = "config"
+CACHE_DIR_NAME = "cache"
+LEGACY_LINE_RE = re.compile(r"^[A-Za-z0-9_]+=[A-Za-z0-9_./:@+-]*(?:0o[0-7]+)?$")
+SECTION_RE = re.compile(r"^\s*\[([A-Za-z0-9_]+)\]\s*(?:#.*)?$")
+
+GROUPS = {
+    "auth": [
+        "client_id",
+        "client_secret",
+        "verification_code",
+        "scope",
+        "redirect_uri",
+        "oauth2_loopback",
+        "oauth2_loopback_port",
+        "service_account_credentials_path",
+        "service_account_user_to_impersonate",
+    ],
+    "mount": [
+        "metadata_cache_time",
+        "read_only",
+        "umask",
+        "root_folder",
+        "team_drive_id",
+        "lost_and_found",
+        "disable_trash",
+        "delete_forever_in_trash_folder",
+        "keep_duplicates",
+        "mv_keep_target",
+    ],
+    "docs": [
+        "download_docs",
+        "docs_file_extension",
+        "document_format",
+        "drawing_format",
+        "form_format",
+        "presentation_format",
+        "spreadsheet_format",
+        "map_format",
+        "fusion_table_format",
+        "apps_script_format",
+        "document_icon",
+        "drawing_icon",
+        "form_icon",
+        "presentation_icon",
+        "spreadsheet_icon",
+        "map_icon",
+        "fusion_table_icon",
+        "apps_script_icon",
+        "desktop_entry_exec",
+        "desktop_entry_as_html",
+    ],
+    "cache": [
+        "max_cache_size_mb",
+        "metadata_memory_cache",
+        "metadata_memory_cache_saving_interval",
+        "sqlite3_busy_timeout",
+        "data_directory",
+        "cache_directory",
+        "log_directory",
+    ],
+    "io": [
+        "stream_large_files",
+        "large_file_threshold_mb",
+        "large_file_read_only",
+        "memory_buffer_size",
+        "max_memory_cache_size",
+        "read_ahead_buffers",
+        "write_buffers",
+        "max_upload_chunk_size",
+        "autodetect_mime",
+        "acknowledge_abuse",
+    ],
+    "network": [
+        "connect_timeout_ms",
+        "max_download_speed",
+        "max_upload_speed",
+        "low_speed_limit",
+        "low_speed_time",
+        "max_retries",
+        "curl_debug_off",
+    ],
+    "async": [
+        "async_upload_queue",
+        "async_upload_threads",
+        "async_upload_queue_max_length",
+        "background_folder_fetching",
+    ],
+    "logging": ["log_to", "debug_buffers"],
 }
 
-function check_if_to_proceed(){
-    # Make sure you want to proceed
-    echo ""
-    echo "You are about to change the setting in the above configuration file(s) to:"
-    echo "$PARAMETER=$VALUE"
-    echo ""
-    read -p "Do you want to proceed? [n] " yn
-    echo ""
-    yn=${yn:-"n"}
-    case $yn in
-        [Nn]* )
-            exit 1
-    esac
+BOOL_KEYS = {
+    "read_only",
+    "download_docs",
+    "keep_duplicates",
+    "docs_file_extension",
+    "curl_debug_off",
+    "delete_forever_in_trash_folder",
+    "stream_large_files",
+    "large_file_read_only",
+    "lost_and_found",
+    "metadata_memory_cache",
+    "acknowledge_abuse",
+    "write_buffers",
+    "disable_trash",
+    "autodetect_mime",
+    "mv_keep_target",
+    "async_upload_queue",
+    "debug_buffers",
+    "desktop_entry_as_html",
+    "background_folder_fetching",
+    "oauth2_loopback",
 }
 
-#####################################
-# Main
+INT_KEYS = {
+    "config_version",
+    "metadata_cache_time",
+    "sqlite3_busy_timeout",
+    "max_cache_size_mb",
+    "large_file_threshold_mb",
+    "connect_timeout_ms",
+    "low_speed_limit",
+    "low_speed_time",
+    "max_retries",
+    "max_upload_chunk_size",
+    "memory_buffer_size",
+    "max_memory_cache_size",
+    "read_ahead_buffers",
+    "metadata_memory_cache_saving_interval",
+    "async_upload_threads",
+    "async_upload_queue_max_length",
+    "oauth2_loopback_port",
+}
 
-GDFUSEPATH="$HOME/.gdfuse"  # Default path for .gdfuse
+STRINGIFIED_NUMERIC_KEYS = {"umask", "max_download_speed", "max_upload_speed"}
 
-# Parse input arguments
-while getopts "h:d:p:v:" opt; do
-    case $opt in
-        h|\? )  display_usage
-                exit 0 ;;
-        d )     GDFUSEPATH=$OPTARG ;;
-        p )     PARAMETER=$OPTARG ;;
-        v )     VALUE=$OPTARG ;;
-    esac
-done
+SECTION_BY_KEY = {"config_version": ""}
+TYPE_BY_KEY = {"config_version": "int"}
 
-# Get current values in all config files and display the values
-for label in $GDFUSEPATH/* ; do
-    CURRENTFILE="$label/config"
-    check_current_setting $CURRENTFILE $PARAMETER
-done
+for group_name, keys in GROUPS.items():
+    for key in keys:
+        SECTION_BY_KEY[key] = group_name
+        if key in BOOL_KEYS:
+            TYPE_BY_KEY[key] = "bool"
+        elif key in INT_KEYS:
+            TYPE_BY_KEY[key] = "int"
+        elif key in STRINGIFIED_NUMERIC_KEYS:
+            TYPE_BY_KEY[key] = "stringified_numeric"
+        else:
+            TYPE_BY_KEY[key] = "string"
 
-if [ -z "$VALUE" ]; then
-    exit 1
-fi
 
-# Let user read what they are about to change
-check_if_to_proceed
+def display_usage() -> None:
+    print("Usage: batch_configure [options]")
+    print("Update parameters in every google-drive-ocamlfuse config file.")
+    print("")
+    print("Program Options:")
+    print("  -h                     Display this help message")
+    print("  -d [gdfuse directory]  Path to .gdfuse (default=$HOME/.gdfuse)")
+    print("  -p [parameter]         Parameter to change or inspect")
+    print("  -v [value]             Value to set. Pass raw strings; TOML quoting is")
+    print(
+        '                         added automatically. Use -v "" to set empty string.'
+    )
+    print("")
+    print("With -p but no -v, the script displays the current persisted value in each")
+    print("config. With no -p and no -v, it displays all persisted settings.")
+    print("")
+    print("For parameter configuration, see the GitHub page:")
+    print("    https://github.com/astrada/google-drive-ocamlfuse/wiki/Configuration")
 
-# Change current values in all config files
-for label in $GDFUSEPATH/* ; do
-    CURRENTFILE="$label/config"
-    set_config_val $CURRENTFILE $PARAMETER $VALUE
-done
 
-# Clear cache
-google-drive-ocamlfuse -cc
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("-h", action="store_true")
+    parser.add_argument("-d", default=str(Path.home() / ".gdfuse"))
+    parser.add_argument("-p")
+    parser.add_argument("-v", default=None)
+    args = parser.parse_args(argv)
 
-echo "Parameters successfully changed and cache cleared"
+    if args.h:
+        display_usage()
+        sys.exit(0)
+
+    if args.v is not None and args.p is None:
+        print("A parameter name is required when -v is used.", file=sys.stderr)
+        sys.exit(1)
+
+    if args.p is not None and args.p not in SECTION_BY_KEY:
+        print(f"Unknown parameter: {args.p}", file=sys.stderr)
+        sys.exit(1)
+
+    return args
+
+
+def get_config_paths(base_path: str) -> list[Path]:
+    root = Path(base_path).expanduser()
+    if not root.exists():
+        print(
+            f"{root} not found. Did you specify the correct .gdfuse directory?",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    configs = sorted(path / CONFIG_NAME for path in root.iterdir() if path.is_dir())
+    if not configs:
+        print(f"No label directories found in {root}", file=sys.stderr)
+        sys.exit(1)
+    return configs
+
+
+def get_cache_paths(base_path: str) -> list[Path]:
+    root = Path(base_path).expanduser()
+    if not root.exists():
+        print(
+            f"{root} not found. Did you specify the correct .gdfuse directory?",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    caches = sorted(path / CACHE_DIR_NAME for path in root.iterdir() if path.is_dir())
+    if not caches:
+        print(f"No label directories found in {root}", file=sys.stderr)
+        sys.exit(1)
+    return caches
+
+
+def classify_file(lines: list[str]) -> str:
+    legacy_candidate = True
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("config_version"):
+            return "toml"
+        if line.startswith("#"):
+            legacy_candidate = False
+        elif not LEGACY_LINE_RE.fullmatch(line):
+            legacy_candidate = False
+    return "legacy" if legacy_candidate else "toml"
+
+
+def format_toml_value(parameter: str, raw_value: str) -> str:
+    value_type = TYPE_BY_KEY[parameter]
+    if value_type == "bool":
+        normalized = raw_value.strip().lower()
+        if normalized not in {"true", "false"}:
+            raise ValueError(f"{parameter} expects a boolean value: use true or false")
+        return normalized
+    if value_type == "int":
+        if not re.fullmatch(r"[+-]?\d+", raw_value.strip()):
+            raise ValueError(f"{parameter} expects an integer value")
+        return str(int(raw_value.strip()))
+    return json.dumps(raw_value)
+
+
+def detect_newline(lines: list[str]) -> str:
+    return "\r\n" if any(line.endswith("\r\n") for line in lines) else "\n"
+
+
+def find_parameter_line(lines: list[str], parameter: str, file_kind: str) -> str | None:
+    if file_kind == "legacy":
+        prefix = f"{parameter}="
+        for line in lines:
+            if line.strip().startswith(prefix):
+                return line.rstrip("\r\n")
+        return None
+
+    target_section = SECTION_BY_KEY[parameter]
+    current_section = None
+    for line in lines:
+        section_match = SECTION_RE.match(line)
+        if section_match:
+            current_section = section_match.group(1)
+            continue
+
+        key_match = re.match(r"^\s*([A-Za-z0-9_]+)\s*=", line)
+        if not key_match or key_match.group(1) != parameter:
+            continue
+
+        if target_section is None or current_section == target_section:
+            return line.rstrip("\r\n")
+    return None
+
+
+def show_all_settings(config_path: Path) -> None:
+    lines = config_path.read_text(encoding="utf-8").splitlines()
+    print(f"Found label config file: {config_path}")
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            print(f"    {line}")
+
+
+def show_current_setting(config_path: Path, parameter: str) -> None:
+    if not config_path.is_file():
+        print(
+            f"    {config_path} file not found. Did you specify the correct .gdfuse directory?",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    lines = config_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    setting = find_parameter_line(lines, parameter, classify_file(lines))
+    print(f"Found label config file: {config_path}")
+    if setting is None:
+        print("    Current setting: not set in file")
+    else:
+        print(f"    Current setting: {setting}")
+
+
+def update_legacy(lines: list[str], parameter: str, raw_value: str) -> list[str]:
+    updated = []
+    prefix = f"{parameter}="
+    replacement = f"{prefix}{raw_value}"
+    found = False
+    newline = detect_newline(lines)
+
+    for line in lines:
+        if line.strip().startswith(prefix):
+            updated.append(replacement + newline)
+            found = True
+        else:
+            updated.append(line)
+
+    if not found:
+        if updated and not updated[-1].endswith(("\n", "\r\n")):
+            updated[-1] += newline
+        updated.append(replacement + newline)
+
+    return updated
+
+
+def update_toml(lines: list[str], parameter: str, raw_value: str) -> list[str]:
+    rendered_value = format_toml_value(parameter, raw_value)
+    target_section = SECTION_BY_KEY[parameter]
+    newline = detect_newline(lines)
+    replacement = f"{parameter} = {rendered_value}{newline}"
+
+    if target_section is None:
+        first_section = next(
+            (index for index, line in enumerate(lines) if SECTION_RE.match(line)),
+            len(lines),
+        )
+        for index in range(first_section):
+            if re.match(rf"^\s*{re.escape(parameter)}\s*=", lines[index]):
+                lines[index] = replacement
+                return lines
+        insertion = [replacement]
+        if (
+            first_section < len(lines)
+            and first_section > 0
+            and lines[first_section - 1].strip()
+        ):
+            insertion.append(newline)
+        return lines[:first_section] + insertion + lines[first_section:]
+
+    current_section = None
+    section_start = None
+    section_end = None
+    key_index = None
+
+    for index, line in enumerate(lines):
+        section_match = SECTION_RE.match(line)
+        if section_match:
+            if current_section == target_section and section_end is None:
+                section_end = index
+            current_section = section_match.group(1)
+            if current_section == target_section and section_start is None:
+                section_start = index
+            continue
+
+        key_match = re.match(r"^\s*([A-Za-z0-9_]+)\s*=", line)
+        if (
+            current_section == target_section
+            and key_match
+            and key_match.group(1) == parameter
+        ):
+            key_index = index
+            break
+
+    if current_section == target_section and section_end is None:
+        section_end = len(lines)
+
+    if key_index is not None:
+        lines[key_index] = replacement
+        return lines
+
+    if section_start is not None and section_end is not None:
+        insert_at = section_end
+        return lines[:insert_at] + [replacement] + lines[insert_at:]
+
+    appended = list(lines)
+    if appended and appended[-1].strip():
+        appended.append(newline)
+    appended.append(f"[{target_section}]{newline}")
+    appended.append(replacement)
+    return appended
+
+
+def update_config(config_path: Path, parameter: str, raw_value: str) -> None:
+    if not config_path.is_file():
+        print(
+            f"    {config_path} file not found. Did you specify the correct .gdfuse directory?",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    lines = config_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    original_lines = list(lines)
+    is_legacy = classify_file(lines) == "legacy"
+    print(
+        f"Updating {config_path} (detected format: {'legacy' if is_legacy else 'TOML'}): setting {parameter} to {raw_value}"
+    )
+    updated_lines = (
+        update_legacy(lines, parameter, raw_value)
+        if is_legacy
+        else update_toml(lines, parameter, raw_value)
+    )
+    if updated_lines == original_lines:
+        return
+
+    backup_path = config_path.with_name(f"{config_path.name}~")
+    shutil.copy2(config_path, backup_path)
+    config_path.write_text("".join(updated_lines), encoding="utf-8")
+
+
+def confirm_change(parameter: str, value: str) -> None:
+    print("")
+    print("You are about to change the setting in the above configuration file(s) to:")
+    print(f"{parameter}={value}")
+    print("")
+    answer = input("Do you want to proceed? [n] ").strip() or "n"
+    print("")
+    if answer.lower().startswith("n"):
+        sys.exit(1)
+
+
+def confirm_clear_cache() -> None:
+    print("")
+    print("You are about to clear the cache in all directories.")
+    print("")
+    answer = input("Do you want to proceed? [n] ").strip() or "n"
+    print("")
+    if answer.lower().startswith("n"):
+        sys.exit(1)
+
+
+def clear_cache(cache_path: Path) -> bool:
+    if not cache_path.is_dir():
+        print(
+            f"{cache_path} directory not found. Did you specify the correct .gdfuse directory?",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    for path in cache_path.iterdir():
+        if path.is_file():
+            path.unlink()
+        elif path.is_dir():
+            shutil.rmtree(path)
+    return True
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    config_paths = get_config_paths(args.d)
+
+    if args.p is None:
+        for config_path in config_paths:
+            if not config_path.is_file():
+                print(
+                    f"    {config_path} file not found. Did you specify the correct .gdfuse directory?",
+                    file=sys.stderr,
+                )
+                return 1
+            show_all_settings(config_path)
+        return 0
+
+    for config_path in config_paths:
+        show_current_setting(config_path, args.p)
+
+    if args.v is None:
+        return 0
+
+    try:
+        if any(
+            classify_file(config_path.read_text(encoding="utf-8").splitlines())
+            == "toml"
+            for config_path in config_paths
+        ):
+            format_toml_value(args.p, args.v)
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 1
+
+    confirm_change(args.p, args.v)
+
+    try:
+        for config_path in config_paths:
+            update_config(config_path, args.p, args.v)
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 1
+
+    print("Parameters successfully changed")
+
+    confirm_clear_cache()
+
+    cache_paths = get_cache_paths(args.d)
+
+    for cache_path in cache_paths:
+        cache_cleared = clear_cache(cache_path)
+        if cache_cleared:
+            print(f"Cache cleared in {cache_path}")
+        else:
+            print(f"Failed to clear cache in {cache_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -7,3 +7,7 @@ _build
 
 _config.yml
 
+__pycache__
+*.pyc
+*.pyo
+*.pyd
