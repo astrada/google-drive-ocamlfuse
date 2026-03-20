@@ -65,17 +65,23 @@ How to build
 
 ### Requirements
 
-* [OCaml][] >= 4.02.3
-* [Findlib][] >= 1.2.7
-* [ocamlfuse][] >= 2.7.1
-* [gapi-ocaml][] >= 0.3.6
+* [OCaml][] >= 4.08.3
+* [dune][] >= 2.0.0
+* [ocamlfuse][] >= 2.7.2
+* [gapi-ocaml][] >= 0.4.9
 * [sqlite3-ocaml][] >= 1.6.1
+* [tiny_httpd] >= 0.10
+* [otoml] >= 1.0.1
+* [ounit] >= 2.0.0
 
-[OCaml]: http://caml.inria.fr/ocaml/release.en.html
-[Findlib]: http://projects.camlcity.org/projects/findlib.html/
+[OCaml]: https://ocaml.org/
+[dune]: https://dune.build/
 [ocamlfuse]: https://github.com/astrada/ocamlfuse
 [gapi-ocaml]: https://github.com/astrada/gapi-ocaml
 [sqlite3-ocaml]: https://mmottl.github.io/sqlite3-ocaml/
+[tiny_httpd]: https://github.com/c-cube/tiny_httpd/
+[otoml]: https://github.com/dmbaturin/otoml
+[ounit]: https://github.com/gildor478/ounit
 
 ### Configuration and installation
 

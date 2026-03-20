@@ -7,7 +7,7 @@ There is a way to automount the filesystem at boot, although it's not very strai
 ```bash
 #!/bin/bash
 
-su $USERNAME -l -c "google-drive-ocamlfuse -label $1 $*"
+su $USERNAME -l -c "google-drive-ocamlfuse -label $1 $* &"
 exit 0
 ```
 
@@ -153,7 +153,7 @@ Create a shell script `gdfuse` in `/usr/local/bin/` (as root) with the following
 
     #!/bin/bash
     
-    google-drive-ocamlfuse -label $1 $*
+    google-drive-ocamlfuse -label $1 $* &
 
 And make it executable:
 
@@ -169,7 +169,7 @@ Now log out and back in again and your Google Drive should be mounted on `~/Goog
 
 By inserting the following line into ~/.profile the shell will test whether something has already been mounted on your target mountpoint, and if not, will execute the mount.
 
-    $ mount | grep "${HOME}/GoogleDrive" >/dev/null || /usr/bin/google-drive-ocamlfuse "${HOME}/GoogleDrive"&
+    $ mount | grep "${HOME}/GoogleDrive" >/dev/null || /usr/bin/google-drive-ocamlfuse "${HOME}/GoogleDrive" &
 
 # Mount when using WiFi
 
@@ -184,7 +184,8 @@ while true; do
   # check to see if there is a connection by pinging a Google server
   if ping -q -c 1 -W 1 8.8.8.8 >/dev/null; then
     # if connected, mount the drive and break the loop
-    google-drive-ocamlfuse /home/username/GoogleDrive; break;
+    google-drive-ocamlfuse /home/username/GoogleDrive &
+    break
   else
     # if not connected, wait for one second and then check again
     sleep 1
