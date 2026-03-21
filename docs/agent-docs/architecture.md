@@ -163,6 +163,9 @@ Retry handling is split:
 Open-time file access validation lives in `Drive.fopen`; see
 `docs/agent-docs/drive-fopen.md`.
 
+Path-level stat synthesis lives in `Drive.get_attr`; see
+`docs/agent-docs/drive-get-attr.md`.
+
 ## Directory And Metadata Fetching
 
 `Drive.read_dir` is the main listing path.

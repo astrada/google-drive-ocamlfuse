@@ -309,6 +309,10 @@ Creation choices here directly affect later behavior:
 - both are surfaced through `readlink`
 - shortcuts are presented as symlink-like objects in attribute handling
 
+See `docs/agent-docs/drive-get-attr.md` for how that later attribute handling
+turns these cached shapes into visible `st_kind`, `st_size`, and permission
+results.
+
 So the symlink-versus-shortcut decision is not just an implementation detail. It
 changes how later lookup and `readlink` reconstruction work.
 
