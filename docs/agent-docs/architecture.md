@@ -53,6 +53,9 @@ At FUSE init time, `Drive.init_filesystem` starts background services:
 - async upload thread pool, if enabled
 - background folder prefetching thread, if enabled
 
+See `docs/agent-docs/drive-init-filesystem.md` for the detailed control flow
+and lifecycle notes.
+
 Shutdown logic lives in `GdfuseFlow.shutdown`, and the production executable
 registers it through `GdfuseRuntimeDeps.System.register_exit`. Shutdown
 stops threads, flushes cache state, marks clean shutdown in SQLite, performs
