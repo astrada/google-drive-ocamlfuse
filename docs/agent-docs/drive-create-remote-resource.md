@@ -313,6 +313,9 @@ See `docs/agent-docs/drive-get-attr.md` for how that later attribute handling
 turns these cached shapes into visible `st_kind`, `st_size`, and permission
 results.
 
+See `docs/agent-docs/drive-read-link.md` for the sibling read-side path that
+returns the actual target string.
+
 So the symlink-versus-shortcut decision is not just an implementation detail. It
 changes how later lookup and `readlink` reconstruction work.
 

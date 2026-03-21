@@ -373,6 +373,9 @@ That is why:
 See `docs/agent-docs/drive-create-remote-resource.md` for how those resource
 shapes are created in the first place.
 
+See `docs/agent-docs/drive-read-link.md` for the sibling path that returns the
+full target string instead of using it only for attribute synthesis.
+
 ## Maintenance Notes
 
 ### `getattr` Can Materialize Content

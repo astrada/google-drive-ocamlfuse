@@ -21,9 +21,10 @@ Read these files in order:
 14. `drive-truncate.md` for local size mutation and signed cache-size updates
 15. `drive-fopen.md` for open-time access validation and write-permission checks
 16. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
-17. `application-flow.md`
-18. `workflows.md`
-19. `config-file-handling.md` for config-format and parser refactors
+17. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
+18. `application-flow.md`
+19. `workflows.md`
+20. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in
