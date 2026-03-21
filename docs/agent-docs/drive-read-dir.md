@@ -92,6 +92,9 @@ enough to use. For well-known roots, `get_resource` synthesizes cache entries:
 - `lost+found`
 - `.shared`
 
+See `docs/agent-docs/drive-get-resource.md` for the full path-resolution
+contract.
+
 After that, `read_dir` chooses one of three query strategies.
 
 ### 1. `lost+found`
