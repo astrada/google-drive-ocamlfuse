@@ -196,6 +196,9 @@ The path is:
 
 Buffered streaming is handled by `Buffering.MemoryBuffers`.
 
+See `docs/agent-docs/drive-download-resource.md` for the state machine and
+local-file materialization path behind the non-streaming branch.
+
 ## Write Path
 
 `Drive.write` always works against the local cached file first.
@@ -217,6 +220,9 @@ Upload is not performed on every `write`. It is triggered by:
 - `release`
 
 all of which call `upload_if_dirty`.
+
+See `docs/agent-docs/drive-download-resource.md` for the helper that ensures the
+local cache file exists before write-side mutation begins.
 
 ## Upload Path
 

@@ -72,6 +72,9 @@ Two nuances matter:
 2. `with_retry download_resource resource`
 3. write to either memory buffers or the cache file
 
+See `docs/agent-docs/drive-download-resource.md` for the lock/state logic behind
+that "ensure local content exists" step.
+
 After the local write, it marks the resource dirty:
 
 - if the write extended the file, it updates `size` and `state = ToUpload`

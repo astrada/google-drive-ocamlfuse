@@ -15,9 +15,10 @@ Read these files in order:
 8. `drive-create-remote-resource.md` for file/folder/symlink creation semantics
 9. `drive-rename.md` for move/rename semantics and cache surgery
 10. `drive-update-remote-resource.md` for shared metadata-mutation and delete flow
-11. `application-flow.md`
-12. `workflows.md`
-13. `config-file-handling.md` for config-format and parser refactors
+11. `drive-download-resource.md` for local content materialization and reuse
+12. `application-flow.md`
+13. `workflows.md`
+14. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in
