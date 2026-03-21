@@ -2071,7 +2071,7 @@ let default_save_resource_to_db cache resource file =
 
 let update_remote_resource path ?update_file_in_cache
     ?(save_to_db = default_save_resource_to_db)
-    ?(purge_cache = fun cache resource -> ()) do_remote_update retry_update =
+    ?(purge_cache = fun cache resource -> ()) do_remote_update =
   let context = Context.get_ctx () in
   let cache = context.Context.cache in
   let config = context |. Context.config_lens in
@@ -2122,7 +2122,7 @@ let utime path atime mtime =
     update_remote_resource
       ~update_file_in_cache:(fun content_path ->
         Unix.utimes content_path atime mtime)
-      path touch touch
+      path touch
   in
   do_request update |> ignore
 
@@ -2565,7 +2565,7 @@ let trash_resource is_folder trashed path =
         Cache.Resource.trash_all_with_parent_path cache path_in_cache;
         Utils.log_with_header "END: Trashing folder old content (path=%s)\n%!"
           path_in_cache))
-    path trash trash
+    path trash
 
 (* Permanently delete resources *)
 let delete_resource is_folder path =
@@ -2599,7 +2599,7 @@ let delete_resource is_folder path =
           "END: Deleting folder old content (path=%s, trashed=%b) from cache\n\
            %!"
           path_in_cache trashed))
-    path delete delete
+    path delete
 
 let delete_remote_resource is_folder path =
   let context = Context.get_ctx () in
@@ -2794,8 +2794,7 @@ let rename path new_path =
       if Option.is_some renamed_file then SessionM.return renamed_file
       else SessionM.return moved_file
     in
-    update_remote_resource path move rename_file
-      ~save_to_db:(fun cache resource file ->
+    update_remote_resource path move ~save_to_db:(fun cache resource file ->
         let is_file_replaced =
           resource.CacheData.Resource.remote_id <> Some file.File.id
         in
@@ -2917,7 +2916,7 @@ let chmod path mode =
         remote_id mode;
       SessionM.return (Some patched_file)
     in
-    update_remote_resource path chmod chmod
+    update_remote_resource path chmod
   in
   do_request update |> ignore
 
@@ -2959,7 +2958,7 @@ let chown path uid gid =
         gid;
       SessionM.return (Some patched_file)
     in
-    update_remote_resource path chown chown
+    update_remote_resource path chown
   in
   do_request update |> ignore
 
@@ -3019,7 +3018,7 @@ let set_xattr path name value xflags =
         (Utils.xattr_flags_to_string xflags);
       SessionM.return (Some patched_file)
     in
-    update_remote_resource path setxattr setxattr
+    update_remote_resource path setxattr
   in
   do_request update |> ignore
 
@@ -3068,7 +3067,7 @@ let remove_xattr path name =
         remote_id name;
       SessionM.return (Some patched_file)
     in
-    update_remote_resource path removexattr removexattr
+    update_remote_resource path removexattr
   in
   do_request update |> ignore
 

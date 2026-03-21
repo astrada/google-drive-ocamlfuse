@@ -230,7 +230,6 @@ val update_remote_resource :
     (CacheData.t -> CacheData.Resource.t -> GapiDriveV3Model.File.t -> unit) ->
   ?purge_cache:(CacheData.t -> CacheData.Resource.t -> unit) ->
   (CacheData.Resource.t -> GapiDriveV3Model.File.t option GapiMonad.SessionM.m) ->
-  'a ->
   unit GapiMonad.SessionM.m
 
 val utime : string -> float -> float -> unit
