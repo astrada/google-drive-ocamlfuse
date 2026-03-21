@@ -169,6 +169,9 @@ Path-level stat synthesis lives in `Drive.get_attr`; see
 Symlink-target reads live in `Drive.read_link`; see
 `docs/agent-docs/drive-read-link.md`.
 
+Delete requests flow through `Drive.delete_remote_resource`; see
+`docs/agent-docs/drive-delete-remote-resource.md`.
+
 ## Directory And Metadata Fetching
 
 `Drive.read_dir` is the main listing path.

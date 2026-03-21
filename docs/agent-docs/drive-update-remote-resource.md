@@ -29,6 +29,10 @@ See `docs/agent-docs/drive-upload-path.md` for content uploads and
 `docs/agent-docs/drive-rename.md` for the rename-specific cache logic built on
 top of this wrapper.
 
+See `docs/agent-docs/drive-delete-remote-resource.md` for the higher-level
+policy wrapper that decides when deletion requests reach `trash_resource` versus
+`delete_resource`.
+
 ## Signature
 
 ```ocaml

@@ -22,9 +22,10 @@ Read these files in order:
 15. `drive-fopen.md` for open-time access validation and write-permission checks
 16. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
 17. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
-18. `application-flow.md`
-19. `workflows.md`
-20. `config-file-handling.md` for config-format and parser refactors
+18. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
+19. `application-flow.md`
+20. `workflows.md`
+21. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in
