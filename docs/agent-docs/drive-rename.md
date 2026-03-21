@@ -234,6 +234,9 @@ no-op.
 
 `rename` runs its remote work through `update_remote_resource`.
 
+See `docs/agent-docs/drive-update-remote-resource.md` for the full wrapper
+contract and the other call-site patterns that reuse it.
+
 That shared helper already provides:
 
 - source-path resolution through `get_resource`
