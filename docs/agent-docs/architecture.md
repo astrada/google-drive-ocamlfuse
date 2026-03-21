@@ -256,6 +256,8 @@ It must handle:
 When working on rename behavior, read that function end-to-end before editing.
 It combines remote Drive operations with local cache surgery.
 
+See `docs/agent-docs/drive-rename.md` for the detailed branch structure.
+
 ## OAuth Modes
 
 OAuth support is broader than a simple browser flow:
