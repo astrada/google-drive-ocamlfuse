@@ -94,6 +94,9 @@ local cache usage.
 - change the local file size
 - set `size` and `state = ToUpload`
 
+See `docs/agent-docs/drive-truncate.md` for the exact ordering, including the
+signed cache-size delta and the metadata-before-`truncate(2)` update order.
+
 ### Rename-Replace Special Case
 
 There is one rename flow where replacing a target file's content copies the

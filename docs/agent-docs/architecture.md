@@ -217,6 +217,9 @@ The path is:
 See `docs/agent-docs/drive-write.md` for the detailed write-side control flow
 and the buffered-vs-direct local write split.
 
+See `docs/agent-docs/drive-truncate.md` for the sibling size-mutation path that
+flushes buffers, updates cached length, and reuses the same upload lifecycle.
+
 Upload is not performed on every `write`. It is triggered by:
 
 - `flush`

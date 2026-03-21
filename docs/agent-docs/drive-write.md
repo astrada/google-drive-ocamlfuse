@@ -279,3 +279,5 @@ buffers, not necessarily already present in the cache file.
 
 It does not shrink the file, and it does not recompute size from disk. Shrinks
 are handled by `truncate`, not by overwrite writes.
+
+See `docs/agent-docs/drive-truncate.md` for the dedicated size-mutation path.

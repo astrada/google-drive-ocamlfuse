@@ -18,9 +18,10 @@ Read these files in order:
 11. `drive-download-resource.md` for local content materialization and reuse
 12. `drive-read.md` for stream-vs-cache read policy and read-ahead behavior
 13. `drive-write.md` for local mutation, dirty-state updates, and write buffers
-14. `application-flow.md`
-15. `workflows.md`
-16. `config-file-handling.md` for config-format and parser refactors
+14. `drive-truncate.md` for local size mutation and signed cache-size updates
+15. `application-flow.md`
+16. `workflows.md`
+17. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in
