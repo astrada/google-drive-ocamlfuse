@@ -162,6 +162,8 @@ place where delete/trash correctness is implemented.
 
 See `docs/agent-docs/drive-update-remote-resource.md` for the shared mutation
 wrapper that both helpers use under the hood.
+See `docs/agent-docs/drive-check-if-empty.md` for the folder-emptiness guard
+those helpers both rely on before removing directories.
 
 ## Folder Behavior Is Selected Up Front
 

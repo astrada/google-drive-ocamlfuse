@@ -23,9 +23,10 @@ Read these files in order:
 16. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
 17. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
 18. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
-19. `application-flow.md`
-20. `workflows.md`
-21. `config-file-handling.md` for config-format and parser refactors
+19. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
+20. `application-flow.md`
+21. `workflows.md`
+22. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in
