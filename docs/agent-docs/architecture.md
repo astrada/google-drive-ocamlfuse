@@ -160,6 +160,9 @@ Retry handling is split:
 
 `bin/gdfuseFuse.ml` converts those exceptions into Unix/FUSE errors.
 
+Open-time file access validation lives in `Drive.fopen`; see
+`docs/agent-docs/drive-fopen.md`.
+
 ## Directory And Metadata Fetching
 
 `Drive.read_dir` is the main listing path.

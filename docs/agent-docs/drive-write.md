@@ -52,6 +52,8 @@ Those checks happen earlier in `Drive.fopen` for non-read-only opens:
 So `write` should be understood as the data path that runs after the open path
 has already accepted the write-capable access mode.
 
+See `docs/agent-docs/drive-fopen.md` for the exact open-time access rules.
+
 ## High-Level Flow
 
 At a high level, `write` does this:

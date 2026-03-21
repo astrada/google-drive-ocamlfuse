@@ -257,6 +257,9 @@ outside this function, typically through the filesystem/open layer.
 That is an implementation fact worth remembering if write-access rules are ever
 tightened or refactored.
 
+See `docs/agent-docs/drive-fopen.md` for the open-time access gate this path
+currently relies on.
+
 ## Maintenance Notes
 
 ### Dirty Buffered Writes Must Reach Disk First
