@@ -19,6 +19,9 @@ It is not the same as:
 Those update other parts of Drive state, but they do not go through this
 content-upload pipeline.
 
+See `docs/agent-docs/drive-create-remote-resource.md` for the remote-creation
+side of the lifecycle.
+
 ## Scope In The Write Lifecycle
 
 The content-upload path starts only after some earlier operation has made a file
