@@ -70,6 +70,9 @@ let metadata_last_update =
 - it applies change-feed updates to cached resources
 - if the change set is too large, it invalidates all resources
 
+See `docs/agent-docs/drive-get-metadata.md` for the full metadata-refresh and
+change-reconciliation flow.
+
 So by the time `get_resource` performs its path lookup, the resource cache may
 already have been updated, invalidated, or had paths removed.
 
