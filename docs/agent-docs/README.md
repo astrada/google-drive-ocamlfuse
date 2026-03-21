@@ -16,9 +16,10 @@ Read these files in order:
 9. `drive-rename.md` for move/rename semantics and cache surgery
 10. `drive-update-remote-resource.md` for shared metadata-mutation and delete flow
 11. `drive-download-resource.md` for local content materialization and reuse
-12. `application-flow.md`
-13. `workflows.md`
-14. `config-file-handling.md` for config-format and parser refactors
+12. `drive-read.md` for stream-vs-cache read policy and read-ahead behavior
+13. `application-flow.md`
+14. `workflows.md`
+15. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in

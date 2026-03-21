@@ -25,6 +25,9 @@ It is distinct from the streaming read path:
 - `stream_resource` reads byte ranges directly into the FUSE buffer
 - `download_resource` materializes or validates a full local cache file
 
+See `docs/agent-docs/drive-read.md` for the top-level `Drive.read` policy that
+decides when this helper is used instead of streaming.
+
 ## Signature And Return Value
 
 ```ocaml

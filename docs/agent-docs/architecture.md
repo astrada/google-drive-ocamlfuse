@@ -196,8 +196,9 @@ The path is:
 
 Buffered streaming is handled by `Buffering.MemoryBuffers`.
 
-See `docs/agent-docs/drive-download-resource.md` for the state machine and
-local-file materialization path behind the non-streaming branch.
+See `docs/agent-docs/drive-read.md` for the top-level branch selection, and
+`docs/agent-docs/drive-download-resource.md` for the non-streaming
+materialization path behind the local-file branch.
 
 ## Write Path
 
