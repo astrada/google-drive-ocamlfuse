@@ -273,6 +273,9 @@ local cache file path instead of remote range streaming.
 This preserves read-your-own-write behavior even when
 `config.stream_large_files = true`.
 
+See `docs/agent-docs/drive-write.md` for the producer-side path that marks
+resources dirty and feeds this rule.
+
 ## Maintenance Notes
 
 ### `read` Resolves The Resource Twice When Read-Ahead Is Enabled

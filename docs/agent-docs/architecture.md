@@ -214,6 +214,9 @@ The path is:
 4. Update cached size if needed.
 5. Mark resource state as `ToUpload`.
 
+See `docs/agent-docs/drive-write.md` for the detailed write-side control flow
+and the buffered-vs-direct local write split.
+
 Upload is not performed on every `write`. It is triggered by:
 
 - `flush`
