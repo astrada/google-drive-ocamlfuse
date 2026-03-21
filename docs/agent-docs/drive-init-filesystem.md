@@ -116,6 +116,8 @@ This is why `Drive.init_filesystem` passes `upload_resource_by_id` instead of
 letting `UploadQueue` talk directly to Drive internals: queue scheduling lives
 in `UploadQueue`, but resource upload behavior still lives in `Drive`.
 
+See `docs/agent-docs/drive-upload-path.md` for the end-to-end upload lifecycle.
+
 ### 3. Background folder prefetching
 
 If `config.background_folder_fetching = true`, the function starts a background

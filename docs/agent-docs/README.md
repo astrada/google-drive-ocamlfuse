@@ -11,9 +11,10 @@ Read these files in order:
 4. `drive-read-dir.md` for directory listing, cache refresh, and virtual roots
 5. `drive-get-resource.md` for path resolution and negative-cache behavior
 6. `drive-get-metadata.md` for freshness boundaries and change-feed replay
-7. `application-flow.md`
-8. `workflows.md`
-9. `config-file-handling.md` for config-format and parser refactors
+7. `drive-upload-path.md` for dirty-state, dispatch, and content upload flow
+8. `application-flow.md`
+9. `workflows.md`
+10. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in
