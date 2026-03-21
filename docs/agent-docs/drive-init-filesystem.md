@@ -151,6 +151,8 @@ Calling `read_dir` does the expensive part:
 So this thread is best understood as opportunistic metadata warming for folder
 trees.
 
+See `docs/agent-docs/drive-read-dir.md` for the directory-refresh details.
+
 ## Config Knobs
 
 `Drive.init_filesystem` is controlled by these runtime config fields:

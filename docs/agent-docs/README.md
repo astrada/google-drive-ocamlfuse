@@ -8,9 +8,10 @@ Read these files in order:
 1. `repo-map.md`
 2. `architecture.md`
 3. `drive-init-filesystem.md` for the first FUSE filesystem implementation note
-4. `application-flow.md`
-5. `workflows.md`
-6. `config-file-handling.md` for config-format and parser refactors
+4. `drive-read-dir.md` for directory listing, cache refresh, and virtual roots
+5. `application-flow.md`
+6. `workflows.md`
+7. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in
