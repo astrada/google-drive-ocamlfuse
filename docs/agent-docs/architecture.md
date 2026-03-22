@@ -169,6 +169,9 @@ Path-level stat synthesis lives in `Drive.get_attr`; see
 Symlink-target reads live in `Drive.read_link`; see
 `docs/agent-docs/drive-read-link.md`.
 
+Symlink creation requests enter through `Drive.symlink`; see
+`docs/agent-docs/drive-symlink.md`.
+
 Extended-attribute handling lives in the xattr paths in `Drive`; see
 `docs/agent-docs/drive-xattr.md`.
 

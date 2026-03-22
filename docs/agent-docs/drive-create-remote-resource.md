@@ -28,6 +28,9 @@ let symlink target linkpath =
   create_remote_resource ~link_target:target false linkpath 0o777
 ```
 
+See `docs/agent-docs/drive-symlink.md` for the thin FUSE-facing wrapper that
+delegates into this helper.
+
 So the parameter roles are:
 
 - `is_folder = true` for `mkdir`
