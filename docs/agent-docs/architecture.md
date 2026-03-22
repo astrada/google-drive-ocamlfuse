@@ -325,6 +325,9 @@ See `docs/agent-docs/thread-pool-add-work.md` for the generic worker-pool
 boundary that waits for capacity, starts one thread, and releases worker slots
 even when a worker raises.
 
+See `docs/agent-docs/thread-pool-pending-threads.md` for the observable worker
+count that the async-upload shutdown path logs before joining workers.
+
 See `docs/agent-docs/thread-pool-shutdown.md` for the generic join step used
 after queue draining to wait for still-running workers.
 

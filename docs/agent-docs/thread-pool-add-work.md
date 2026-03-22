@@ -202,6 +202,9 @@ not:
 
 - queued-but-not-started jobs
 
+See `docs/agent-docs/thread-pool-pending-threads.md` for the helper-focused
+view of that count.
+
 ## Relationship To `shutdown`
 
 `ThreadPool.shutdown` later does:
@@ -267,6 +270,7 @@ It only handles capacity gating, worker creation, and worker-slot cleanup.
 ## Related Docs
 
 - `docs/agent-docs/thread-pool-create.md`
+- `docs/agent-docs/thread-pool-pending-threads.md`
 - `docs/agent-docs/thread-pool-shutdown.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`

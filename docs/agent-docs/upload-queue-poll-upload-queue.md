@@ -211,6 +211,9 @@ worker thread itself has fully completed and been joined.
 See `docs/agent-docs/thread-pool-shutdown.md` for the generic join-side
 behavior of `ThreadPool.shutdown`.
 
+See `docs/agent-docs/thread-pool-pending-threads.md` for the generic meaning of
+the count logged immediately before that join step.
+
 ## Interaction With Worker-Pool Saturation
 
 `poll_upload_queue` itself calls `upload_resource cache`, and that helper may
@@ -258,6 +261,7 @@ It only paces and terminates the async upload poll thread.
 - `docs/agent-docs/upload-queue-stop-async-upload-thread.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`
 - `docs/agent-docs/thread-pool-add-work.md`
+- `docs/agent-docs/thread-pool-pending-threads.md`
 - `docs/agent-docs/thread-pool-shutdown.md`
 - `docs/agent-docs/drive-upload-resource-by-id.md`
 - `docs/agent-docs/drive-upload-path.md`

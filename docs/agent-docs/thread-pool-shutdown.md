@@ -116,6 +116,9 @@ immediately before calling:
 ThreadPool.shutdown d.thread_pool
 ```
 
+See `docs/agent-docs/thread-pool-pending-threads.md` for the helper-focused
+view of that count and what it actually measures.
+
 ## Relationship To `UploadQueue.poll_upload_queue`
 
 The main production caller is the shutdown tail of:
@@ -185,6 +188,7 @@ It only joins the threads currently registered in the pool.
 
 - `docs/agent-docs/thread-pool-create.md`
 - `docs/agent-docs/thread-pool-add-work.md`
+- `docs/agent-docs/thread-pool-pending-threads.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`
 - `docs/agent-docs/upload-queue-start-async-upload-thread.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`
