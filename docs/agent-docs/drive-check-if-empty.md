@@ -74,6 +74,9 @@ This is why the higher-level delete wrapper can pass a simple caller-provided
 `is_folder` bit instead of forcing every delete path to re-inspect the resource
 kind here.
 
+See `docs/agent-docs/drive-unlink-rmdir.md` for the thin public wrappers that
+originate that bit at the FUSE boundary.
+
 ## The Remote Query
 
 For folders, the helper builds:

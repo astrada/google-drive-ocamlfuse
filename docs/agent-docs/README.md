@@ -26,9 +26,10 @@ Read these files in order:
 19. `drive-xattr.md` for extended-attribute storage, reads, and mutations
 20. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
 21. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
-22. `application-flow.md`
-23. `workflows.md`
-24. `config-file-handling.md` for config-format and parser refactors
+22. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
+23. `application-flow.md`
+24. `workflows.md`
+25. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in

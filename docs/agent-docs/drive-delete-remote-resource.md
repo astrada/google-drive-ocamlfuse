@@ -37,6 +37,9 @@ let rmdir path = delete_remote_resource true path
 So `delete_remote_resource` is the shared path-level layer, while
 `unlink`/`rmdir` only provide the folder/non-folder intent.
 
+See `docs/agent-docs/drive-unlink-rmdir.md` for the thin FUSE-facing wrappers
+and why that caller-provided `is_folder` bit matters.
+
 At the FUSE boundary, `bin/gdfuseFuse.ml` wires:
 
 ```ocaml

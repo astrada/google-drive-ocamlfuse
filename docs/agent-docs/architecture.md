@@ -175,7 +175,10 @@ Symlink creation requests enter through `Drive.symlink`; see
 Extended-attribute handling lives in the xattr paths in `Drive`; see
 `docs/agent-docs/drive-xattr.md`.
 
-Delete requests flow through `Drive.delete_remote_resource`; see
+Visible delete requests enter through `Drive.unlink` / `Drive.rmdir`; see
+`docs/agent-docs/drive-unlink-rmdir.md`.
+
+Delete policy then flows through `Drive.delete_remote_resource`; see
 `docs/agent-docs/drive-delete-remote-resource.md`.
 
 ## Directory And Metadata Fetching
