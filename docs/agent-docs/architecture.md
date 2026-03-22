@@ -166,6 +166,9 @@ Open-time file access validation lives in `Drive.fopen`; see
 Path-level stat synthesis lives in `Drive.get_attr`; see
 `docs/agent-docs/drive-get-attr.md`.
 
+Regular file and folder creation requests enter through `Drive.mknod` /
+`Drive.mkdir`; see `docs/agent-docs/drive-mknod-mkdir.md`.
+
 Symlink-target reads live in `Drive.read_link`; see
 `docs/agent-docs/drive-read-link.md`.
 

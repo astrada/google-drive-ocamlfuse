@@ -22,14 +22,15 @@ Read these files in order:
 15. `drive-fopen.md` for open-time access validation and write-permission checks
 16. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
 17. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
-18. `drive-symlink.md` for the FUSE symlink entrypoint and create-link delegation
-19. `drive-xattr.md` for extended-attribute storage, reads, and mutations
-20. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
-21. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
-22. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
-23. `application-flow.md`
-24. `workflows.md`
-25. `config-file-handling.md` for config-format and parser refactors
+18. `drive-mknod-mkdir.md` for the thin file/folder creation entrypoints over `create_remote_resource`
+19. `drive-symlink.md` for the FUSE symlink entrypoint and create-link delegation
+20. `drive-xattr.md` for extended-attribute storage, reads, and mutations
+21. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
+22. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
+23. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
+24. `application-flow.md`
+25. `workflows.md`
+26. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in
