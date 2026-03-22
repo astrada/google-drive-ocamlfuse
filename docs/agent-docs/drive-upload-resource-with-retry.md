@@ -117,6 +117,9 @@ That deeper helper handles the real upload work:
 So `upload_resource_with_retry` should be read as a wrapper around `upload`, not
 as the place where the upload request itself is built.
 
+See `docs/agent-docs/drive-upload.md` for the actual upload attempt and cache
+reconciliation logic.
+
 See `docs/agent-docs/drive-upload-path.md` for the actual `upload` behavior.
 
 ## Step 3: Error Normalization Through `try_with_default`

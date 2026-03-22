@@ -297,6 +297,9 @@ The function then:
 7. marks the resource `Synchronized` if it is still in `Uploading`
 8. runs `shrink_cache ()`
 
+See `docs/agent-docs/drive-upload.md` for the helper-focused view of this
+actual network operation and its post-upload cache reconciliation rules.
+
 ### MIME Type Selection
 
 If `config.autodetect_mime = true`, the content type is passed as `""`, letting
