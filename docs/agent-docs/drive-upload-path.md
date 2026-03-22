@@ -241,6 +241,9 @@ The async flow is:
 So async mode changes when the upload happens, but not which Drive upload logic
 ultimately runs.
 
+See `docs/agent-docs/drive-upload-resource-by-id.md` for the helper-focused
+view of the worker callback that reloads the queued resource row by cache id.
+
 ## The Actual Upload: `upload_resource_with_retry`
 
 `upload_resource_with_retry resource` is the narrow wrapper around the real

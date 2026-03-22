@@ -219,6 +219,9 @@ So if async uploads and direct synchronous uploads behave differently, compare:
 Once both paths enter `upload_resource_with_retry`, they share the same flush,
 normalization, and retry behavior.
 
+See `docs/agent-docs/drive-upload-resource-by-id.md` for the helper-focused
+view of that worker-side cache lookup and `do_request` handoff.
+
 ## Relationship To `queue_upload`
 
 `queue_upload` is the upstream dispatcher that decides whether this helper runs

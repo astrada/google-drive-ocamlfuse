@@ -164,6 +164,9 @@ not as:
 
 - "implement the queue mechanics itself"
 
+See `docs/agent-docs/drive-upload-resource-by-id.md` for the worker-side
+callback that the async queue eventually invokes after entry selection.
+
 ## Relationship To Resource State
 
 One subtle but important point is that `queue_upload` does not itself change the
@@ -250,6 +253,7 @@ resource.
 ## Related Docs
 
 - `docs/agent-docs/drive-upload-with-retry.md`
+- `docs/agent-docs/drive-upload-resource-by-id.md`
 - `docs/agent-docs/drive-upload-path.md`
 - `docs/agent-docs/drive-flush-fsync-release.md`
 - `docs/agent-docs/drive-rename.md`

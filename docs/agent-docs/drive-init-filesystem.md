@@ -117,6 +117,9 @@ letting `UploadQueue` talk directly to Drive internals: queue scheduling lives
 in `UploadQueue`, but resource upload behavior still lives in `Drive`.
 
 See `docs/agent-docs/drive-upload-path.md` for the end-to-end upload lifecycle.
+See `docs/agent-docs/drive-upload-resource-by-id.md` for the worker-side
+callback that reloads queued resources by cache id before entering the normal
+upload wrapper.
 See `docs/agent-docs/drive-upload-resource-with-retry.md` for the common upload
 wrapper that the async worker eventually enters.
 

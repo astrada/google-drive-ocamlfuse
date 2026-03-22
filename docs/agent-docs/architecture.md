@@ -278,8 +278,8 @@ local cache file exists before write-side mutation begins.
 
 ## Upload Path
 
-Upload logic lives in `Drive.upload`, `Drive.queue_upload`, and
-`UploadQueue`.
+Upload logic lives in `Drive.upload`, `Drive.queue_upload`,
+`Drive.upload_resource_by_id`, and `UploadQueue`.
 
 The file-level entrypoints that trigger this path are `Drive.flush`,
 `Drive.fsync`, and `Drive.release`; see
@@ -300,6 +300,9 @@ Shared behavior:
 
 The async path persists queue entries in cache, then a background thread polls
 the queue and hands work to `ThreadPool`.
+
+See `docs/agent-docs/drive-upload-resource-by-id.md` for the worker-side
+bridge from queue entries back into the normal request/session upload path.
 
 ## Rename / Move Semantics
 
