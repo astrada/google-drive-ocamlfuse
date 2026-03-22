@@ -4,6 +4,10 @@
 
 `Drive.read_dir` implements directory listing for the mounted filesystem.
 
+Its open-time sibling is `Drive.opendir`, which only validates that the path
+resolves and does not itself list children; see
+`docs/agent-docs/drive-opendir.md`.
+
 At the FUSE boundary, `bin/gdfuseFuse.ml` calls it from the `readdir`
 callback, then prepends `"."` and `".."` to the returned list. So
 `Drive.read_dir` itself returns only the directory's child names.

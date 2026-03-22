@@ -163,6 +163,9 @@ Retry handling is split:
 Open-time file access validation lives in `Drive.fopen`; see
 `docs/agent-docs/drive-fopen.md`.
 
+Directory-open validation lives in `Drive.opendir`; see
+`docs/agent-docs/drive-opendir.md`.
+
 Metadata-only `utime` / `chmod` / `chown` requests enter through thin wrappers
 over `Drive.update_remote_resource`; see
 `docs/agent-docs/drive-chmod-chown-utime.md`.

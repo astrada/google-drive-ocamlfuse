@@ -22,17 +22,18 @@ Read these files in order:
 15. `drive-truncate.md` for local size mutation and signed cache-size updates
 16. `drive-flush-fsync-release.md` for the file-close/sync callbacks that trigger upload dispatch
 17. `drive-fopen.md` for open-time access validation and write-permission checks
-18. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
-19. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
-20. `drive-mknod-mkdir.md` for the thin file/folder creation entrypoints over `create_remote_resource`
-21. `drive-symlink.md` for the FUSE symlink entrypoint and create-link delegation
-22. `drive-xattr.md` for extended-attribute storage, reads, and mutations
-23. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
-24. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
-25. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
-26. `application-flow.md`
-27. `workflows.md`
-28. `config-file-handling.md` for config-format and parser refactors
+18. `drive-opendir.md` for directory-open validation and its lookup-only contract
+19. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
+20. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
+21. `drive-mknod-mkdir.md` for the thin file/folder creation entrypoints over `create_remote_resource`
+22. `drive-symlink.md` for the FUSE symlink entrypoint and create-link delegation
+23. `drive-xattr.md` for extended-attribute storage, reads, and mutations
+24. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
+25. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
+26. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
+27. `application-flow.md`
+28. `workflows.md`
+29. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in

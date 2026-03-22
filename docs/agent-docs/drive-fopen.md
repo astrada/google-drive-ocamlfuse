@@ -5,6 +5,9 @@
 `Drive.fopen` is the access-validation path used by the FUSE file-open
 callback.
 
+Its directory-side counterpart is `Drive.opendir`; see
+`docs/agent-docs/drive-opendir.md`.
+
 It does not allocate or return a persistent open-file object. Its real job is
 to validate that the requested path exists and that the requested access mode is
 allowed before later operations like `read`, `write`, and `truncate` run.
