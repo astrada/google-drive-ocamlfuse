@@ -81,28 +81,12 @@ process. This helper is not a safe "maybe-stop-if-running" probe.
 
 ## What Happens Next
 
-The flag flipped here is consumed by the polling loop:
+The flag flipped here is consumed later by `folder_fetch`.
 
-```ocaml
-let check () =
-  let d = ConcurrentBackgroundFolderFetching.get () in
-  if d.stop_folder_fetching then raise Exit
-```
-
-So the running thread does not stop immediately. It exits on the next loop
-iteration whose top-of-loop check observes the updated flag.
-
-The loop order is:
-
-```ocaml
-check ();
-Thread.delay 0.5;
-fetch_next_folder cache
-```
-
-So a stop request that arrives during the sleep window can still allow one more
-`fetch_next_folder cache` call before exit. The exact loop behavior is
-documented in `docs/agent-docs/background-folder-fetching-folder-fetch.md`.
+So the running thread does not stop immediately. This helper only requests
+shutdown; the polling loop notices the updated flag on a later iteration and
+returns. See `docs/agent-docs/background-folder-fetching-folder-fetch.md` for
+the exact check ordering and stop latency details.
 
 ## Not An Immediate Stop
 
@@ -114,9 +98,8 @@ This helper does not interrupt the background thread in the middle of:
 
 So after this function returns:
 
-- the background thread may still be sleeping
-- one final prefetch attempt may still start
-- one prefetch callback may still be running
+- the background thread may still be sleeping or polling
+- a prefetch callback may still be running
 - `Thread.join folder_fetching_thread` may still need to wait
 
 That is expected. Immediate termination is not the contract.

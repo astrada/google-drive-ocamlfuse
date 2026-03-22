@@ -112,23 +112,13 @@ The created thread runs:
 folder_fetch cache
 ```
 
-That loop:
+This helper therefore begins a long-lived polling thread rather than a one-shot
+prefetch.
 
-- polls the stop flag every iteration
-- sleeps for `0.5` seconds
-- calls `fetch_next_folder cache`
-
-`fetch_next_folder` then:
-
-- selects the next eligible folder resource from cache
-- reads the injected callback from `ConcurrentBackgroundFolderFetching`
-- calls that callback with the folder path
-
-So this startup helper begins a polling loop rather than a one-shot prefetch.
 See `docs/agent-docs/background-folder-fetching-folder-fetch.md` for the exact
 loop ordering, cadence, and stop behavior.
 See `docs/agent-docs/background-folder-fetching-fetch-next-folder.md` for the
-selection and callback contract of the one-folder step inside that loop.
+one-folder selection and callback step that the loop runs each iteration.
 
 ## Relationship To `Drive.read_dir`
 
@@ -184,21 +174,10 @@ So the lifecycle split is:
   the thread to finish
 
 See `src/gdfuseFlow.ml` for the higher-level shutdown call site.
+See `docs/agent-docs/background-folder-fetching-folder-fetch.md` for the loop
+that actually observes the stop request and exits.
 See `docs/agent-docs/background-folder-fetching-stop-thread.md` for the
 stop-request half of that lifecycle.
-
-## Relationship To `select_next_folder_to_fetch`
-
-The started poll loop does not scan arbitrary resources. It delegates selection
-to:
-
-```ocaml
-Cache.Resource.select_next_folder_to_fetch cache
-```
-
-That is the cache-side gate that decides which folder resource is eligible for
-prefetching next. In practice, this is the source of the `ToDownload` folder
-selection mentioned in the `Drive.read_dir` note.
 
 ## What `BackgroundFolderFetching.start_folder_fetching_thread` Does Not Do
 
