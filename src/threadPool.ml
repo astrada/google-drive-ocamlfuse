@@ -30,8 +30,9 @@ let add_work f x pool =
         let thread_id = Thread.id thread in
         Utils.log_with_header "Spawning new thread id=%d from thread pool\n%!"
           thread_id;
-        let _ = f x in
-        signal_work_done thread_id pool
+        Utils.try_finally
+          (fun () -> ignore (f x))
+          (fun () -> signal_work_done thread_id pool)
       in
       let thread = Thread.create f' x in
       let thread_id = Thread.id thread in

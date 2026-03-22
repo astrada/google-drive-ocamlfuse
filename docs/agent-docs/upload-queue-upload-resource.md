@@ -243,20 +243,16 @@ This helper owns:
 - entry into `do_request`
 - handoff to `upload_resource_with_retry`
 
-## Current Failure-Path Quirk
+## Failure Path And Thread-Pool Cleanup
 
 On failure, `do_work` re-raises after restoring queue state to `ToUpload`.
 
-At the same time, `ThreadPool.add_work` only removes a worker from its internal
-table after the worker function returns normally.
+`ThreadPool.add_work` removes the worker from its internal table in an
+exception-safe cleanup path, so a failed upload worker still releases its
+thread-pool slot before the exception escapes the thread.
 
-So failed worker cleanup is not handled in an exception-safe way by the current
-`ThreadPool` wrapper.
-
-If async uploads ever appear to stall after worker failures, inspect both:
-
-- this helper's re-raise path
-- `src/threadPool.ml`
+That means the queue entry is made selectable again without wedging worker-slot
+accounting at the thread-pool layer.
 
 ## What `UploadQueue.upload_resource` Does Not Do
 
