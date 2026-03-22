@@ -117,6 +117,8 @@ letting `UploadQueue` talk directly to Drive internals: queue scheduling lives
 in `UploadQueue`, but resource upload behavior still lives in `Drive`.
 
 See `docs/agent-docs/drive-upload-path.md` for the end-to-end upload lifecycle.
+See `docs/agent-docs/upload-queue-poll-upload-queue.md` for the long-lived
+poll loop that paces async dispatch and drains queued work during shutdown.
 See `docs/agent-docs/upload-queue-upload-resource.md` for the poll-thread
 helper that selects one queued entry, marks it `Uploading`, and decides
 delete-vs-requeue around the worker callback.

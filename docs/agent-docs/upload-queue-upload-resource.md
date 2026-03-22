@@ -294,6 +294,9 @@ So under the current design:
 This is why `async_upload_threads` controls maximum concurrent workers, while
 the poll loop still controls how often new worker launches are attempted.
 
+See `docs/agent-docs/upload-queue-poll-upload-queue.md` for the outer polling
+loop, stop-flag check, and final thread-pool drain.
+
 ## Relationship To `Drive.upload_resource_by_id`
 
 `UploadQueue.upload_resource` and `Drive.upload_resource_by_id` own adjacent but
@@ -354,6 +357,7 @@ It only advances one queued upload entry into worker execution.
 ## Related Docs
 
 - `docs/agent-docs/drive-init-filesystem.md`
+- `docs/agent-docs/upload-queue-poll-upload-queue.md`
 - `docs/agent-docs/drive-queue-upload.md`
 - `docs/agent-docs/drive-upload-resource-by-id.md`
 - `docs/agent-docs/drive-upload-resource-with-retry.md`
