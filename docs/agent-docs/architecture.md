@@ -55,6 +55,8 @@ At FUSE init time, `Drive.init_filesystem` starts background services:
 
 See `docs/agent-docs/drive-init-filesystem.md` for the detailed control flow
 and lifecycle notes.
+See `docs/agent-docs/background-folder-fetching-start-thread.md` for the
+folder-prefetch startup boundary and its injected `read_dir` callback.
 
 Shutdown logic lives in `GdfuseFlow.shutdown`, and the production executable
 registers it through `GdfuseRuntimeDeps.System.register_exit`. Shutdown

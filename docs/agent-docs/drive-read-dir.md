@@ -271,6 +271,9 @@ contract:
 So the background thread is not implementing separate synchronization logic. It
 is just running the same code path ahead of demand.
 
+See `docs/agent-docs/background-folder-fetching-start-thread.md` for the
+startup boundary that installs the callback and starts that polling thread.
+
 ## Maintenance Notes
 
 When changing `read_dir`, watch these invariants:

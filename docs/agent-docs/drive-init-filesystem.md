@@ -167,6 +167,9 @@ So this thread is best understood as opportunistic metadata warming for folder
 trees.
 
 See `docs/agent-docs/drive-read-dir.md` for the directory-refresh details.
+See `docs/agent-docs/background-folder-fetching-start-thread.md` for the
+runtime-state installation and polling-thread startup done by
+`BackgroundFolderFetching.start_folder_fetching_thread`.
 
 ## Config Knobs
 
