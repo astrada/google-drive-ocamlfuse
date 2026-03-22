@@ -122,6 +122,9 @@ That means all downstream policy lives in `queue_upload`, including:
 So `upload_with_retry` itself does not decide how the upload runs after the
 resource has been resolved.
 
+See `docs/agent-docs/drive-queue-upload.md` for the helper-focused view of that
+dispatch-policy branch.
+
 See `docs/agent-docs/drive-upload-path.md` for the dispatch policy behind
 `queue_upload`.
 

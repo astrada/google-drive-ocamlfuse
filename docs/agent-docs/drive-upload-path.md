@@ -179,6 +179,9 @@ this path-resolution step and the naming quirk around "with_retry".
 `queue_upload resource` selects between synchronous and asynchronous upload
 execution.
 
+See `docs/agent-docs/drive-queue-upload.md` for the helper-focused view of this
+dispatcher and its naming quirk.
+
 ### Synchronous Mode
 
 If `config.async_upload_queue = false`, it simply runs:
