@@ -166,6 +166,9 @@ Open-time file access validation lives in `Drive.fopen`; see
 Directory-open validation lives in `Drive.opendir`; see
 `docs/agent-docs/drive-opendir.md`.
 
+Filesystem-wide capacity reporting lives in `Drive.statfs`; see
+`docs/agent-docs/drive-statfs.md`.
+
 Metadata-only `utime` / `chmod` / `chown` requests enter through thin wrappers
 over `Drive.update_remote_resource`; see
 `docs/agent-docs/drive-chmod-chown-utime.md`.

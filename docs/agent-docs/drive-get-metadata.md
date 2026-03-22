@@ -336,6 +336,9 @@ So `get_resource` can treat `metadata.last_update` as a meaningful global fence.
 That means a `statfs` call can also trigger a metadata refresh and change-feed
 reconciliation, even though it looks like a quota-only query from the outside.
 
+See `docs/agent-docs/drive-statfs.md` for the reporting-side logic that turns
+those metadata fields into a synthetic `statvfs` record.
+
 ## Maintenance Notes
 
 When changing `get_metadata`, watch these invariants:
