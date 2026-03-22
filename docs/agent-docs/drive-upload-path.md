@@ -137,6 +137,9 @@ This function is deliberately cheap:
 So repeated close/sync callbacks do not keep rescheduling the same upload once
 the resource has already left `ToUpload`.
 
+See `docs/agent-docs/drive-start-uploading-if-dirty.md` for the helper-focused
+view of this exact state gate.
+
 See `docs/agent-docs/drive-flush-fsync-release.md` for the boundary-layer view
 of those three callbacks and the fact that they are identical at the `Drive`
 layer.

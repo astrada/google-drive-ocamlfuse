@@ -90,6 +90,8 @@ So the work is split into two phases:
 
 `start_uploading_if_dirty path` is the key idempotency check.
 
+See `docs/agent-docs/drive-start-uploading-if-dirty.md` for the helper itself.
+
 It:
 
 1. normalizes the path with `get_path_in_cache`
