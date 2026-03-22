@@ -125,8 +125,10 @@ That loop:
 - calls that callback with the folder path
 
 So this startup helper begins a polling loop rather than a one-shot prefetch.
+See `docs/agent-docs/background-folder-fetching-folder-fetch.md` for the exact
+loop ordering, cadence, and stop behavior.
 See `docs/agent-docs/background-folder-fetching-fetch-next-folder.md` for the
-selection and callback contract of that one-folder step.
+selection and callback contract of the one-folder step inside that loop.
 
 ## Relationship To `Drive.read_dir`
 
@@ -212,6 +214,7 @@ It only installs the runtime state and starts the polling thread.
 
 ## Related Docs
 
+- `docs/agent-docs/background-folder-fetching-folder-fetch.md`
 - `docs/agent-docs/background-folder-fetching-fetch-next-folder.md`
 - `docs/agent-docs/background-folder-fetching-stop-thread.md`
 - `docs/agent-docs/drive-init-filesystem.md`

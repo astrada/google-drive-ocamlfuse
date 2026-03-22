@@ -171,7 +171,9 @@ So if the injected callback raises:
 And because `folder_fetch` only catches `Exit`, an arbitrary callback failure
 can currently terminate the background folder-fetch thread.
 
-That is an important maintenance property of this helper.
+That is an important maintenance property of this helper. See
+`docs/agent-docs/background-folder-fetching-folder-fetch.md` for the outer loop
+and thread-lifetime boundary around this behavior.
 
 ## What `BackgroundFolderFetching.fetch_next_folder` Does Not Do
 
@@ -187,6 +189,7 @@ It only selects one folder and invokes the installed callback.
 
 ## Related Docs
 
+- `docs/agent-docs/background-folder-fetching-folder-fetch.md`
 - `docs/agent-docs/background-folder-fetching-start-thread.md`
 - `docs/agent-docs/background-folder-fetching-stop-thread.md`
 - `docs/agent-docs/drive-read-dir.md`

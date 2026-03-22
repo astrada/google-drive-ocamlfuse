@@ -90,10 +90,19 @@ let check () =
 ```
 
 So the running thread does not stop immediately. It exits on the next loop
-iteration after that check observes the updated flag.
+iteration whose top-of-loop check observes the updated flag.
 
-Because the loop sleeps for `0.5` seconds between checks, stop latency is
-bounded by that polling cadence plus any `read_dir` call already in progress.
+The loop order is:
+
+```ocaml
+check ();
+Thread.delay 0.5;
+fetch_next_folder cache
+```
+
+So a stop request that arrives during the sleep window can still allow one more
+`fetch_next_folder cache` call before exit. The exact loop behavior is
+documented in `docs/agent-docs/background-folder-fetching-folder-fetch.md`.
 
 ## Not An Immediate Stop
 
@@ -106,6 +115,7 @@ This helper does not interrupt the background thread in the middle of:
 So after this function returns:
 
 - the background thread may still be sleeping
+- one final prefetch attempt may still start
 - one prefetch callback may still be running
 - `Thread.join folder_fetching_thread` may still need to wait
 
@@ -164,6 +174,7 @@ It only sets the stop flag that the polling thread will observe later.
 
 ## Related Docs
 
+- `docs/agent-docs/background-folder-fetching-folder-fetch.md`
 - `docs/agent-docs/background-folder-fetching-fetch-next-folder.md`
 - `docs/agent-docs/background-folder-fetching-start-thread.md`
 - `docs/agent-docs/drive-init-filesystem.md`

@@ -273,6 +273,8 @@ is just running the same code path ahead of demand.
 
 See `docs/agent-docs/background-folder-fetching-start-thread.md` for the
 startup boundary that installs the callback and starts that polling thread.
+See `docs/agent-docs/background-folder-fetching-folder-fetch.md` for the
+polling cadence and stop-check behavior around those background refreshes.
 See `docs/agent-docs/background-folder-fetching-fetch-next-folder.md` for the
 runtime selection rule and callback handoff used by that thread.
 
