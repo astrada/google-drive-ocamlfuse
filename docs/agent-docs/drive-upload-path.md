@@ -155,6 +155,9 @@ do_request (upload_with_retry path) |> ignore
 That means the actual upload dispatch runs in the request/session machinery, but
 the scheduling decision was made locally first.
 
+See `docs/agent-docs/drive-upload-if-dirty.md` for the helper-focused view of
+that bridge into `do_request (upload_with_retry path)`.
+
 ### `upload_with_retry`
 
 `upload_with_retry path` is the path-based bridge into the actual upload

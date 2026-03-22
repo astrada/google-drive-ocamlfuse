@@ -154,6 +154,9 @@ If this function returns `false`, the later upload path is never entered.
 If it returns `true`, the next step is `upload_with_retry path`, which performs
 full path resolution and eventually reaches `queue_upload`.
 
+See `docs/agent-docs/drive-upload-if-dirty.md` for the tiny bridge helper that
+performs that handoff into `do_request`.
+
 ## Why `upload_with_retry` Re-Resolves The Resource
 
 A subtle but important design point is that `start_uploading_if_dirty` does not

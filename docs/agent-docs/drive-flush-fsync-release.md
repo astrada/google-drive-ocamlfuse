@@ -86,6 +86,9 @@ So the work is split into two phases:
 1. a cheap local gate: `start_uploading_if_dirty`
 2. the real request/session dispatch: `upload_with_retry`
 
+The small bridge function that performs phase 2 entry is documented in
+`docs/agent-docs/drive-upload-if-dirty.md`.
+
 ## Phase 1: Cheap Dirty-State Gate
 
 `start_uploading_if_dirty path` is the key idempotency check.
