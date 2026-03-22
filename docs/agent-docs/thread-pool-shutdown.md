@@ -88,6 +88,9 @@ The split is:
 See `docs/agent-docs/thread-pool-add-work.md` for the start-side half of that
 lifecycle.
 
+See `docs/agent-docs/thread-pool-create.md` for the constructor that created
+the pool record and its empty worker table.
+
 ## Relationship To `pending_threads`
 
 `ThreadPool.pending_threads` is:
@@ -180,6 +183,7 @@ It only joins the threads currently registered in the pool.
 
 ## Related Docs
 
+- `docs/agent-docs/thread-pool-create.md`
 - `docs/agent-docs/thread-pool-add-work.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`
 - `docs/agent-docs/upload-queue-start-async-upload-thread.md`

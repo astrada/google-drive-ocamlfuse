@@ -222,6 +222,9 @@ The broader lifecycle is:
 See `docs/agent-docs/thread-pool-shutdown.md` for the join-side half of that
 lifecycle.
 
+See `docs/agent-docs/thread-pool-create.md` for the constructor that built the
+pool record this helper later uses.
+
 ## Relationship To `UploadQueue.upload_resource`
 
 The main production caller is:
@@ -263,6 +266,7 @@ It only handles capacity gating, worker creation, and worker-slot cleanup.
 
 ## Related Docs
 
+- `docs/agent-docs/thread-pool-create.md`
 - `docs/agent-docs/thread-pool-shutdown.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`

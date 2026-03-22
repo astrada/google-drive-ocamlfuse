@@ -83,6 +83,9 @@ The important fields are:
 - `upload_resource_by_id`: callback injected from `Drive`
 - `thread_pool`: worker pool shared by all queued uploads
 
+See `docs/agent-docs/thread-pool-create.md` for the generic construction
+contract of `ThreadPool.create`.
+
 ## Why `set` Happens Before `Thread.create`
 
 The ordering is deliberate:
@@ -134,6 +137,7 @@ It only installs runtime state and starts the poll thread.
 ## Related Docs
 
 - `docs/agent-docs/drive-init-filesystem.md`
+- `docs/agent-docs/thread-pool-create.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`
 - `docs/agent-docs/upload-queue-stop-async-upload-thread.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`

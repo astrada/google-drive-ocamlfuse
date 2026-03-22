@@ -318,6 +318,9 @@ See `docs/agent-docs/upload-queue-upload-resource.md` for the poll-thread
 helper that selects one queued entry and wraps it in queue-entry state
 transitions.
 
+See `docs/agent-docs/thread-pool-create.md` for the generic construction of
+the worker pool that async upload startup installs into runtime state.
+
 See `docs/agent-docs/thread-pool-add-work.md` for the generic worker-pool
 boundary that waits for capacity, starts one thread, and releases worker slots
 even when a worker raises.

@@ -30,27 +30,28 @@ Read these files in order:
 23. `upload-queue-stop-async-upload-thread.md` for the stop-flag request that asks the async upload poll loop to drain and exit
 24. `upload-queue-poll-upload-queue.md` for the long-lived async-upload poll loop and its drain-on-stop contract
 25. `upload-queue-upload-resource.md` for the poll-thread helper that selects one queued entry and hands it to a worker thread
-26. `thread-pool-add-work.md` for the generic worker-pool admission and exception-safe cleanup boundary
-27. `thread-pool-shutdown.md` for the generic worker-pool join step used during async-upload shutdown
-28. `drive-upload-resource-by-id.md` for the async-worker bridge from queue entries back into the request/session upload path
-29. `drive-upload-resource-with-retry.md` for the common flush-and-retry wrapper around the real upload
-30. `drive-upload.md` for the actual `FilesResource.update` upload attempt and cache reconciliation
-31. `drive-flush-fsync-release.md` for the file-close/sync callbacks that trigger upload dispatch
-32. `drive-fopen.md` for open-time access validation and write-permission checks
-33. `drive-opendir.md` for directory-open validation and its lookup-only contract
-34. `gdfuse-noop-dir-callbacks.md` for the adapter-level `releasedir` / `fsyncdir` no-op hooks
-35. `drive-statfs.md` for filesystem-wide quota reporting and synthetic `statvfs` fields
-36. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
-37. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
-38. `drive-mknod-mkdir.md` for the thin file/folder creation entrypoints over `create_remote_resource`
-39. `drive-symlink.md` for the FUSE symlink entrypoint and create-link delegation
-40. `drive-xattr.md` for extended-attribute storage, reads, and mutations
-41. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
-42. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
-43. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
-44. `application-flow.md`
-45. `workflows.md`
-46. `config-file-handling.md` for config-format and parser refactors
+26. `thread-pool-create.md` for generic worker-pool construction, defaults, and injected synchronization primitives
+27. `thread-pool-add-work.md` for the generic worker-pool admission and exception-safe cleanup boundary
+28. `thread-pool-shutdown.md` for the generic worker-pool join step used during async-upload shutdown
+29. `drive-upload-resource-by-id.md` for the async-worker bridge from queue entries back into the request/session upload path
+30. `drive-upload-resource-with-retry.md` for the common flush-and-retry wrapper around the real upload
+31. `drive-upload.md` for the actual `FilesResource.update` upload attempt and cache reconciliation
+32. `drive-flush-fsync-release.md` for the file-close/sync callbacks that trigger upload dispatch
+33. `drive-fopen.md` for open-time access validation and write-permission checks
+34. `drive-opendir.md` for directory-open validation and its lookup-only contract
+35. `gdfuse-noop-dir-callbacks.md` for the adapter-level `releasedir` / `fsyncdir` no-op hooks
+36. `drive-statfs.md` for filesystem-wide quota reporting and synthetic `statvfs` fields
+37. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
+38. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
+39. `drive-mknod-mkdir.md` for the thin file/folder creation entrypoints over `create_remote_resource`
+40. `drive-symlink.md` for the FUSE symlink entrypoint and create-link delegation
+41. `drive-xattr.md` for extended-attribute storage, reads, and mutations
+42. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
+43. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
+44. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
+45. `application-flow.md`
+46. `workflows.md`
+47. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in
