@@ -164,6 +164,7 @@ It only sets the stop flag that the polling thread will observe later.
 
 ## Related Docs
 
+- `docs/agent-docs/background-folder-fetching-fetch-next-folder.md`
 - `docs/agent-docs/background-folder-fetching-start-thread.md`
 - `docs/agent-docs/drive-init-filesystem.md`
 - `docs/agent-docs/drive-read-dir.md`
