@@ -305,6 +305,9 @@ See `docs/agent-docs/upload-queue-start-async-upload-thread.md` for the
 runtime-state installation and thread startup that bring this subsystem into
 existence.
 
+See `docs/agent-docs/upload-queue-stop-async-upload-thread.md` for the stop
+request that asks the poll loop to drain rather than stop immediately.
+
 See `docs/agent-docs/upload-queue-poll-upload-queue.md` for the long-lived
 poll loop, its one-second pacing, and its shutdown-drain contract.
 

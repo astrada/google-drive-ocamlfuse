@@ -183,6 +183,9 @@ Instead it enters drain mode:
 
 This is the key shutdown contract for the async upload subsystem.
 
+See `docs/agent-docs/upload-queue-stop-async-upload-thread.md` for that stop
+request helper itself.
+
 ## Shutdown Depends On No New Entries Arriving
 
 Because the exit condition is `entries = 0`, termination depends on the queue
@@ -295,6 +298,7 @@ It only paces and terminates the async upload poll thread.
 ## Related Docs
 
 - `docs/agent-docs/drive-init-filesystem.md`
+- `docs/agent-docs/upload-queue-stop-async-upload-thread.md`
 - `docs/agent-docs/upload-queue-start-async-upload-thread.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`
 - `docs/agent-docs/drive-upload-resource-by-id.md`

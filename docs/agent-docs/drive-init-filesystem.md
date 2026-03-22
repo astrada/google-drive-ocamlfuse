@@ -212,6 +212,11 @@ Two details matter here:
 - the folder-prefetch and flush-db threads are simple polling loops that exit
   after their stop flag is observed
 
+See `docs/agent-docs/upload-queue-stop-async-upload-thread.md` for the queue
+side of that stop request, and
+`docs/agent-docs/upload-queue-poll-upload-queue.md` for the drain behavior that
+follows.
+
 Because shutdown is coordinated elsewhere, `Drive.init_filesystem` only starts
 threads; it does not own their lifecycle end-to-end.
 

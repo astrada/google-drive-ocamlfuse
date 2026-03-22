@@ -220,6 +220,9 @@ In particular, it assumes:
 So `start_async_upload_thread` is the prerequisite for the entire stop/drain
 contract.
 
+See `docs/agent-docs/upload-queue-stop-async-upload-thread.md` for the sibling
+helper that flips the stop flag later.
+
 ## Relationship To `Drive.init_filesystem`
 
 The production startup call site is:
@@ -256,6 +259,7 @@ It only brings the async upload subsystem into existence.
 ## Related Docs
 
 - `docs/agent-docs/drive-init-filesystem.md`
+- `docs/agent-docs/upload-queue-stop-async-upload-thread.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`
 - `docs/agent-docs/drive-upload-resource-by-id.md`
