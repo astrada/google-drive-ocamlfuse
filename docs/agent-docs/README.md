@@ -22,11 +22,12 @@ Read these files in order:
 15. `drive-fopen.md` for open-time access validation and write-permission checks
 16. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
 17. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
-18. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
-19. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
-20. `application-flow.md`
-21. `workflows.md`
-22. `config-file-handling.md` for config-format and parser refactors
+18. `drive-xattr.md` for extended-attribute storage, reads, and mutations
+19. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
+20. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
+21. `application-flow.md`
+22. `workflows.md`
+23. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in
