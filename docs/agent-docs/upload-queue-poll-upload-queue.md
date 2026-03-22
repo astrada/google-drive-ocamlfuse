@@ -221,6 +221,9 @@ So the poll loop's pacing is shaped by both:
 In other words, "poll every second" is an upper bound on dispatch attempts, not
 a guarantee that one new worker starts every second.
 
+See `docs/agent-docs/thread-pool-add-work.md` for the lower-level blocking and
+cleanup rules of that worker-pool handoff.
+
 ## Idle Behavior
 
 If the stop flag is not set and the queue is empty, the helper does not log or
@@ -251,6 +254,7 @@ It only paces and terminates the async upload poll thread.
 - `docs/agent-docs/upload-queue-start-async-upload-thread.md`
 - `docs/agent-docs/upload-queue-stop-async-upload-thread.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`
+- `docs/agent-docs/thread-pool-add-work.md`
 - `docs/agent-docs/drive-upload-resource-by-id.md`
 - `docs/agent-docs/drive-upload-path.md`
 

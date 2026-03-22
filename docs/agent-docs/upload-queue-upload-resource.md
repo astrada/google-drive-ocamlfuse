@@ -225,6 +225,10 @@ free.
 So `UploadQueue.upload_resource` can block the poll thread while the worker pool
 is full.
 
+See `docs/agent-docs/thread-pool-add-work.md` for the generic thread-pool
+contract around caller blocking, worker registration, and exception-safe slot
+release.
+
 ## Relationship To `Drive.upload_resource_by_id`
 
 `UploadQueue.upload_resource` and `Drive.upload_resource_by_id` own adjacent but
@@ -273,6 +277,7 @@ It only advances one queued upload entry into worker execution.
 - `docs/agent-docs/upload-queue-queue-resource.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`
 - `docs/agent-docs/upload-queue-start-async-upload-thread.md`
+- `docs/agent-docs/thread-pool-add-work.md`
 - `docs/agent-docs/drive-queue-upload.md`
 - `docs/agent-docs/drive-upload-resource-by-id.md`
 - `docs/agent-docs/drive-upload-resource-with-retry.md`
