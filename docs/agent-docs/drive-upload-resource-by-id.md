@@ -175,6 +175,10 @@ The surrounding queue layer in `UploadQueue` does the rest:
 
 So this helper should be read as the callback body, not as the queue engine.
 
+See `docs/agent-docs/upload-queue-upload-resource.md` for the queue-side helper
+that performs entry selection, updates queue-entry state, and chooses
+delete-versus-requeue around this callback.
+
 ## Naming Quirk
 
 The name `upload_resource_by_id` can be misread as "upload by remote file id".
@@ -202,6 +206,7 @@ it.
 ## Related Docs
 
 - `docs/agent-docs/drive-init-filesystem.md`
+- `docs/agent-docs/upload-queue-upload-resource.md`
 - `docs/agent-docs/drive-queue-upload.md`
 - `docs/agent-docs/drive-upload-resource-with-retry.md`
 - `docs/agent-docs/drive-upload.md`

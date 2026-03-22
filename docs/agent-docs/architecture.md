@@ -301,6 +301,10 @@ Shared behavior:
 The async path persists queue entries in cache, then a background thread polls
 the queue and hands work to `ThreadPool`.
 
+See `docs/agent-docs/upload-queue-upload-resource.md` for the poll-thread
+helper that selects one queued entry and wraps it in queue-entry state
+transitions.
+
 See `docs/agent-docs/drive-upload-resource-by-id.md` for the worker-side
 bridge from queue entries back into the normal request/session upload path.
 
