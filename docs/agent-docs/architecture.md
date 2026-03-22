@@ -252,6 +252,9 @@ Upload is not performed on every `write`. It is triggered by:
 
 all of which call `upload_if_dirty`.
 
+See `docs/agent-docs/drive-flush-fsync-release.md` for the thin file-callback
+layer that gates upload dispatch on the `ToUpload` state.
+
 See `docs/agent-docs/drive-download-resource.md` for the helper that ensures the
 local cache file exists before write-side mutation begins.
 
@@ -259,6 +262,10 @@ local cache file exists before write-side mutation begins.
 
 Upload logic lives in `Drive.upload`, `Drive.queue_upload`, and
 `UploadQueue`.
+
+The file-level entrypoints that trigger this path are `Drive.flush`,
+`Drive.fsync`, and `Drive.release`; see
+`docs/agent-docs/drive-flush-fsync-release.md`.
 
 Two modes exist:
 

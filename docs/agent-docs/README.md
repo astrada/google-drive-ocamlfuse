@@ -19,18 +19,19 @@ Read these files in order:
 12. `drive-read.md` for stream-vs-cache read policy and read-ahead behavior
 13. `drive-write.md` for local mutation, dirty-state updates, and write buffers
 14. `drive-truncate.md` for local size mutation and signed cache-size updates
-15. `drive-fopen.md` for open-time access validation and write-permission checks
-16. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
-17. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
-18. `drive-mknod-mkdir.md` for the thin file/folder creation entrypoints over `create_remote_resource`
-19. `drive-symlink.md` for the FUSE symlink entrypoint and create-link delegation
-20. `drive-xattr.md` for extended-attribute storage, reads, and mutations
-21. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
-22. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
-23. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
-24. `application-flow.md`
-25. `workflows.md`
-26. `config-file-handling.md` for config-format and parser refactors
+15. `drive-flush-fsync-release.md` for the file-close/sync callbacks that trigger upload dispatch
+16. `drive-fopen.md` for open-time access validation and write-permission checks
+17. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
+18. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
+19. `drive-mknod-mkdir.md` for the thin file/folder creation entrypoints over `create_remote_resource`
+20. `drive-symlink.md` for the FUSE symlink entrypoint and create-link delegation
+21. `drive-xattr.md` for extended-attribute storage, reads, and mutations
+22. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
+23. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
+24. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
+25. `application-flow.md`
+26. `workflows.md`
+27. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in

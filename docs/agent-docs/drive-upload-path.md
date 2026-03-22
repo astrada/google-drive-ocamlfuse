@@ -22,6 +22,9 @@ content-upload pipeline.
 See `docs/agent-docs/drive-create-remote-resource.md` for the remote-creation
 side of the lifecycle.
 
+The thin FUSE-side callbacks that usually trigger this path are documented in
+`docs/agent-docs/drive-flush-fsync-release.md`.
+
 ## Scope In The Write Lifecycle
 
 The content-upload path starts only after some earlier operation has made a file
@@ -133,6 +136,10 @@ This function is deliberately cheap:
 
 So repeated close/sync callbacks do not keep rescheduling the same upload once
 the resource has already left `ToUpload`.
+
+See `docs/agent-docs/drive-flush-fsync-release.md` for the boundary-layer view
+of those three callbacks and the fact that they are identical at the `Drive`
+layer.
 
 ### `upload_if_dirty`
 
