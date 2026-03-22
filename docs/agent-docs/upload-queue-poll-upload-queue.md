@@ -19,6 +19,9 @@ upload_resource cache
 
 and decides when the poll thread should keep running, start draining, or exit.
 
+See `docs/agent-docs/upload-queue-start-async-upload-thread.md` for the startup
+path that installs the runtime state this loop reads.
+
 ## Internal Status And Effective Signature
 
 `poll_upload_queue` is internal to `src/uploadQueue.ml`. It is not exposed in
@@ -292,6 +295,7 @@ It only paces and terminates the async upload poll thread.
 ## Related Docs
 
 - `docs/agent-docs/drive-init-filesystem.md`
+- `docs/agent-docs/upload-queue-start-async-upload-thread.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`
 - `docs/agent-docs/drive-upload-resource-by-id.md`
 - `docs/agent-docs/drive-upload-path.md`

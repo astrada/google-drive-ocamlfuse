@@ -301,6 +301,10 @@ Shared behavior:
 The async path persists queue entries in cache, then a background thread polls
 the queue and hands work to `ThreadPool`.
 
+See `docs/agent-docs/upload-queue-start-async-upload-thread.md` for the
+runtime-state installation and thread startup that bring this subsystem into
+existence.
+
 See `docs/agent-docs/upload-queue-poll-upload-queue.md` for the long-lived
 poll loop, its one-second pacing, and its shutdown-drain contract.
 

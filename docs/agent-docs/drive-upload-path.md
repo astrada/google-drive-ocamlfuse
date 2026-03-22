@@ -265,6 +265,7 @@ When changing this area, watch these invariants:
 - `docs/agent-docs/drive-start-uploading-if-dirty.md`
 - `docs/agent-docs/drive-upload-if-dirty.md`
 - `docs/agent-docs/drive-upload-with-retry.md`
+- `docs/agent-docs/upload-queue-start-async-upload-thread.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`
 - `docs/agent-docs/drive-queue-upload.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`
