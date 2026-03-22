@@ -197,6 +197,9 @@ only log in `bin/gdfuseFuse.ml` and do not call into `Drive`.
 
 So this upload-trigger behavior is specific to file callbacks.
 
+See `docs/agent-docs/gdfuse-noop-dir-callbacks.md` for the adapter-side note on
+those two no-op directory callbacks.
+
 ## What These Wrappers Do Not Do
 
 `Drive.flush`, `Drive.fsync`, and `Drive.release` do not:

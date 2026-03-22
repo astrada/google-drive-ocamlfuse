@@ -182,6 +182,9 @@ directory-specific copy of the same logic.
 
 See `docs/agent-docs/drive-fopen.md` for the file-open side.
 
+The later directory-close and directory-sync callbacks are adapter-level
+no-ops; see `docs/agent-docs/gdfuse-noop-dir-callbacks.md`.
+
 ## What `Drive.opendir` Does Not Do
 
 `Drive.opendir` does not:

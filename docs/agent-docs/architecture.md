@@ -166,6 +166,10 @@ Open-time file access validation lives in `Drive.fopen`; see
 Directory-open validation lives in `Drive.opendir`; see
 `docs/agent-docs/drive-opendir.md`.
 
+The directory-side `releasedir` / `fsyncdir` callbacks remain adapter-level
+no-ops in `bin/gdfuseFuse.ml`; see
+`docs/agent-docs/gdfuse-noop-dir-callbacks.md`.
+
 Filesystem-wide capacity reporting lives in `Drive.statfs`; see
 `docs/agent-docs/drive-statfs.md`.
 
