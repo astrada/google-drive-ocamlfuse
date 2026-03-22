@@ -82,6 +82,10 @@ That means:
 The later retry behavior comes from `upload_resource_with_retry`, not from any
 logic inside `queue_upload` itself.
 
+See `docs/agent-docs/drive-upload-resource-with-retry.md` for the common
+wrapper that both the direct sync branch and the async worker path eventually
+share.
+
 ## Branch 2: Asynchronous Mode
 
 If:
@@ -133,6 +137,9 @@ cache file, but they do it at different layers:
 
 - async mode: in `queue_upload`
 - sync mode: in `upload_resource_with_retry`
+
+See `docs/agent-docs/drive-upload-resource-with-retry.md` for that downstream
+wrapper.
 
 ## Relationship To `UploadQueue.queue_resource`
 

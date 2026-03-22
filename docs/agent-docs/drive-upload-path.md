@@ -249,6 +249,9 @@ network operation:
 1. `flush_memory_buffers resource`
 2. `with_retry (fun r -> try_with_default (upload r)) resource`
 
+See `docs/agent-docs/drive-upload-resource-with-retry.md` for the helper-focused
+view of this wrapper, including the retry refresh behavior.
+
 The buffer flush is unconditional when `write_buffers` is enabled. This is the
 last guard that ensures buffered local writes actually reach the cache file
 before the upload reads from disk.
