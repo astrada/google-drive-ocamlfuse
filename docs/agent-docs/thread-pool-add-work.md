@@ -219,6 +219,9 @@ The broader lifecycle is:
 - worker cleanup: remove the worker from the table when done
 - `shutdown`: join any workers still present in the table
 
+See `docs/agent-docs/thread-pool-shutdown.md` for the join-side half of that
+lifecycle.
+
 ## Relationship To `UploadQueue.upload_resource`
 
 The main production caller is:
@@ -260,6 +263,7 @@ It only handles capacity gating, worker creation, and worker-slot cleanup.
 
 ## Related Docs
 
+- `docs/agent-docs/thread-pool-shutdown.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`
 - `docs/agent-docs/upload-queue-start-async-upload-thread.md`

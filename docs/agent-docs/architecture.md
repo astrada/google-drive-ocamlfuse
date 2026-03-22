@@ -322,6 +322,9 @@ See `docs/agent-docs/thread-pool-add-work.md` for the generic worker-pool
 boundary that waits for capacity, starts one thread, and releases worker slots
 even when a worker raises.
 
+See `docs/agent-docs/thread-pool-shutdown.md` for the generic join step used
+after queue draining to wait for still-running workers.
+
 See `docs/agent-docs/drive-upload-resource-by-id.md` for the worker-side
 bridge from queue entries back into the normal request/session upload path.
 
