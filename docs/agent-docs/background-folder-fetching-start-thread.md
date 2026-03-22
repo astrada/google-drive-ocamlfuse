@@ -180,6 +180,8 @@ So the lifecycle split is:
   the thread to finish
 
 See `src/gdfuseFlow.ml` for the higher-level shutdown call site.
+See `docs/agent-docs/background-folder-fetching-stop-thread.md` for the
+stop-request half of that lifecycle.
 
 ## Relationship To `select_next_folder_to_fetch`
 
@@ -208,6 +210,7 @@ It only installs the runtime state and starts the polling thread.
 
 ## Related Docs
 
+- `docs/agent-docs/background-folder-fetching-stop-thread.md`
 - `docs/agent-docs/drive-init-filesystem.md`
 - `docs/agent-docs/drive-read-dir.md`
 - `docs/agent-docs/architecture.md`

@@ -219,6 +219,8 @@ See `docs/agent-docs/upload-queue-stop-async-upload-thread.md` for the queue
 side of that stop request, and
 `docs/agent-docs/upload-queue-poll-upload-queue.md` for the drain behavior that
 follows.
+See `docs/agent-docs/background-folder-fetching-stop-thread.md` for the folder
+prefetch stop-request helper that shutdown calls before joining that thread.
 
 Because shutdown is coordinated elsewhere, `Drive.init_filesystem` only starts
 threads; it does not own their lifecycle end-to-end.
