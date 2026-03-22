@@ -23,22 +23,23 @@ Read these files in order:
 16. `drive-truncate.md` for local size mutation and signed cache-size updates
 17. `drive-start-uploading-if-dirty.md` for the tiny `ToUpload -> Uploading` gate behind upload dispatch
 18. `drive-upload-if-dirty.md` for the bridge from the local dirty-state gate into `do_request (upload_with_retry ...)`
-19. `drive-flush-fsync-release.md` for the file-close/sync callbacks that trigger upload dispatch
-20. `drive-fopen.md` for open-time access validation and write-permission checks
-21. `drive-opendir.md` for directory-open validation and its lookup-only contract
-22. `gdfuse-noop-dir-callbacks.md` for the adapter-level `releasedir` / `fsyncdir` no-op hooks
-23. `drive-statfs.md` for filesystem-wide quota reporting and synthetic `statvfs` fields
-24. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
-25. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
-26. `drive-mknod-mkdir.md` for the thin file/folder creation entrypoints over `create_remote_resource`
-27. `drive-symlink.md` for the FUSE symlink entrypoint and create-link delegation
-28. `drive-xattr.md` for extended-attribute storage, reads, and mutations
-29. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
-30. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
-31. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
-32. `application-flow.md`
-33. `workflows.md`
-34. `config-file-handling.md` for config-format and parser refactors
+19. `drive-upload-with-retry.md` for the path-based bridge from `do_request` into `get_resource` and `queue_upload`
+20. `drive-flush-fsync-release.md` for the file-close/sync callbacks that trigger upload dispatch
+21. `drive-fopen.md` for open-time access validation and write-permission checks
+22. `drive-opendir.md` for directory-open validation and its lookup-only contract
+23. `gdfuse-noop-dir-callbacks.md` for the adapter-level `releasedir` / `fsyncdir` no-op hooks
+24. `drive-statfs.md` for filesystem-wide quota reporting and synthetic `statvfs` fields
+25. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy
+26. `drive-read-link.md` for symlink/shortcut target resolution and cache fill
+27. `drive-mknod-mkdir.md` for the thin file/folder creation entrypoints over `create_remote_resource`
+28. `drive-symlink.md` for the FUSE symlink entrypoint and create-link delegation
+29. `drive-xattr.md` for extended-attribute storage, reads, and mutations
+30. `drive-delete-remote-resource.md` for delete-vs-trash policy selection
+31. `drive-check-if-empty.md` for the folder emptiness guard used by deletion
+32. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
+33. `application-flow.md`
+34. `workflows.md`
+35. `config-file-handling.md` for config-format and parser refactors
 
 The existing user-facing docs under `docs/wiki/` are still the source for
 installation, authorization, and end-user configuration details. The files in

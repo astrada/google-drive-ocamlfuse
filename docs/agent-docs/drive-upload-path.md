@@ -171,6 +171,9 @@ Using `get_resource` here is important because the actual upload should operate
 on the latest cached row, not the stale row that `start_uploading_if_dirty` may
 have seen during its fast local check.
 
+See `docs/agent-docs/drive-upload-with-retry.md` for the helper-focused view of
+this path-resolution step and the naming quirk around "with_retry".
+
 ## Phase 3: Dispatch Policy In `queue_upload`
 
 `queue_upload resource` selects between synchronous and asynchronous upload

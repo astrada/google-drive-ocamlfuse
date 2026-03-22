@@ -156,6 +156,9 @@ not as:
 
 See `docs/agent-docs/drive-upload-path.md` for the later phases.
 
+See `docs/agent-docs/drive-upload-with-retry.md` for the helper-focused view of
+that path-based resolution step.
+
 ## Synchronous Entry, Config-Dependent Completion
 
 `upload_if_dirty` always enters the request path synchronously in the current
