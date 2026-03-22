@@ -3,18 +3,19 @@
 ## Purpose
 
 `Drive.flush`, `Drive.fsync`, and `Drive.release` are the FUSE-facing file
-callbacks that trigger the upload lifecycle after local file mutation.
+callbacks that trigger upload dispatch after local mutation.
 
 In this repository they are intentionally thin and intentionally identical at
 the `Drive` layer. They do not implement three different sync policies.
-Instead, all three ask the same question:
 
-- is this path still marked `ToUpload`?
+Their only `Drive`-level question is:
 
-If yes, they start the upload dispatch path. If not, they do nothing.
+- is this path still in `ToUpload` state?
 
-So these functions are best understood as upload-trigger entrypoints, not as
-distinct data-flush primitives.
+If yes, they launch the upload pipeline. If not, they return.
+
+So these functions are best understood as file-callback entrypoints into the
+upload lifecycle, not as three distinct persistence primitives.
 
 ## Signatures And FUSE Boundary
 
@@ -45,11 +46,11 @@ let fsync path ds file_descr =
 
 So all three:
 
-- log the visible path plus the extra FUSE parameters
+- log the visible path and extra FUSE parameters
 - run through the shared `with_drive_op` exception-mapping wrapper
-- surface repository errors as Unix/FUSE errors through `handle_exception`
+- rely on `handle_exception` in `bin/gdfuseFuse.ml` for Unix/FUSE error mapping
 
-The extra parameters are not used by the `Drive` implementations themselves.
+The extra parameters are ignored by the `Drive` implementations themselves.
 
 ## Entire Implementations
 
@@ -71,83 +72,45 @@ At the `Drive` layer:
 
 The only semantic input is the path.
 
-## The Shared Helper: `upload_if_dirty`
+## Shared Drive-Layer Contract
 
-All three wrappers delegate to:
-
-```ocaml
-let upload_if_dirty path =
-  if start_uploading_if_dirty path then
-    do_request (upload_with_retry path) |> ignore
-```
-
-So the work is split into two phases:
-
-1. a cheap local gate: `start_uploading_if_dirty`
-2. the real request/session dispatch: `upload_with_retry`
-
-The small bridge function that performs phase 2 entry is documented in
-`docs/agent-docs/drive-upload-if-dirty.md`.
-
-## Phase 1: Cheap Dirty-State Gate
-
-`start_uploading_if_dirty path` is the key idempotency check.
-
-See `docs/agent-docs/drive-start-uploading-if-dirty.md` for the helper itself.
-
-It:
-
-1. normalizes the path with `get_path_in_cache`
-2. looks up the cached row with `lookup_resource`
-3. checks whether the current state is exactly `ToUpload`
-
-If the row is not found, or is in any other state, it returns `false`.
-
-If the row is `ToUpload`, it immediately flips the cached state to
-`Uploading` and returns `true`.
-
-That means these callbacks only schedule upload work once per
-`ToUpload -> Uploading` transition.
-
-Repeated `flush`, `fsync`, or `release` calls on the same dirty file do not
-keep re-entering the upload path after the first state flip.
-
-## Phase 2: Path-Based Upload Dispatch
-
-If the gate returns `true`, `upload_if_dirty` runs:
+All three wrappers hand the work to:
 
 ```ocaml
-do_request (upload_with_retry path) |> ignore
+upload_if_dirty path
 ```
 
-`upload_with_retry path` then:
+That downstream helper does two things:
 
-1. normalizes the path again
-2. resolves the current resource with `get_resource`
-3. calls `queue_upload resource`
+1. ask the cheap local gate whether this path is still uploadable now
+2. if yes, enter `do_request (upload_with_retry path)`
 
-That second-stage `get_resource` matters because the actual upload dispatch
-should use the latest cached row, not only the row seen by the cheap local
-gate.
+The detailed semantics of those helper layers live in:
+
+- `docs/agent-docs/drive-start-uploading-if-dirty.md`
+- `docs/agent-docs/drive-upload-if-dirty.md`
+- `docs/agent-docs/drive-upload-with-retry.md`
+
+This wrapper note intentionally stops at the callback boundary.
 
 ## Why Three Callbacks Share One Implementation
 
-At the repository level, these three callbacks all mean:
+At the repository level, these callbacks all mean:
 
-- "a write-capable file operation boundary has been reached"
+- a write-capable file-operation boundary has been reached
 
-The code does not try to give them different persistence guarantees.
+The code does not try to give them different persistence guarantees at the
+`Drive` layer.
 
-Instead it treats them as equivalent chances to notice:
+Instead, all three are treated as equivalent chances to notice:
 
-- this file was dirtied earlier by `write`, `truncate`, or a rename-replace
-  path
-- the upload path should now start if it has not already started
+- the file was dirtied earlier
+- upload dispatch should start if it has not already started
 
-So the distinction between "flush", "fsync", and "release" mostly exists at the
+So the distinction between `flush`, `fsync`, and `release` mostly exists at the
 FUSE boundary and in logging, not in the `Drive` implementation.
 
-## Relationship To The Dirtying Operations
+## Relationship To Dirtying Operations
 
 These callbacks do not make a file dirty themselves.
 
@@ -155,82 +118,79 @@ They depend on an earlier path having already set:
 
 - `state = ToUpload`
 
-The main producers of that state are:
+The main producers are:
 
 - `Drive.write`
 - `Drive.truncate`
-- one `Drive.rename` replacement path
+- one rename-replace path in `Drive.rename`
 
-So the upload lifecycle is intentionally split:
+So the lifecycle split is:
 
 1. local mutation marks the resource dirty
-2. one of these callbacks notices the dirty state
-3. the upload path actually dispatches the remote update
+2. one of these callbacks notices that dirty state
+3. the downstream upload pipeline handles dispatch and remote update
 
 See `docs/agent-docs/drive-write.md` and
 `docs/agent-docs/drive-truncate.md` for the mutation-side half.
 
 ## Relationship To Sync Versus Async Upload
 
-These callbacks do not decide whether upload runs synchronously or through the
-background queue.
+These callbacks do not choose sync-vs-async policy themselves.
 
-They only reach `queue_upload` through `upload_with_retry`.
+They only enter the upload pipeline. Later:
 
-`queue_upload` then chooses:
+- `queue_upload` performs the policy split
+- the async queue may return before network upload completes
 
-- direct upload, if `async_upload_queue = false`
-- queue insertion, if `async_upload_queue = true`
+So a successful `flush`, `fsync`, or `release` does not imply that the remote
+file update has already finished when the callback returns.
 
-So a successful `flush`, `fsync`, or `release` does not necessarily mean the
-network upload has already completed when the callback returns.
-
-See `docs/agent-docs/drive-upload-path.md` for the full dispatch policy and
-async worker flow.
+See `docs/agent-docs/drive-upload-path.md` for the end-to-end overview and
+`docs/agent-docs/drive-queue-upload.md` for the policy branch.
 
 ## File Callbacks Only
 
-It is easy to overgeneralize this behavior to directories, but the FUSE adapter
-does not do that.
+This behavior is specific to file callbacks.
 
 The directory callbacks:
 
 - `releasedir`
 - `fsyncdir`
 
-only log in `bin/gdfuseFuse.ml` and do not call into `Drive`.
+remain adapter-level no-ops in `bin/gdfuseFuse.ml` and do not call into
+`Drive`.
 
-So this upload-trigger behavior is specific to file callbacks.
-
-See `docs/agent-docs/gdfuse-noop-dir-callbacks.md` for the adapter-side note on
-those two no-op directory callbacks.
+See `docs/agent-docs/gdfuse-noop-dir-callbacks.md` for those directory-side
+hooks.
 
 ## What These Wrappers Do Not Do
 
 `Drive.flush`, `Drive.fsync`, and `Drive.release` do not:
 
-- flush memory buffers directly
+- flush write buffers directly
 - inspect file descriptors or open flags
-- force a metadata refresh before the cheap dirty-state check
-- perform the actual upload logic themselves
-- guarantee an immediate network write in async mode
+- refresh metadata directly
+- decide sync-vs-async upload policy directly
+- perform the actual network upload themselves
+- guarantee immediate remote completion in async mode
 
-They only gate and launch the upload path when the cached resource is still
-marked `ToUpload`.
+They only hand the visible path to the upload-dispatch gate.
 
 ## Related Docs
 
+- `docs/agent-docs/drive-start-uploading-if-dirty.md`
+- `docs/agent-docs/drive-upload-if-dirty.md`
+- `docs/agent-docs/drive-upload-with-retry.md`
 - `docs/agent-docs/drive-upload-path.md`
 - `docs/agent-docs/drive-write.md`
 - `docs/agent-docs/drive-truncate.md`
 
 ## Source Pointers
 
-- `src/drive.ml`: `start_uploading_if_dirty`
-- `src/drive.ml`: `upload_if_dirty`
 - `src/drive.ml`: `flush`
 - `src/drive.ml`: `fsync`
 - `src/drive.ml`: `release`
+- `src/drive.ml`: `upload_if_dirty`
 - `bin/gdfuseFuse.ml`: `flush`
 - `bin/gdfuseFuse.ml`: `fsync`
 - `bin/gdfuseFuse.ml`: `release`

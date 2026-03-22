@@ -2,395 +2,224 @@
 
 ## Purpose
 
-This note documents the content-upload path centered on:
+This note is the end-to-end map of the content-upload lifecycle.
 
-- `Drive.queue_upload`
-- `Drive.upload_resource_with_retry`
-- `Drive.upload`
+Its job is to show how the pieces fit together:
 
-It is the path used to push locally modified file content back to Google Drive
-after the resource already has a remote file id.
+- which paths mark a resource dirty
+- which callbacks notice that dirty state
+- where the code switches from local state checks to request/session work
+- where sync-vs-async policy is chosen
+- where the actual `FilesResource.update` request finally happens
 
-It is not the same as:
+It is intentionally an overview note. The helper-specific docs own the detailed
+semantics of each stage.
 
-- initial remote file creation in `create_remote_resource`
-- metadata-only Drive patches such as `chmod`, `chown`, or `setxattr`
+This path is only for file-content uploads after a resource already has a remote
+Drive file id. It is not the same as:
 
-Those update other parts of Drive state, but they do not go through this
-content-upload pipeline.
+- initial remote object creation in `create_remote_resource`
+- metadata-only mutations such as `chmod`, `chown`, `utime`, or xattr updates
 
-See `docs/agent-docs/drive-create-remote-resource.md` for the remote-creation
-side of the lifecycle.
-
-The thin FUSE-side callbacks that usually trigger this path are documented in
-`docs/agent-docs/drive-flush-fsync-release.md`.
+See `docs/agent-docs/drive-create-remote-resource.md` for remote object
+creation.
 
 ## Scope In The Write Lifecycle
 
-The content-upload path starts only after some earlier operation has made a file
-dirty.
+The upload pipeline starts only after some earlier operation has already made a
+resource dirty.
 
-The main dirtying operations are:
+The main producers are:
 
-- `write`, which downloads the current content if needed, writes locally, and
-  sets the resource state to `ToUpload`
-- `truncate`, which updates the local cached file and sets `ToUpload`
-- one rename-replace path, which copies cache content into the target resource,
-  marks the target `ToUpload`, and calls `queue_upload` directly
+- `Drive.write`
+- `Drive.truncate`
+- one rename-replace path inside `Drive.rename`
 
-So the upload lifecycle has three phases:
+Those paths are responsible for creating or updating the authoritative local
+cache file and setting the resource state to `ToUpload`.
 
-1. local mutation marks a resource dirty
-2. a later trigger schedules upload work
-3. the upload path flushes buffers, retries transient failures, and patches the
-   remote file
+After that, the later upload lifecycle is:
 
-## Resource State Machine For Uploads
+1. a trigger callback notices the `ToUpload` state
+2. the code enters the request/session layer
+3. dispatch policy chooses direct upload or async queueing
+4. the common upload wrapper flushes buffers and retries temporary failures
+5. `Drive.upload` performs one concrete `FilesResource.update` attempt
+
+## Resource And Queue State
 
 The relevant resource states are:
 
-- `Synchronized`: local cache content matches Drive
-- `ToUpload`: local content changed and must be uploaded
-- `Uploading`: an upload is in progress or has been scheduled to start
+- `Synchronized`
+- `ToUpload`
+- `Uploading`
 
-The usual transition is:
+The usual resource-state progression is:
 
 ```text
 Synchronized -> ToUpload -> Uploading -> Synchronized
 ```
 
-Two nuances matter:
+There is also a separate async queue-entry state machine in
+`CacheData.UploadEntry.State`.
 
-- `flush`, `fsync`, and `release` only schedule work when the current state is
-  exactly `ToUpload`
-- the async queue also has its own entry states, separate from resource states
+That distinction matters:
 
-## Phase 1: Marking A Resource Dirty
+- resource state answers "what is true of the cached file?"
+- queue-entry state answers "what is true of the async scheduling record?"
 
-### `write`
+The two are related, but they are not interchangeable.
 
-`Drive.write` first resolves the resource and ensures local content exists:
+## End-To-End Flow
 
-1. `get_resource path_in_cache trashed`
-2. `with_retry download_resource resource`
-3. write to either memory buffers or the cache file
+### 1. Dirtying Operations
 
-See `docs/agent-docs/drive-write.md` for the full local-mutation flow, and
-`docs/agent-docs/drive-download-resource.md` for the lock/state logic behind
-that "ensure local content exists" step.
+`Drive.write` and `Drive.truncate` both stop after local mutation and cache
+updates. They do not upload immediately.
 
-After the local write, it marks the resource dirty:
+What they contribute to the later upload path is:
 
-- if the write extended the file, it updates `size` and `state = ToUpload`
-- otherwise it updates only the state to `ToUpload`
+- a usable local cache file
+- `state = ToUpload`
+- updated size/accounting where needed
 
-If the file grew, it also calls `shrink_cache ~file_size` to account for the new
-local cache usage.
+See `docs/agent-docs/drive-write.md` and
+`docs/agent-docs/drive-truncate.md` for those mutation-side details.
 
-### `truncate`
+### 2. File Callbacks Trigger Upload Dispatch
 
-`Drive.truncate` follows the same basic pattern:
+The usual trigger callbacks are:
 
-- resolve resource
-- flush write buffers first
-- ensure a local cache file exists
-- change the local file size
-- set `size` and `state = ToUpload`
+- `Drive.flush`
+- `Drive.fsync`
+- `Drive.release`
 
-See `docs/agent-docs/drive-truncate.md` for the exact ordering, including the
-signed cache-size delta and the metadata-before-`truncate(2)` update order.
-
-### Rename-Replace Special Case
-
-There is one rename flow where replacing a target file's content copies the
-source cache file into the target cache file, marks the target resource
-`ToUpload`, and immediately calls `queue_upload target_resource`.
-
-That path is important because it shows `queue_upload` is the general content
-upload dispatcher, not just something reached from `flush`/`fsync`/`release`.
-
-## Phase 2: Scheduling Upload Work
-
-### Cheap Dirty Check: `start_uploading_if_dirty`
-
-`flush`, `fsync`, and `release` all call:
+At the `Drive` layer they are intentionally identical and all delegate to:
 
 ```ocaml
 upload_if_dirty path
 ```
 
-`upload_if_dirty` first runs `start_uploading_if_dirty path`, which:
+See `docs/agent-docs/drive-flush-fsync-release.md` for the FUSE-boundary view
+of those callbacks.
 
-- normalizes the path with `get_path_in_cache`
-- uses `lookup_resource` directly
-- checks whether the cached row is currently `ToUpload`
+### 3. Cheap Local Gate: `start_uploading_if_dirty`
 
-If so, it immediately flips the resource state to `Uploading` and returns `true`.
-Otherwise it returns `false`.
+`upload_if_dirty` begins with the local gate:
 
-This function is deliberately cheap:
+```ocaml
+start_uploading_if_dirty path
+```
 
-- it does not call `get_resource`
-- it does not refresh metadata
-- it acts as the idempotency gate for repeated `flush`/`fsync`/`release` calls
+That helper is intentionally cheap:
 
-So repeated close/sync callbacks do not keep rescheduling the same upload once
-the resource has already left `ToUpload`.
+- it normalizes the path
+- it uses `lookup_resource`, not `get_resource`
+- it only starts work when the current cached state is exactly `ToUpload`
+- it flips the cached row to `Uploading`
 
-See `docs/agent-docs/drive-start-uploading-if-dirty.md` for the helper-focused
-view of this exact state gate.
+This is the main repeated-callback suppression point for `flush` / `fsync` /
+`release`.
 
-See `docs/agent-docs/drive-flush-fsync-release.md` for the boundary-layer view
-of those three callbacks and the fact that they are identical at the `Drive`
-layer.
+See `docs/agent-docs/drive-start-uploading-if-dirty.md` for the exact local
+state contract.
 
-### `upload_if_dirty`
+### 4. Request-Side Re-Resolution
 
-If `start_uploading_if_dirty` returns `true`, `upload_if_dirty` launches:
+If the local gate returns `true`, `upload_if_dirty` enters the request/session
+layer:
 
 ```ocaml
 do_request (upload_with_retry path) |> ignore
 ```
 
-That means the actual upload dispatch runs in the request/session machinery, but
-the scheduling decision was made locally first.
+`upload_with_retry` then:
 
-See `docs/agent-docs/drive-upload-if-dirty.md` for the helper-focused view of
-that bridge into `do_request (upload_with_retry path)`.
+1. normalizes the visible path again
+2. resolves the current resource with `get_resource`
+3. hands that row to `queue_upload`
 
-### `upload_with_retry`
+This second lookup is deliberate. The upload path should use the current
+authoritative resource row, not only the cached row seen during the cheap local
+gate.
 
-`upload_with_retry path` is the path-based bridge into the actual upload
-dispatcher:
+See `docs/agent-docs/drive-upload-if-dirty.md` and
+`docs/agent-docs/drive-upload-with-retry.md` for those two handoff layers.
 
-1. normalize the visible path
-2. resolve the current resource with `get_resource`
-3. call `queue_upload resource`
+### 5. Dispatch Policy In `queue_upload`
 
-Using `get_resource` here is important because the actual upload should operate
-on the latest cached row, not the stale row that `start_uploading_if_dirty` may
-have seen during its fast local check.
+`queue_upload` is where the path stops dealing in visible paths and starts
+dealing in a resolved `CacheData.Resource.t`.
 
-See `docs/agent-docs/drive-upload-with-retry.md` for the helper-focused view of
-this path-resolution step and the naming quirk around "with_retry".
+It chooses between two modes.
 
-## Phase 3: Dispatch Policy In `queue_upload`
+### Direct Synchronous Mode
 
-`queue_upload resource` selects between synchronous and asynchronous upload
-execution.
-
-See `docs/agent-docs/drive-queue-upload.md` for the helper-focused view of this
-dispatcher and its naming quirk.
-
-### Synchronous Mode
-
-If `config.async_upload_queue = false`, it simply runs:
+If `config.async_upload_queue = false`, it immediately runs:
 
 ```ocaml
 upload_resource_with_retry resource
 ```
 
-in the current request flow.
+### Async Queue Mode
 
-### Asynchronous Mode
+If `config.async_upload_queue = true`, it:
 
-If `config.async_upload_queue = true`, it does two things:
+1. flushes memory buffers for the resource
+2. inserts or reuses an upload-queue entry keyed by `resource_id`
+3. returns without waiting for the network upload to complete
 
-1. `flush_memory_buffers resource`
-2. `UploadQueue.queue_resource cache config resource`
+Later, the queue worker reloads the current resource row by cache id and calls
+back into `Drive.upload_resource_by_id`.
 
-and returns immediately.
+See `docs/agent-docs/drive-queue-upload.md` for the dispatch branch,
+`docs/agent-docs/drive-upload-resource-by-id.md` for the worker callback, and
+`docs/agent-docs/drive-init-filesystem.md` for queue-thread startup.
 
-That means async mode separates:
+### 6. Common Upload Execution
 
-- getting dirty bytes onto disk
-- actually performing the network upload later
+Once execution reaches `upload_resource_with_retry`, the synchronous path and
+the async worker path share the same downstream behavior:
 
-### Queue Semantics
+1. flush memory buffers to disk
+2. run `upload`
+3. normalize request failures through `try_with_default`
+4. retry only `Utils.Temporary_error` through `with_retry`
 
-`UploadQueue.queue_resource` deduplicates by `resource_id`:
+See `docs/agent-docs/drive-upload-resource-with-retry.md` for that wrapper.
 
-- if an upload entry already exists for the resource, it does not add another
-- otherwise it inserts an upload-queue row in state `ToUpload`
+### 7. Concrete Network Upload
 
-If `config.async_upload_queue_max_length > 0`, it blocks before enqueueing until
-the queue length drops below the configured limit.
+`Drive.upload` is the actual remote update attempt.
 
-The queue entry state is not the same as the resource state:
+At a high level it:
 
-- resource state lives in `CacheData.Resource.State`
-- queue entry state lives in `CacheData.UploadEntry.State`
+1. reads the on-disk cache file
+2. chooses the outgoing MIME/media representation
+3. updates local cached state to `Uploading`
+4. sends `FilesResource.update`
+5. rebuilds cache state from the returned Drive metadata
+6. returns to `Synchronized` only if no newer local state superseded it
 
-Keeping those distinct is important when debugging async behavior.
+This is the point where the upload pipeline stops being about dispatch and retry
+policy and actually mutates the remote file.
 
-## Async Worker Path
+See `docs/agent-docs/drive-upload.md` for the request shape and post-upload
+cache reconciliation rules.
 
-When async upload is enabled, `Drive.init_filesystem` starts the poll thread and
-worker pool in `UploadQueue`.
+## Why Buffer Flushing Appears In Multiple Places
 
-The async flow is:
+The upload pipeline has to defend against dirty write buffers that have not yet
+reached the on-disk cache file.
 
-1. poll thread selects the next queue entry
-2. queue entry state becomes `Uploading`
-3. worker calls `Drive.upload_resource_by_id resource_id`
-4. `upload_resource_by_id` loads the current resource row by cache id
-5. it runs `do_request (upload_resource_with_retry r)`
-6. on success the queue entry is deleted
-7. on failure the queue entry returns to queue state `ToUpload`
+That is why buffer flushing appears in more than one stage:
 
-So async mode changes when the upload happens, but not which Drive upload logic
-ultimately runs.
+- `truncate` flushes before changing file length
+- `queue_upload` flushes before async queue handoff
+- `upload_resource_with_retry` flushes before the actual upload attempt
 
-See `docs/agent-docs/drive-upload-resource-by-id.md` for the helper-focused
-view of the worker callback that reloads the queued resource row by cache id.
-
-## The Actual Upload: `upload_resource_with_retry`
-
-`upload_resource_with_retry resource` is the narrow wrapper around the real
-network operation:
-
-1. `flush_memory_buffers resource`
-2. `with_retry (fun r -> try_with_default (upload r)) resource`
-
-See `docs/agent-docs/drive-upload-resource-with-retry.md` for the helper-focused
-view of this wrapper, including the retry refresh behavior.
-
-The buffer flush is unconditional when `write_buffers` is enabled. This is the
-last guard that ensures buffered local writes actually reach the cache file
-before the upload reads from disk.
-
-## Buffer Flush Requirement
-
-`upload` reads bytes from:
-
-```ocaml
-let content_path = Cache.get_content_path cache resource
-```
-
-and then creates a `GapiMediaResource` from that file path.
-
-So if a write path updates only in-memory buffers and does not flush them before
-upload, the upload would send stale on-disk content.
-
-That is why buffer flushing appears in multiple places:
-
-- before direct upload retry execution
-- before async enqueue
-- in some other local content-manipulation paths such as `truncate`
-
-## The Actual Network Operation: `upload`
-
-`upload resource` assumes the resource already has a remote id:
-
-```ocaml
-let remote_id = resource |. CacheData.Resource.remote_id |> Option.get
-```
-
-So this path is for updating an existing remote file, not creating a new remote
-file shell.
-
-The function then:
-
-1. resolves `content_path`
-2. computes the outgoing MIME type
-3. builds `GapiMediaResource.create_file_resource`
-4. updates the cached resource state and size to `Uploading`
-5. sends `FilesResource.update`
-6. updates the cached row from the returned Drive file metadata
-7. marks the resource `Synchronized` if it is still in `Uploading`
-8. runs `shrink_cache ()`
-
-See `docs/agent-docs/drive-upload.md` for the helper-focused view of this
-actual network operation and its post-upload cache reconciliation rules.
-
-### MIME Type Selection
-
-If `config.autodetect_mime = true`, the content type is passed as `""`, letting
-Drive infer it.
-
-Otherwise, the upload path prefers:
-
-- the cached resource MIME type, if present and non-empty
-- otherwise the MIME type detected by the local media resource helper
-
-### Zero-Byte Files
-
-If the local content length is `0L`, `upload` sends:
-
-- the metadata patch
-- no media body (`media_source = None`)
-
-So empty-file uploads still update remote metadata, especially modified time,
-without requiring a media payload.
-
-### Request Shape
-
-The upload call is:
-
-```ocaml
-FilesResource.update
-  ~enforceSingleParent:true
-  ~supportsAllDrives:true
-  ~std_params:file_std_params
-  ?media_source
-  ~custom_headers
-  ~fileId:remote_id
-  file_patch
-```
-
-Two details are worth remembering:
-
-- `file_patch` only forces `modifiedTime = now`
-- `custom_headers` may carry Drive resource keys
-
-The returned `file` object is then treated as the new source of truth for the
-cached resource row.
-
-## Post-Upload Reconciliation
-
-After `FilesResource.update` succeeds, `upload`:
-
-1. updates the resource from the returned file metadata
-2. reloads by remote id from the cache if another row now owns that remote id
-3. if the resource state is still `Uploading`, sets the final state to
-   `Synchronized`
-4. saves the updated resource
-
-That reloaded-by-remote-id step is the same convergence pattern used elsewhere
-in `Drive`: remote id is treated as the durable identity, while paths can shift.
-
-## Retry Semantics
-
-`with_retry` handles `Utils.Temporary_error` specially.
-
-On a retryable failure it:
-
-1. waits with exponential backoff
-2. refreshes the remote file metadata with `FilesResource.get`
-3. rewrites the cached resource from that fresh server state
-4. preserves the high-level operation direction:
-   - `ToUpload` for upload retries
-   - `ToDownload` for download retries
-5. retries the original operation
-
-So upload retries are not blind resends against stale metadata. The code
-refreshes its view of the remote file between attempts.
-
-If retries are exhausted, the upload path raises `IO_error`.
-
-## Distinction Between Queue State And Resource State
-
-There are two parallel state machines during async uploads:
-
-- resource state: `ToUpload`, `Uploading`, `Synchronized`, etc.
-- upload-entry state: queue-local `ToUpload` / `Uploading`
-
-They answer different questions:
-
-- resource state: what is true of the cached file?
-- queue entry state: what is true of the async scheduling record?
-
-Confusing the two makes async upload bugs hard to reason about.
+Those are not redundant copies of the same responsibility. They protect
+different handoff boundaries.
 
 ## Config Knobs
 
@@ -402,41 +231,52 @@ The upload path is primarily shaped by these config fields:
 - `async_upload_threads`
 - `async_upload_queue_max_length`
 
-Their effects are:
+Their main effects are:
 
-- `write_buffers`: writes can accumulate in memory and therefore must be flushed
-  before upload
-- `autodetect_mime`: upload content type is delegated to Drive when enabled
-- `async_upload_queue`: switches between direct upload and queued upload
-- `async_upload_threads`: sizes the async worker pool
-- `async_upload_queue_max_length`: optionally backpressures enqueueing
+- `write_buffers`: dirty bytes may live in memory until a later flush point
+- `autodetect_mime`: `upload` may delegate MIME detection to Drive
+- `async_upload_queue`: choose direct upload vs queue handoff
+- `async_upload_threads`: size the async worker pool
+- `async_upload_queue_max_length`: optionally backpressure enqueueing
 
 ## Maintenance Notes
 
 When changing this area, watch these invariants:
 
-- local write paths must set `ToUpload`, or later flush/sync callbacks will not
-  schedule uploads
-- any path that uploads file content must flush memory buffers first when
-  `write_buffers` is enabled
-- async queue deduplication is by `resource_id`, not by path
-- `flush`, `fsync`, and `release` are intentionally the same upload trigger
-- this path assumes a `remote_id` already exists; remote file creation is a
-  separate concern
-- resource-state transitions and upload-entry-state transitions are related but
-  not interchangeable
+- dirtying paths must set `ToUpload`, or the trigger callbacks will never start
+  upload dispatch
+- any path that uploads file content must make sure buffered writes have reached
+  the cache file first
+- async queue deduplication is by cache `resource_id`, not by visible path or
+  remote id
+- `flush`, `fsync`, and `release` are intentionally the same trigger at the
+  `Drive` layer
+- this path assumes a remote file already exists; initial remote creation is a
+  separate lifecycle
+- resource state and queue-entry state must be reasoned about separately
 
 ## Related Docs
 
-- `docs/agent-docs/drive-init-filesystem.md`
-- `docs/agent-docs/drive-get-resource.md`
+- `docs/agent-docs/drive-write.md`
+- `docs/agent-docs/drive-truncate.md`
+- `docs/agent-docs/drive-flush-fsync-release.md`
+- `docs/agent-docs/drive-start-uploading-if-dirty.md`
+- `docs/agent-docs/drive-upload-if-dirty.md`
+- `docs/agent-docs/drive-upload-with-retry.md`
+- `docs/agent-docs/drive-queue-upload.md`
+- `docs/agent-docs/drive-upload-resource-by-id.md`
+- `docs/agent-docs/drive-upload-resource-with-retry.md`
+- `docs/agent-docs/drive-upload.md`
 
 ## Source Pointers
 
 - `src/drive.ml`: `write`
 - `src/drive.ml`: `truncate`
 - `src/drive.ml`: `start_uploading_if_dirty`
+- `src/drive.ml`: `upload_if_dirty`
+- `src/drive.ml`: `upload_with_retry`
 - `src/drive.ml`: `queue_upload`
+- `src/drive.ml`: `upload_resource_by_id`
 - `src/drive.ml`: `upload_resource_with_retry`
 - `src/drive.ml`: `upload`
 - `src/uploadQueue.ml`: async queue polling and worker dispatch
