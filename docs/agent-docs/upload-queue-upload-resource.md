@@ -7,7 +7,7 @@ upload entry into actual worker execution.
 
 It sits between:
 
-- `poll_upload_queue`, which wakes periodically and asks for one unit of work
+- `poll_upload_queue`, which asks for one unit of work
 - `Drive.upload_resource_by_id`, which is the callback that eventually re-enters
   the normal request/session upload path
 
@@ -18,7 +18,7 @@ Its job is narrower than either of those layers. It:
 - flips the queue entry to `Uploading` in the worker
 - deletes the entry on success or restores it to `ToUpload` on failure
 
-So this helper is the queue-side worker-dispatch step for async uploads.
+So this helper owns one-entry selection and worker handoff.
 
 ## Internal Status And Effective Signature
 
@@ -35,8 +35,6 @@ The input is the cache handle. Everything else comes from the global
 `ConcurrentUploadQueue` runtime state installed by `start_async_upload_thread`.
 
 ## Entire Implementation
-
-The implementation is:
 
 ```ocaml
 let upload_resource cache =
@@ -65,7 +63,7 @@ let upload_resource cache =
   | None -> ()
 ```
 
-That is the whole control flow.
+That is the whole helper.
 
 ## High-Level Flow
 
@@ -82,10 +80,9 @@ At a high level, the helper does this:
    - on success, delete the queue entry
    - on failure, restore queue state to `ToUpload` and re-raise
 
-So this helper is best read as "dispatch one queued upload entry now", not as
-"run the whole queue loop".
+So this helper is best read as "dispatch one queued upload entry now".
 
-## Runtime Data From `ConcurrentUploadQueue`
+## Runtime Dependencies
 
 The helper begins with:
 
@@ -94,25 +91,11 @@ let d = ConcurrentUploadQueue.get () in
 let upload = d.upload_resource_by_id in
 ```
 
-So `upload_resource` does not receive its worker callback as an explicit
-argument.
+So `upload_resource` does not receive its worker callback or thread pool as
+explicit arguments. Both come from the runtime record installed earlier by
+`start_async_upload_thread`.
 
-Instead it uses the module-global async-upload runtime state set earlier by:
-
-```ocaml
-start_async_upload_thread cache upload_threads upload_resource
-```
-
-In normal production flow, that callback is `Drive.upload_resource_by_id`.
-
-The thread pool also comes from the same shared runtime state:
-
-```ocaml
-d.thread_pool
-```
-
-So this helper depends on `start_async_upload_thread` having already initialized
-that concurrent global.
+In normal production flow, the callback is `Drive.upload_resource_by_id`.
 
 ## Queue Selection: One `ToUpload` Entry
 
@@ -130,8 +113,6 @@ again.
 
 ### No Explicit Ordering Guarantee
 
-One implementation detail is important here.
-
 There is no explicit FIFO or age-based ordering guarantee in the current
 selection path:
 
@@ -147,8 +128,6 @@ not as:
 
 - "return the oldest queued entry"
 
-This matters if async-upload fairness or queue ordering ever becomes important.
-
 ## Empty-Queue Behavior
 
 If `select_next_resource` returns `None`, the helper does exactly this:
@@ -157,10 +136,8 @@ If `select_next_resource` returns `None`, the helper does exactly this:
 | None -> ()
 ```
 
-There is no log line and no retry loop at this layer.
-
-That is deliberate because `poll_upload_queue` calls this helper repeatedly. An
-empty queue is a normal idle condition, not an error.
+There is no log line and no retry loop at this layer. An empty queue is a
+normal idle condition.
 
 ## Worker Callback: `do_work`
 
@@ -170,11 +147,9 @@ The actual queue-entry transition logic lives in the local worker closure:
 let do_work e = ...
 ```
 
-This closure is what the thread pool runs for the selected entry.
+That closure owns the queue-entry lifecycle for a single piece of work.
 
-It owns the queue-entry lifecycle for that single piece of work.
-
-## Step 1: Log And Mark Queue Entry `Uploading`
+## Step 1: Mark Queue Entry `Uploading`
 
 Inside the worker, the first queue-side state change is:
 
@@ -182,9 +157,6 @@ Inside the worker, the first queue-side state change is:
 Cache.UploadQueue.update_entry_state cache
   CacheData.UploadEntry.State.Uploading entry_id
 ```
-
-So the selected entry is not considered in-progress until the worker callback
-actually starts running.
 
 At this layer, the queue-entry state machine is:
 
@@ -215,8 +187,6 @@ Two details matter:
 In the production path, the callback is `Drive.upload_resource_by_id`, which
 then reloads the resource row and runs the shared upload wrapper.
 
-See `docs/agent-docs/drive-upload-resource-by-id.md` for that next stage.
-
 ## Step 3: Failure Path Requeues The Entry
 
 If the callback raises, `do_work` catches that exception long enough to:
@@ -225,13 +195,10 @@ If the callback raises, `do_work` catches that exception long enough to:
 2. set the queue entry back to `ToUpload`
 3. re-raise the exception
 
-So async queue retry policy at this layer is:
+So retry policy at this layer is:
 
 - do not swallow the failure
 - do make the queue entry selectable again for a later poll cycle
-
-This is why transient failures eventually re-enter the async queue instead of
-silently deleting the entry.
 
 ## Step 4: Success Path Deletes The Entry
 
@@ -241,12 +208,9 @@ If the callback returns normally, the worker finally does:
 Cache.UploadQueue.delete_upload_entry cache e
 ```
 
-So queue entry deletion is success-driven, not "attempt-driven".
+So queue entry deletion is success-driven, not attempt-driven.
 
-The entry is removed only after the configured upload callback finishes without
-raising.
-
-## Relationship To `ThreadPool.add_work`
+## `ThreadPool.add_work` Is The Execution Boundary
 
 The dispatch step is:
 
@@ -254,51 +218,12 @@ The dispatch step is:
 ThreadPool.add_work do_work e d.thread_pool
 ```
 
-This has an important consequence because `ThreadPool.add_work` does not keep a
-separate backlog queue. Instead it:
-
-- waits while `pending_threads >= max_threads`
-- creates a new thread immediately once a slot is free
+`ThreadPool.add_work` does not keep a separate backlog queue. Instead it waits
+while `pending_threads >= max_threads` and starts a new worker once a slot is
+free.
 
 So `UploadQueue.upload_resource` can block the poll thread while the worker pool
 is full.
-
-This helper therefore does not mean:
-
-- "always enqueue one more worker task instantly"
-
-It means:
-
-- "start one worker now if capacity exists, otherwise wait for capacity"
-
-## Relationship To `poll_upload_queue`
-
-`poll_upload_queue` calls this helper once per loop iteration, after a
-one-second sleep:
-
-```ocaml
-while true do
-  check ();
-  Thread.delay 1.0;
-  upload_resource cache
-done
-```
-
-So under the current design:
-
-- at most one queue entry is selected per poll iteration
-- the poll loop itself is the pacing mechanism
-- worker concurrency comes from overlapping thread-pool threads over multiple
-  poll iterations, not from one `upload_resource` call dispatching many entries
-
-This is why `async_upload_threads` controls maximum concurrent workers, while
-the poll loop still controls how often new worker launches are attempted.
-
-See `docs/agent-docs/upload-queue-poll-upload-queue.md` for the outer polling
-loop, stop-flag check, and final thread-pool drain.
-
-See `docs/agent-docs/upload-queue-queue-resource.md` for the earlier enqueue
-step that created the queue row this helper later consumes.
 
 ## Relationship To `Drive.upload_resource_by_id`
 
@@ -318,15 +243,7 @@ This helper owns:
 - entry into `do_request`
 - handoff to `upload_resource_with_retry`
 
-So if async uploads misbehave, a useful boundary is:
-
-- queue-entry issues: inspect `UploadQueue.upload_resource`
-- resource-upload issues after callback entry: inspect
-  `Drive.upload_resource_by_id`
-
 ## Current Failure-Path Quirk
-
-One maintenance detail is worth documenting explicitly.
 
 On failure, `do_work` re-raises after restoring queue state to `ToUpload`.
 
@@ -335,9 +252,6 @@ table after the worker function returns normally.
 
 So failed worker cleanup is not handled in an exception-safe way by the current
 `ThreadPool` wrapper.
-
-This means `UploadQueue.upload_resource` successfully requeues the upload entry,
-but worker-slot accounting depends on thread-pool behavior outside this helper.
 
 If async uploads ever appear to stall after worker failures, inspect both:
 
@@ -362,6 +276,7 @@ It only advances one queued upload entry into worker execution.
 - `docs/agent-docs/drive-init-filesystem.md`
 - `docs/agent-docs/upload-queue-queue-resource.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`
+- `docs/agent-docs/upload-queue-start-async-upload-thread.md`
 - `docs/agent-docs/drive-queue-upload.md`
 - `docs/agent-docs/drive-upload-resource-by-id.md`
 - `docs/agent-docs/drive-upload-resource-with-retry.md`
