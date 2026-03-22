@@ -257,4 +257,5 @@ When debugging mount/runtime issues, focus on:
 - dirty-shutdown recovery
 - shutdown ordering
 - `GdfuseFuse.handle_exception`
+  see `docs/agent-docs/gdfuse-fuse-boundary.md`
 - the specific `Drive.*` callback being exercised

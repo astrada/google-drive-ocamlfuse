@@ -151,6 +151,10 @@ Most remote operations run through:
 - `Oauth2.do_request`: authenticated request wrapper
 - `Drive.with_retry_default`: Drive-specific exception mapping and retries
 
+The FUSE adapter boundary in `bin/gdfuseFuse.ml` then wraps `Drive` callbacks
+through `handle_exception`, `with_drive_op`, and `drive_path_op`; see
+`docs/agent-docs/gdfuse-fuse-boundary.md`.
+
 Retry handling is split:
 
 - CURL/network failures and temporary API errors are retried
