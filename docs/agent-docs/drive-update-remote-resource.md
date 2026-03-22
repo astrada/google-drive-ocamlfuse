@@ -33,6 +33,9 @@ See `docs/agent-docs/drive-delete-remote-resource.md` for the higher-level
 policy wrapper that decides when deletion requests reach `trash_resource` versus
 `delete_resource`.
 
+See `docs/agent-docs/drive-chmod-chown-utime.md` for the thin public metadata
+entrypoints that use this wrapper for `utime`, `chmod`, and `chown`.
+
 See `docs/agent-docs/drive-xattr.md` for the concrete xattr read/mutate paths
 that use this wrapper for `set_xattr` and `remove_xattr`.
 
