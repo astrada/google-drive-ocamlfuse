@@ -173,6 +173,8 @@ Later, the queue worker reloads the current resource row by cache id and calls
 back into `Drive.upload_resource_by_id`.
 
 See `docs/agent-docs/drive-queue-upload.md` for the dispatch branch,
+`docs/agent-docs/upload-queue-queue-resource.md` for the queue-row insertion
+step,
 `docs/agent-docs/upload-queue-upload-resource.md` for the queue-side poll
 helper and worker handoff,
 `docs/agent-docs/drive-upload-resource-by-id.md` for the worker callback, and
@@ -265,6 +267,7 @@ When changing this area, watch these invariants:
 - `docs/agent-docs/drive-start-uploading-if-dirty.md`
 - `docs/agent-docs/drive-upload-if-dirty.md`
 - `docs/agent-docs/drive-upload-with-retry.md`
+- `docs/agent-docs/upload-queue-queue-resource.md`
 - `docs/agent-docs/upload-queue-start-async-upload-thread.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`
 - `docs/agent-docs/drive-queue-upload.md`

@@ -297,6 +297,9 @@ the poll loop still controls how often new worker launches are attempted.
 See `docs/agent-docs/upload-queue-poll-upload-queue.md` for the outer polling
 loop, stop-flag check, and final thread-pool drain.
 
+See `docs/agent-docs/upload-queue-queue-resource.md` for the earlier enqueue
+step that created the queue row this helper later consumes.
+
 ## Relationship To `Drive.upload_resource_by_id`
 
 `UploadQueue.upload_resource` and `Drive.upload_resource_by_id` own adjacent but
@@ -357,6 +360,7 @@ It only advances one queued upload entry into worker execution.
 ## Related Docs
 
 - `docs/agent-docs/drive-init-filesystem.md`
+- `docs/agent-docs/upload-queue-queue-resource.md`
 - `docs/agent-docs/upload-queue-poll-upload-queue.md`
 - `docs/agent-docs/drive-queue-upload.md`
 - `docs/agent-docs/drive-upload-resource-by-id.md`

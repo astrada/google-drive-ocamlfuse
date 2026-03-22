@@ -167,6 +167,9 @@ not as:
 See `docs/agent-docs/drive-upload-resource-by-id.md` for the worker-side
 callback that the async queue eventually invokes after entry selection.
 
+See `docs/agent-docs/upload-queue-queue-resource.md` for the helper-focused
+view of that queue-row persistence and queue-length limiting logic.
+
 See `docs/agent-docs/upload-queue-upload-resource.md` for the poll-thread
 helper that performs that entry selection and thread-pool handoff.
 
@@ -256,6 +259,7 @@ resource.
 ## Related Docs
 
 - `docs/agent-docs/drive-upload-with-retry.md`
+- `docs/agent-docs/upload-queue-queue-resource.md`
 - `docs/agent-docs/upload-queue-upload-resource.md`
 - `docs/agent-docs/drive-upload-resource-by-id.md`
 - `docs/agent-docs/drive-upload-path.md`

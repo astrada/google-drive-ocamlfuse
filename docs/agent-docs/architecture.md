@@ -301,6 +301,9 @@ Shared behavior:
 The async path persists queue entries in cache, then a background thread polls
 the queue and hands work to `ThreadPool`.
 
+See `docs/agent-docs/upload-queue-queue-resource.md` for the enqueue-time
+helper that persists and deduplicates upload-queue rows.
+
 See `docs/agent-docs/upload-queue-start-async-upload-thread.md` for the
 runtime-state installation and thread startup that bring this subsystem into
 existence.
