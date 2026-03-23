@@ -22,6 +22,8 @@ written in OCaml. It lets you mount your Google Drive on Linux.
 * Team Drive [Support](https://github.com/astrada/google-drive-ocamlfuse/wiki/Team-Drives)
 * Service Account [Support](https://github.com/astrada/google-drive-ocamlfuse/wiki/Service-Accounts)
 * OAuth2 for Devices [Support](https://github.com/astrada/google-drive-ocamlfuse/wiki/OAuth2-for-Devices)
+* Since version 0.8.0, the process is kept in foreground (**breaking change**)
+* Since version 0.8.0, the new configuration file format is TOML (**breaking change**)
 
 ### Resources
 
