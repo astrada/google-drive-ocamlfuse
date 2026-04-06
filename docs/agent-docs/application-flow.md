@@ -8,7 +8,9 @@ in `src/` and thin production wiring in `bin/`.
 The important modules are:
 
 - `src/gdfuseCommon.ml`: shared startup types and config/state helpers
-- `src/gdfuseCli.ml`: CLI parsing and `application_params` construction
+- `src/gdfuseCli.ml`: CLI parsing and explicit parse outcomes
+- `src/gdfuseApp.ml`: top-level CLI runner over parse outcomes and flow
+  dispatch
 - `src/gdfuseFlow.ml`: startup, auth bootstrap, shutdown, and mount-mode
   orchestration behind a functorized dependency boundary
 - `bin/gdfuseRuntimeDeps.ml`: production dependency implementation for browser,
@@ -22,7 +24,7 @@ code only prepares runtime state and hands off to FUSE.
 ## Flow At A Glance
 
 1. Parse CLI options and mount options in `GdfuseCli.parse`.
-2. If `-version` is set, print version information and exit.
+2. `GdfuseApp` handles parse outcomes for version, help, and CLI errors.
 3. Instantiate `GdfuseFlow.Make(GdfuseRuntimeDeps)` in the executable.
 4. If no mountpoint was passed, run bootstrap-only mode with `"."`.
 5. Otherwise run full mount mode.
@@ -41,9 +43,21 @@ without starting the FUSE loop. That is effectively a bootstrap/auth-only mode.
 thin. It:
 
 - instantiates the real flow module
-- parses CLI arguments
-- dispatches to bootstrap-only or mount mode
-- converts uncaught failures into `Error: ...` on stderr
+- instantiates the real CLI runner
+- calls the CLI runner
+
+### Top-Level CLI Runner
+
+[gdfuseApp.ml](/home/alex/src/google-drive-ocamlfuse/src/gdfuseApp.ml) owns
+the top-level user-visible CLI behavior above the flow module.
+
+It:
+
+- matches on `GdfuseCli.parse_result`
+- prints version/help output
+- prints parse errors without surfacing uncaught `Arg` exceptions
+- dispatches successful parses to bootstrap-only or mount mode
+- keeps runtime `Failure` handling on the `Error: ...` stderr path
 
 ### CLI
 
@@ -64,7 +78,15 @@ Important behavior:
 - `gdfroot=...` is handled specially and stored in `base_dir`
 - all remaining mount options are forwarded into the FUSE argv
 
-`parse_argv` also exists specifically to make CLI behavior unit testable.
+`parse_argv` returns an explicit outcome:
+
+- `Parsed parsed` for successful flow execution
+- `Show_version` for the version-only path
+- `Help text` for help output
+- `Error text` for CLI parse failures
+
+That keeps help/version/error handling testable without relying on uncaught
+`Arg.Help` or `Arg.Bad` exceptions.
 
 ### Library Flow
 

@@ -1,16 +1,23 @@
 type parsed = {
-  show_version : bool;
   mount_requested : bool;
   params : GdfuseCommon.application_params;
   fuse_args : string list;
 }
 
-let print_version () =
-  Printf.printf
+type parse_result =
+  | Parsed of parsed
+  | Show_version
+  | Help of string
+  | Error of string
+
+let version_text =
+  Printf.sprintf
     "google-drive-ocamlfuse, version %s\n\
      Copyright (C) 2012-2026 Alessandro Strada\n\
      License MIT\n"
     Config.version
+
+let print_version () = print_string version_text
 
 let parse_argv argv =
   let argv = if Array.length argv = 0 then [| "gdfuse" |] else argv in
@@ -50,7 +57,7 @@ let parse_argv argv =
           let _, bd = ExtString.String.split o "=" in
           base_dir := bd
         with ExtString.Invalid_string ->
-          failwith "Invalid mount option gdfroot")
+          raise (Arg.Bad "Invalid mount option gdfroot"))
       base_dir_opt;
     let fuse_mount_opts =
       List.filter (fun o -> not (ExtString.String.starts_with o "gdfroot")) opts
@@ -134,40 +141,47 @@ let parse_argv argv =
         ("-port", Arg.Set_int port, " set loopback port. Default is 8080.");
       ]
   in
-  ignore
-    (Arg.parse_argv ~current:(ref 0) argv arg_specs
-       (fun s -> mountpoint := s)
-       usage);
-  let params =
-    {
-      GdfuseCommon.debug = !debug;
-      filesystem_label = !fs_label;
-      client_id = !client_id;
-      client_secret = !client_secret;
-      mountpoint = !mountpoint;
-      clear_cache = !clear_cache;
-      headless = !headless;
-      skip_trash = !skip_trash;
-      base_dir = !base_dir;
-      multi_threading = !multi_threading;
-      config_path = !config_path;
-      xdg_base_directory = !xdg_base_directory;
-      browser = !browser;
-      docs_mode = !docs_mode;
-      service_account_credentials_path = !service_account_credentials_path;
-      service_account_user_to_impersonate = !service_account_user_to_impersonate;
-      log_to = !log_to;
-      scope = !scope;
-      redirect_uri = !redirect_uri;
-      device = !device;
-      port = !port;
-    }
-  in
-  {
-    show_version = !show_version;
-    mount_requested = !mountpoint <> "";
-    params;
-    fuse_args = !fuse_args;
-  }
+  try
+    ignore
+      (Arg.parse_argv ~current:(ref 0) argv arg_specs
+         (fun s -> mountpoint := s)
+         usage);
+    if !show_version then Show_version
+    else
+      let params =
+        {
+          GdfuseCommon.debug = !debug;
+          filesystem_label = !fs_label;
+          client_id = !client_id;
+          client_secret = !client_secret;
+          mountpoint = !mountpoint;
+          clear_cache = !clear_cache;
+          headless = !headless;
+          skip_trash = !skip_trash;
+          base_dir = !base_dir;
+          multi_threading = !multi_threading;
+          config_path = !config_path;
+          xdg_base_directory = !xdg_base_directory;
+          browser = !browser;
+          docs_mode = !docs_mode;
+          service_account_credentials_path = !service_account_credentials_path;
+          service_account_user_to_impersonate =
+            !service_account_user_to_impersonate;
+          log_to = !log_to;
+          scope = !scope;
+          redirect_uri = !redirect_uri;
+          device = !device;
+          port = !port;
+        }
+      in
+      Parsed
+        {
+          mount_requested = !mountpoint <> "";
+          params;
+          fuse_args = !fuse_args;
+        }
+  with
+  | Arg.Help message -> Help message
+  | Arg.Bad message -> Error message
 
 let parse () = parse_argv Sys.argv

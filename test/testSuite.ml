@@ -7,6 +7,7 @@ let _ =
            TestConfigRuntime.suite;
            TestConfigStore.suite;
            TestGdfuseCli.suite;
+           TestGdfuseApp.suite;
            TestGdfuseFlow.suite;
            TestDriveUploadDispatch.suite;
            TestDriveFileMutations.suite;

@@ -40,11 +40,18 @@ The `Makefile` is only a small wrapper around these dune commands.
 
 - `bin/gdfuse.ml`
   - Thin executable entrypoint.
-  - Instantiates the real `GdfuseFlow` module and dispatches based on CLI mode.
+  - Instantiates the real `GdfuseFlow` and `GdfuseApp` modules.
+  - Hands process argv to the library-visible CLI runner.
 
 - `src/gdfuseCli.ml`
-  - Parses CLI flags into `application_params` plus FUSE argv fragments.
-  - Also exposes `parse_argv`, which makes CLI behavior unit testable.
+  - Parses CLI flags into explicit CLI outcomes.
+  - Builds `application_params` plus FUSE argv fragments for the successful
+    path.
+
+- `src/gdfuseApp.ml`
+  - Top-level CLI runner above `GdfuseCli` and `GdfuseFlow`.
+  - Handles version/help/error output and dispatches successful parses into
+    bootstrap-only or mount mode.
 
 - `src/gdfuseCommon.ml`
   - Shared startup types and helpers.
