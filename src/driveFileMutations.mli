@@ -1,7 +1,4 @@
-type runtime = {
-  cache : CacheData.t;
-  config : Config.t;
-}
+type runtime = { cache : CacheData.t; config : Config.t }
 
 type io_buffer =
   (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
@@ -27,6 +24,8 @@ module type PORTS = sig
 end
 
 module Make (P : PORTS) : sig
-  val write : runtime -> string -> io_buffer -> int64 -> int GapiMonad.SessionM.m
+  val write :
+    runtime -> string -> io_buffer -> int64 -> int GapiMonad.SessionM.m
+
   val truncate : runtime -> string -> int64 -> unit GapiMonad.SessionM.m
 end

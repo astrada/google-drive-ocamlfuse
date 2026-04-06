@@ -16,11 +16,8 @@ module Make (D : DEPS) = struct
     if message = "" || message.[String.length message - 1] = '\n' then message
     else message ^ "\n"
 
-  let print_stdout message =
-    ensure_trailing_newline message |> D.print_stdout
-
-  let print_stderr message =
-    ensure_trailing_newline message |> D.print_stderr
+  let print_stdout message = ensure_trailing_newline message |> D.print_stdout
+  let print_stderr message = ensure_trailing_newline message |> D.print_stderr
 
   let quit_with_error error_message =
     Printf.sprintf "Error: %s\n" error_message |> D.print_stderr;

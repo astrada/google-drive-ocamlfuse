@@ -1,7 +1,4 @@
-type runtime = {
-  cache : CacheData.t;
-  config : Config.t;
-}
+type runtime = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
   val get_path_in_cache : string -> Config.t -> string * bool
@@ -14,10 +11,11 @@ module type PORTS = sig
 
   val get_resource : string -> bool -> CacheData.Resource.t GapiMonad.SessionM.m
   val flush_memory_buffers : CacheData.Resource.t -> unit
-  val enqueue_async_upload : CacheData.t -> Config.t -> CacheData.Resource.t -> unit
 
-  val upload_now_with_retry :
-    CacheData.Resource.t -> unit GapiMonad.SessionM.m
+  val enqueue_async_upload :
+    CacheData.t -> Config.t -> CacheData.Resource.t -> unit
+
+  val upload_now_with_retry : CacheData.Resource.t -> unit GapiMonad.SessionM.m
 end
 
 module Make (P : PORTS) : sig
@@ -27,7 +25,5 @@ module Make (P : PORTS) : sig
     runtime -> CacheData.Resource.t -> unit GapiMonad.SessionM.m
 
   val upload_with_retry : runtime -> string -> unit GapiMonad.SessionM.m
-
-  val upload_if_dirty :
-    runtime -> string -> unit GapiMonad.SessionM.m option
+  val upload_if_dirty : runtime -> string -> unit GapiMonad.SessionM.m option
 end

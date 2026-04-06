@@ -175,11 +175,7 @@ let parse_argv argv =
         }
       in
       Parsed
-        {
-          mount_requested = !mountpoint <> "";
-          params;
-          fuse_args = !fuse_args;
-        }
+        { mount_requested = !mountpoint <> ""; params; fuse_args = !fuse_args }
   with
   | Arg.Help message -> Help message
   | Arg.Bad message -> Error message

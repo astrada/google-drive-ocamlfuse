@@ -39,23 +39,26 @@ module FakePorts = struct
 
   let add_resource resource =
     let trashed = Option.default false resource.CacheData.Resource.trashed in
-    Hashtbl.replace resources (key resource.CacheData.Resource.path trashed) resource
+    Hashtbl.replace resources
+      (key resource.CacheData.Resource.path trashed)
+      resource
 
   let find_resource path trashed =
     try Some (Hashtbl.find resources (key path trashed))
     with Not_found -> None
 
   let find_by_id id =
-    Hashtbl.to_seq_values resources |> List.of_seq
+    Hashtbl.to_seq_values resources
+    |> List.of_seq
     |> List.find_opt (fun resource -> resource.CacheData.Resource.id = id)
 
   let replace_resource resource =
     let old_keys =
       Hashtbl.to_seq resources |> List.of_seq
       |> List.filter_map (fun (k, existing) ->
-             if existing.CacheData.Resource.id = resource.CacheData.Resource.id then
-               Some k
-             else None)
+          if existing.CacheData.Resource.id = resource.CacheData.Resource.id
+          then Some k
+          else None)
     in
     List.iter (Hashtbl.remove resources) old_keys;
     add_resource resource
@@ -72,8 +75,7 @@ module FakePorts = struct
          (CacheData.Resource.State.to_string state));
     match find_by_id id with
     | None -> ()
-    | Some resource ->
-        replace_resource { resource with state }
+    | Some resource -> replace_resource { resource with state }
 
   let get_resource path trashed =
     record (Printf.sprintf "get_resource:%s:%b" path trashed);
@@ -119,13 +121,14 @@ let test_start_uploading_if_dirty_flips_state_once () =
     (make_resource ~state:CacheData.Resource.State.ToUpload "/file.txt"
        "file-id");
   let runtime = default_runtime () in
-  assert_equal true (UploadDispatch.start_uploading_if_dirty runtime "/file.txt");
+  assert_equal true
+    (UploadDispatch.start_uploading_if_dirty runtime "/file.txt");
   let resource = Option.get (FakePorts.find_resource "/file.txt" false) in
-  assert_equal CacheData.Resource.State.Uploading resource.CacheData.Resource.state;
+  assert_equal CacheData.Resource.State.Uploading
+    resource.CacheData.Resource.state;
   assert_equal false
     (UploadDispatch.start_uploading_if_dirty runtime "/file.txt");
-  assert_equal
-    ~printer:string_of_string_list
+  assert_equal ~printer:string_of_string_list
     [
       "lookup:/file.txt:false";
       "update_state:1:Uploading";
@@ -141,8 +144,7 @@ let test_upload_if_dirty_uses_lookup_before_request_side_work () =
   let runtime = default_runtime () in
   let upload_request = UploadDispatch.upload_if_dirty runtime "/file.txt" in
   assert_bool "expected queued upload request" (Option.is_some upload_request);
-  assert_equal
-    ~printer:string_of_string_list
+  assert_equal ~printer:string_of_string_list
     [
       "lookup:/file.txt:false";
       "update_state:1:Uploading";
@@ -150,8 +152,7 @@ let test_upload_if_dirty_uses_lookup_before_request_side_work () =
     ]
     !FakePorts.trace;
   run_session (Option.get upload_request);
-  assert_equal
-    ~printer:string_of_string_list
+  assert_equal ~printer:string_of_string_list
     [
       "lookup:/file.txt:false";
       "update_state:1:Uploading";
@@ -166,7 +167,8 @@ let test_upload_if_dirty_ignores_non_dirty_resources () =
   let runtime = default_runtime () in
   let upload_request = UploadDispatch.upload_if_dirty runtime "/file.txt" in
   assert_bool "expected no upload request" (Option.is_none upload_request);
-  assert_equal ~printer:string_of_string_list [ "lookup:/file.txt:false" ]
+  assert_equal ~printer:string_of_string_list
+    [ "lookup:/file.txt:false" ]
     !FakePorts.trace
 
 let test_queue_upload_async_flushes_and_enqueues () =

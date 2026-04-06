@@ -17,16 +17,12 @@ module FakeDeps = struct
     let run_bootstrap_only params =
       record "bootstrap";
       bootstrap_calls := !bootstrap_calls @ [ params ];
-      match !bootstrap_exception with
-      | Some exn -> raise exn
-      | None -> ()
+      match !bootstrap_exception with Some exn -> raise exn | None -> ()
 
     let run_mount_mode params fuse_args =
       record "mount";
       mount_calls := !mount_calls @ [ (params, fuse_args) ];
-      match !mount_exception with
-      | Some exn -> raise exn
-      | None -> ()
+      match !mount_exception with Some exn -> raise exn | None -> ()
   end
 
   let print_stdout message = stdout_messages := !stdout_messages @ [ message ]
@@ -77,7 +73,8 @@ let test_help_prints_to_stdout_and_exits_cleanly () =
       expect_exit 0 (fun () -> App.run_argv [| "gdfuse"; "-help" |]);
       let stdout_message = only_message !FakeDeps.stdout_messages in
       assert_contains "Usage: gdfuse" stdout_message;
-      assert_equal ~printer:string_of_int 0 (List.length !FakeDeps.stderr_messages);
+      assert_equal ~printer:string_of_int 0
+        (List.length !FakeDeps.stderr_messages);
       assert_equal ~printer:string_of_int 0 (List.length !FakeDeps.events))
 
 let test_double_dash_help_prints_to_stdout_and_exits_cleanly () =
@@ -85,7 +82,8 @@ let test_double_dash_help_prints_to_stdout_and_exits_cleanly () =
       expect_exit 0 (fun () -> App.run_argv [| "gdfuse"; "--help" |]);
       let stdout_message = only_message !FakeDeps.stdout_messages in
       assert_contains "Usage: gdfuse" stdout_message;
-      assert_equal ~printer:string_of_int 0 (List.length !FakeDeps.stderr_messages);
+      assert_equal ~printer:string_of_int 0
+        (List.length !FakeDeps.stderr_messages);
       assert_equal ~printer:string_of_int 0 (List.length !FakeDeps.events))
 
 let test_invalid_option_prints_arg_error_without_running_flow () =
@@ -97,7 +95,8 @@ let test_invalid_option_prints_arg_error_without_running_flow () =
         stderr_message;
       assert_contains "Usage: gdfuse" stderr_message;
       assert_not_contains "Error:" stderr_message;
-      assert_equal ~printer:string_of_int 0 (List.length !FakeDeps.stdout_messages);
+      assert_equal ~printer:string_of_int 0
+        (List.length !FakeDeps.stdout_messages);
       assert_equal ~printer:string_of_int 0 (List.length !FakeDeps.events))
 
 let test_version_prints_and_exits_without_running_flow () =
@@ -105,7 +104,8 @@ let test_version_prints_and_exits_without_running_flow () =
       expect_exit 0 (fun () -> App.run_argv [| "gdfuse"; "-version" |]);
       let stdout_message = only_message !FakeDeps.stdout_messages in
       assert_equal ~printer:(fun x -> x) GdfuseCli.version_text stdout_message;
-      assert_equal ~printer:string_of_int 0 (List.length !FakeDeps.stderr_messages);
+      assert_equal ~printer:string_of_int 0
+        (List.length !FakeDeps.stderr_messages);
       assert_equal ~printer:string_of_int 0 (List.length !FakeDeps.events))
 
 let test_mount_invocation_runs_mount_mode () =
@@ -114,10 +114,10 @@ let test_mount_invocation_runs_mount_mode () =
       assert_equal ~printer:(String.concat ";") [ "mount" ] !FakeDeps.events;
       match !FakeDeps.mount_calls with
       | [ (params, fuse_args) ] ->
-          assert_equal ~printer:(fun x -> x) "/tmp/mnt"
-            params.GdfuseCommon.mountpoint;
-          assert_equal ~printer:(String.concat ",")
-            [ "-f"; "-obig_writes" ]
+          assert_equal
+            ~printer:(fun x -> x)
+            "/tmp/mnt" params.GdfuseCommon.mountpoint;
+          assert_equal ~printer:(String.concat ",") [ "-f"; "-obig_writes" ]
             fuse_args
       | _ -> assert_failure "Expected exactly one mount invocation")
 
@@ -127,8 +127,7 @@ let test_no_mount_invocation_runs_bootstrap_only () =
       assert_equal ~printer:(String.concat ";") [ "bootstrap" ] !FakeDeps.events;
       match !FakeDeps.bootstrap_calls with
       | [ params ] ->
-          assert_equal ~printer:(fun x -> x) ""
-            params.GdfuseCommon.mountpoint
+          assert_equal ~printer:(fun x -> x) "" params.GdfuseCommon.mountpoint
       | _ -> assert_failure "Expected exactly one bootstrap invocation")
 
 let test_runtime_failure_keeps_clean_error_format () =

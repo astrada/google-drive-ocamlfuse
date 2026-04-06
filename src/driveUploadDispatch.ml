@@ -1,10 +1,7 @@
 open GapiMonad
 open GapiMonad.SessionM.Infix
 
-type runtime = {
-  cache : CacheData.t;
-  config : Config.t;
-}
+type runtime = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
   val get_path_in_cache : string -> Config.t -> string * bool
@@ -17,7 +14,10 @@ module type PORTS = sig
 
   val get_resource : string -> bool -> CacheData.Resource.t SessionM.m
   val flush_memory_buffers : CacheData.Resource.t -> unit
-  val enqueue_async_upload : CacheData.t -> Config.t -> CacheData.Resource.t -> unit
+
+  val enqueue_async_upload :
+    CacheData.t -> Config.t -> CacheData.Resource.t -> unit
+
   val upload_now_with_retry : CacheData.Resource.t -> unit SessionM.m
 end
 
@@ -28,9 +28,7 @@ module Make (P : PORTS) = struct
     match resource with
     | None -> false
     | Some resource ->
-        if
-          resource.CacheData.Resource.state
-          = CacheData.Resource.State.ToUpload
+        if resource.CacheData.Resource.state = CacheData.Resource.State.ToUpload
         then (
           P.update_cached_resource_state runtime.cache
             CacheData.Resource.State.Uploading resource.CacheData.Resource.id;

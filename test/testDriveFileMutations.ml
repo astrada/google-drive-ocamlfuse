@@ -59,7 +59,9 @@ module FakePorts = struct
 
   let add_resource resource =
     let trashed = Option.default false resource.CacheData.Resource.trashed in
-    Hashtbl.replace resources (key resource.CacheData.Resource.path trashed) resource
+    Hashtbl.replace resources
+      (key resource.CacheData.Resource.path trashed)
+      resource
 
   let content_path resource =
     "/tmp/" ^ Option.get resource.CacheData.Resource.remote_id
@@ -72,16 +74,17 @@ module FakePorts = struct
     with Not_found -> None
 
   let find_by_id id =
-    Hashtbl.to_seq_values resources |> List.of_seq
+    Hashtbl.to_seq_values resources
+    |> List.of_seq
     |> List.find_opt (fun resource -> resource.CacheData.Resource.id = id)
 
   let replace_resource resource =
     let old_keys =
       Hashtbl.to_seq resources |> List.of_seq
       |> List.filter_map (fun (k, existing) ->
-             if existing.CacheData.Resource.id = resource.CacheData.Resource.id then
-               Some k
-             else None)
+          if existing.CacheData.Resource.id = resource.CacheData.Resource.id
+          then Some k
+          else None)
     in
     List.iter (Hashtbl.remove resources) old_keys;
     add_resource resource
@@ -109,10 +112,11 @@ module FakePorts = struct
 
   let write_to_file content_path buf offset =
     let bytes = Bigarray.Array1.dim buf in
-    record
-      (Printf.sprintf "write_to_file:%s:%Ld:%d" content_path offset bytes);
+    record (Printf.sprintf "write_to_file:%s:%Ld:%d" content_path offset bytes);
     let top_offset = Int64.add offset (Int64.of_int bytes) in
-    let current_size = Hashtbl.find_opt local_files content_path |> Option.default 0L in
+    let current_size =
+      Hashtbl.find_opt local_files content_path |> Option.default 0L
+    in
     Hashtbl.replace local_files content_path (max current_size top_offset);
     bytes
 
@@ -124,8 +128,7 @@ module FakePorts = struct
 
   let update_cached_resource _cache resource =
     record
-      (Printf.sprintf "update:%s:%s"
-         resource.CacheData.Resource.path
+      (Printf.sprintf "update:%s:%s" resource.CacheData.Resource.path
          (CacheData.Resource.State.to_string resource.CacheData.Resource.state));
     replace_resource resource
 
@@ -135,8 +138,7 @@ module FakePorts = struct
          (CacheData.Resource.State.to_string state));
     match find_by_id id with
     | None -> ()
-    | Some resource ->
-        replace_resource { resource with state }
+    | Some resource -> replace_resource { resource with state }
 
   let shrink_cache ?(file_size = 0L) () =
     record ("shrink:" ^ Int64.to_string file_size);
@@ -175,8 +177,10 @@ let test_write_direct_mode_updates_size_and_uses_file_sink () =
   let resource = Option.get (FakePorts.find_resource "/file.txt" false) in
   assert_equal 3 bytes;
   assert_equal (Some 3L) resource.CacheData.Resource.size;
-  assert_equal CacheData.Resource.State.ToUpload resource.CacheData.Resource.state;
-  assert_equal ~printer:string_of_int64_list [ 3L ] !FakePorts.shrink_cache_calls;
+  assert_equal CacheData.Resource.State.ToUpload
+    resource.CacheData.Resource.state;
+  assert_equal ~printer:string_of_int64_list [ 3L ]
+    !FakePorts.shrink_cache_calls;
   assert_bool "expected direct file sink"
     (List.mem "write_to_file:/tmp/file-id:0:3" !FakePorts.trace);
   assert_bool "unexpected memory-buffer sink"
@@ -194,7 +198,8 @@ let test_write_buffered_overwrite_only_marks_state () =
   let resource = Option.get (FakePorts.find_resource "/file.txt" false) in
   assert_equal 3 bytes;
   assert_equal (Some 10L) resource.CacheData.Resource.size;
-  assert_equal CacheData.Resource.State.ToUpload resource.CacheData.Resource.state;
+  assert_equal CacheData.Resource.State.ToUpload
+    resource.CacheData.Resource.state;
   assert_equal [] !FakePorts.shrink_cache_calls;
   assert_bool "expected memory-buffer sink"
     (List.mem "write_to_memory:/tmp/file-id:2:3" !FakePorts.trace);
@@ -213,8 +218,10 @@ let test_truncate_flushes_before_local_truncate_and_grows_size () =
   let truncate_index = index_of "truncate:/tmp/file-id:10" !FakePorts.trace in
   assert_bool "expected flush before truncate" (flush_index < truncate_index);
   assert_equal (Some 10L) updated.CacheData.Resource.size;
-  assert_equal CacheData.Resource.State.ToUpload updated.CacheData.Resource.state;
-  assert_equal ~printer:string_of_int64_list [ 6L ] !FakePorts.shrink_cache_calls
+  assert_equal CacheData.Resource.State.ToUpload
+    updated.CacheData.Resource.state;
+  assert_equal ~printer:string_of_int64_list [ 6L ]
+    !FakePorts.shrink_cache_calls
 
 let test_truncate_shrinks_with_negative_delta () =
   FakePorts.reset ();
@@ -225,8 +232,10 @@ let test_truncate_shrinks_with_negative_delta () =
   run_session (FileMutations.truncate runtime "/file.txt" 4L);
   let updated = Option.get (FakePorts.find_resource "/file.txt" false) in
   assert_equal (Some 4L) updated.CacheData.Resource.size;
-  assert_equal CacheData.Resource.State.ToUpload updated.CacheData.Resource.state;
-  assert_equal ~printer:string_of_int64_list [ -6L ] !FakePorts.shrink_cache_calls
+  assert_equal CacheData.Resource.State.ToUpload
+    updated.CacheData.Resource.state;
+  assert_equal ~printer:string_of_int64_list [ -6L ]
+    !FakePorts.shrink_cache_calls
 
 let test_truncate_missing_local_file_skips_local_mutation_but_marks_dirty () =
   FakePorts.reset ();
@@ -235,8 +244,10 @@ let test_truncate_missing_local_file_skips_local_mutation_but_marks_dirty () =
   run_session (FileMutations.truncate runtime "/file.txt" 4L);
   let updated = Option.get (FakePorts.find_resource "/file.txt" false) in
   assert_equal (Some 4L) updated.CacheData.Resource.size;
-  assert_equal CacheData.Resource.State.ToUpload updated.CacheData.Resource.state;
-  assert_equal ~printer:string_of_int64_list [ -6L ] !FakePorts.shrink_cache_calls;
+  assert_equal CacheData.Resource.State.ToUpload
+    updated.CacheData.Resource.state;
+  assert_equal ~printer:string_of_int64_list [ -6L ]
+    !FakePorts.shrink_cache_calls;
   assert_bool "unexpected local truncate"
     (not (List.mem "truncate:/tmp/file-id:4" !FakePorts.trace))
 

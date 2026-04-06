@@ -12,7 +12,8 @@ let with_clean_cli_globals f =
 
 let assert_parsed = function
   | GdfuseCli.Parsed parsed -> parsed
-  | GdfuseCli.Show_version -> assert_failure "Expected Parsed outcome, got Show_version"
+  | GdfuseCli.Show_version ->
+      assert_failure "Expected Parsed outcome, got Show_version"
   | GdfuseCli.Help _ -> assert_failure "Expected Parsed outcome, got Help"
   | GdfuseCli.Error _ -> assert_failure "Expected Parsed outcome, got Error"
 
@@ -32,7 +33,9 @@ let assert_error_contains needle = function
 
 let test_parse_argv_forces_foreground () =
   with_clean_cli_globals (fun () ->
-      let parsed = assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "/tmp/mnt" |]) in
+      let parsed =
+        assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "/tmp/mnt" |])
+      in
       assert_bool "Expected mountpoint to be detected" parsed.mount_requested;
       assert_equal ~printer:(String.concat ",") [ "-f"; "-obig_writes" ]
         parsed.fuse_args)
@@ -40,7 +43,8 @@ let test_parse_argv_forces_foreground () =
 let test_parse_argv_debug_sets_verbose_without_extra_f_flag () =
   with_clean_cli_globals (fun () ->
       let parsed =
-        assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "-debug"; "/tmp/mnt" |])
+        assert_parsed
+          (GdfuseCli.parse_argv [| "gdfuse"; "-debug"; "/tmp/mnt" |])
       in
       assert_equal ~printer:(String.concat ",") [ "-f"; "-obig_writes" ]
         parsed.fuse_args;
@@ -52,8 +56,7 @@ let test_parse_argv_mount_options_extract_gdfroot () =
       let parsed =
         assert_parsed
           (GdfuseCli.parse_argv
-          [| "gdfuse"; "-o"; "allow_other,gdfroot=/tmp/root"; "/tmp/mnt" |]
-          )
+             [| "gdfuse"; "-o"; "allow_other,gdfroot=/tmp/root"; "/tmp/mnt" |])
       in
       assert_equal
         ~printer:(fun x -> x)
@@ -78,7 +81,8 @@ let test_parse_argv_version_returns_show_version () =
       | GdfuseCli.Show_version -> ()
       | GdfuseCli.Parsed _ ->
           assert_failure "Expected Show_version outcome, got Parsed"
-      | GdfuseCli.Help _ -> assert_failure "Expected Show_version outcome, got Help"
+      | GdfuseCli.Help _ ->
+          assert_failure "Expected Show_version outcome, got Help"
       | GdfuseCli.Error _ ->
           assert_failure "Expected Show_version outcome, got Error")
 
@@ -94,14 +98,18 @@ let test_parse_argv_invalid_gdfroot_returns_error_outcome () =
 
 let test_parse_argv_d_adds_fuse_debug_flag () =
   with_clean_cli_globals (fun () ->
-      let parsed = assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "-d"; "/tmp/mnt" |]) in
+      let parsed =
+        assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "-d"; "/tmp/mnt" |])
+      in
       assert_equal ~printer:(String.concat ",")
         [ "-d"; "-f"; "-obig_writes" ]
         parsed.fuse_args)
 
 let test_parse_argv_s_forces_single_threaded_mode () =
   with_clean_cli_globals (fun () ->
-      let parsed = assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "-s"; "/tmp/mnt" |]) in
+      let parsed =
+        assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "-s"; "/tmp/mnt" |])
+      in
       assert_equal ~printer:(String.concat ",")
         [ "-s"; "-f"; "-obig_writes" ]
         parsed.fuse_args;
@@ -110,7 +118,9 @@ let test_parse_argv_s_forces_single_threaded_mode () =
 
 let test_parse_argv_m_enables_multithreading_without_changing_fuse_args () =
   with_clean_cli_globals (fun () ->
-      let parsed = assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "-m"; "/tmp/mnt" |]) in
+      let parsed =
+        assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "-m"; "/tmp/mnt" |])
+      in
       assert_equal ~printer:(String.concat ",") [ "-f"; "-obig_writes" ]
         parsed.fuse_args;
       assert_equal ~printer:string_of_bool true
@@ -120,7 +130,9 @@ let test_parse_argv_without_mountpoint_keeps_bootstrap_shape () =
   with_clean_cli_globals (fun () ->
       let parsed = assert_parsed (GdfuseCli.parse_argv [| "gdfuse" |]) in
       assert_equal ~printer:string_of_bool false parsed.mount_requested;
-      assert_equal ~printer:(fun x -> x) "" parsed.params.GdfuseCommon.mountpoint)
+      assert_equal
+        ~printer:(fun x -> x)
+        "" parsed.params.GdfuseCommon.mountpoint)
 
 let suite =
   "GdfuseCli test"
