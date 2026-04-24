@@ -10,14 +10,16 @@ The executable mounts a FUSE filesystem whose operations are implemented in
 - Google Drive API calls through `gapi-ocaml`
 - background work such as uploads and folder prefetching
 
-The mutation-heavy create/delete/rename paths, the read-side view/listing
-paths, the content-read paths, the local file-mutation paths, the
-metadata-mutation paths, the upload-dispatch paths, and the xattr paths are
-separated:
+The mutation-heavy create/delete/rename paths, the open-validation paths, the
+read-side view/listing paths, the content-read paths, the local file-mutation
+paths, the metadata-mutation paths, the upload-dispatch paths, and the xattr
+paths are separated:
 
 - `Drive` is the public FUSE-facing module
 - `src/driveMutations.ml` holds the mutation core for create/delete/rename
   policy and cache reconciliation
+- `src/driveOpens.ml` holds the open-time access-validation core for `fopen`
+  and the per-resource file read-only predicate
 - `src/driveViews.ml` holds the read-side view core for `get_attr`,
   `read_link`, and the lookup portion of `opendir`
 - `src/driveDirectoryReads.ml` holds the directory-listing core for `read_dir`
@@ -32,8 +34,8 @@ separated:
 - `src/driveXattrs.ml` holds the extended-attribute core for xattr reads,
   validation, and Drive app-property patches
 - `src/drive.ml` provides the production `DriveMutationPorts`,
-  `DriveViewPorts`, `DriveDirectoryReadPorts`, `DriveReadPorts`,
-  `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,
+  `DriveOpenPorts`, `DriveViewPorts`, `DriveDirectoryReadPorts`,
+  `DriveReadPorts`, `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,
   `DriveUploadDispatchPorts`, and `DriveXattrPorts`, builds the small runtimes
   from `Context`, and executes those sessions through `Oauth2.do_request`
 
@@ -195,8 +197,8 @@ Retry handling is split:
 
 `bin/gdfuseFuse.ml` converts those exceptions into Unix/FUSE errors.
 
-Open-time file access validation lives in `Drive.fopen`; see
-`docs/agent-docs/drive-fopen.md`.
+Open-time file access validation enters through the thin `Drive.fopen` wrapper
+over `DriveOpens`; see `docs/agent-docs/drive-fopen.md`.
 
 Directory-open validation lives in the thin `Drive.opendir` wrapper over
 `DriveViews`; see

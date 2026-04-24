@@ -24,6 +24,8 @@
   `DriveXattrs` and making xattr behavior unit testable.
 - `drive-read-extraction/plan.md`: archived completed plan for extracting
   `DriveReads` and making regular-file read strategy unit testable.
+- `drive-fopen-extraction/plan.md`: archived completed plan for extracting
+  `DriveOpens` and making file-open access validation unit testable.
 - `gdfuse-cli-error-handling/plan.md`: archived completed plan for restoring
   clean CLI handling for `-version`, `-help`, `--help`, and invalid options,
   and for expanding CLI behavior test coverage.

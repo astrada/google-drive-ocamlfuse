@@ -42,7 +42,7 @@ Read these files in order:
 35. `drive-upload-resource-with-retry.md` for the common flush-and-retry wrapper around the real upload
 36. `drive-upload.md` for the actual `FilesResource.update` upload attempt and cache reconciliation
 37. `drive-flush-fsync-release.md` for the file-close/sync callbacks that trigger upload dispatch
-38. `drive-fopen.md` for open-time access validation and write-permission checks
+38. `drive-fopen.md` for `DriveOpens` open-time access validation and write-permission checks
 39. `drive-opendir.md` for directory-open validation in the read-side view core
 40. `gdfuse-noop-dir-callbacks.md` for the adapter-level `releasedir` / `fsyncdir` no-op hooks
 41. `drive-statfs.md` for filesystem-wide quota reporting and synthetic `statvfs` fields

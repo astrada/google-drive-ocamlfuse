@@ -1712,11 +1712,7 @@ let is_filesystem_read_only () =
 
 let is_file_read_only resource =
   let config = Context.get_ctx () |. Context.config_lens in
-  (not (Option.default true resource.CacheData.Resource.can_edit))
-  || CacheData.Resource.is_document resource
-     && ((not config.Config.editable_docs) || is_desktop_format resource config)
-  || config.Config.large_file_read_only
-     && CacheData.Resource.is_large_file config resource
+  DriveOpens.is_file_read_only config resource
 
 module DriveViewPorts = struct
   let get_path_in_cache = get_path_in_cache
@@ -1815,21 +1811,19 @@ let read_dir path =
 (* END readdir *)
 
 (* fopen *)
+module DriveOpenPorts = struct
+  let get_path_in_cache = get_path_in_cache
+  let get_resource = get_resource
+end
+
+module OpenOps = DriveOpens.Make (DriveOpenPorts)
+
+let drive_open_runtime () =
+  let context = Context.get_ctx () in
+  { DriveOpens.config = context |. Context.config_lens }
+
 let fopen path flags =
-  let config = Context.get_ctx () |. Context.config_lens in
-  let path_in_cache, trashed = get_path_in_cache path config in
-  let is_read_only_request = List.mem Unix.O_RDONLY flags in
-
-  let check_editable =
-    get_resource path_in_cache trashed >>= fun resource ->
-    if (not is_read_only_request) && is_file_read_only resource then
-      Utils.raise_m Permission_denied
-    else SessionM.return ()
-  in
-
-  if (not is_read_only_request) && is_filesystem_read_only () then
-    raise Permission_denied
-  else do_request check_editable |> ignore;
+  do_request (OpenOps.fopen (drive_open_runtime ()) path flags) |> ignore;
   None
 
 (* END fopen *)

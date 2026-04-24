@@ -84,6 +84,7 @@ The `Makefile` is only a small wrapper around these dune commands.
   - Create/delete/rename enter through public `Drive` functions here, and
     those wrappers delegate into `DriveMutations` through
     `DriveMutationPorts`.
+  - `fopen` delegates into `DriveOpens` through `DriveOpenPorts`.
   - `get_attr`, `read_link`, and `opendir` delegate into `DriveViews`
     through `DriveViewPorts`.
   - `read_dir` delegates into `DriveDirectoryReads` through
@@ -106,6 +107,13 @@ The `Makefile` is only a small wrapper around these dune commands.
     can be unit tested without real Drive, cache-file, or thread side effects.
   - Owns the policy-heavy logic for create, delete/trash, and rename cache
     reconciliation.
+
+- `src/driveOpens.ml`
+  - Open-time access-validation core for `fopen`.
+  - Owns request-mode classification, filesystem-wide read-only rejection,
+    per-resource write-denial policy, and the pure file read-only predicate.
+  - Functorized over a narrow boundary so file-open policy can be unit tested
+    without real `Context`, Drive API requests, or cache access.
 
 - `src/driveViews.ml`
   - Read-side view core.
@@ -244,6 +252,7 @@ Current tests are in:
 - `test/testConfigRuntime.ml`
 - `test/testConfigStore.ml`
 - `test/testDriveDirectoryReads.ml`
+- `test/testDriveOpens.ml`
 - `test/testDriveReads.ml`
 - `test/testDriveFileMutations.ml`
 - `test/testDriveMetadataMutations.ml`
@@ -271,8 +280,9 @@ There are no end-to-end tests for:
 - OAuth flows
 - rename/delete semantics against live Drive state
 
-The mutation, read-side, file-mutation, metadata-mutation, upload-dispatch, and
-xattr cores are covered by focused unit tests in `test/testDriveMutations.ml`,
+The mutation, open-validation, read-side, file-mutation, metadata-mutation,
+upload-dispatch, and xattr cores are covered by focused unit tests in
+`test/testDriveMutations.ml`, `test/testDriveOpens.ml`,
 `test/testDriveViews.ml`, `test/testDriveDirectoryReads.ml`,
 `test/testDriveReads.ml`, `test/testDriveFileMutations.ml`,
 `test/testDriveMetadataMutations.ml`, `test/testDriveUploadDispatch.ml`, and

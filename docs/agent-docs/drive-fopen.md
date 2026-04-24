@@ -8,6 +8,18 @@ callback.
 Its directory-side counterpart is `Drive.opendir`; see
 `docs/agent-docs/drive-opendir.md`.
 
+The production entrypoint in `src/drive.ml` is a thin adapter over
+`DriveOpens`:
+
+```ocaml
+let fopen path flags =
+  do_request (OpenOps.fopen (drive_open_runtime ()) path flags) |> ignore;
+  None
+```
+
+`DriveOpens` owns open-time access policy. `DriveOpenPorts` connects that
+policy to production path normalization and resource resolution.
+
 It does not allocate or return a persistent open-file object. Its real job is
 to validate that the requested path exists and that the requested access mode is
 allowed before later operations like `read`, `write`, and `truncate` run.
@@ -66,7 +78,10 @@ At a high level, `fopen` does this:
    read-only
 6. return `None`
 
-So `fopen` is a validation path with side effects only through exceptions and
+`DriveOpens.fopen` returns `unit` on success. The public `Drive.fopen` wrapper
+then returns `None`.
+
+So this is a validation path with side effects only through exceptions and
 through any metadata refresh that `get_resource` triggers.
 
 ## Path Normalization
@@ -105,7 +120,7 @@ So requests such as `O_WRONLY` or `O_RDWR` go down the write-capable path.
 Before resolving the resource, `fopen` checks:
 
 ```ocaml
-if (not is_read_only_request) && is_filesystem_read_only () then
+if (not is_read_only_request) && runtime.config.Config.read_only then
   raise Permission_denied
 ```
 
@@ -125,8 +140,6 @@ If the global read-only guard does not reject the request, `fopen` runs:
 get_resource path_in_cache trashed
 ```
 
-inside the `check_editable` request.
-
 That means even a read-only open still performs full path resolution and
 existence checking.
 
@@ -145,18 +158,18 @@ After the resource is resolved, `fopen` only performs an extra check for
 write-capable opens:
 
 ```ocaml
-if (not is_read_only_request) && is_file_read_only resource then
+if (not is_read_only_request) && is_file_read_only runtime.config resource then
   Utils.raise_m Permission_denied
 ```
 
 So read-only opens only validate existence.
 
-Write-capable opens must also pass `is_file_read_only resource = false`.
+Write-capable opens must also pass
+`DriveOpens.is_file_read_only config resource = false`.
 
 ## What `is_file_read_only` Means Here
 
-The current implementation of `is_file_read_only` returns true when any of
-these hold:
+`DriveOpens.is_file_read_only` returns true when any of these hold:
 
 - `resource.can_edit = Some false`
 - the resource is a Google document and either `config.editable_docs = false`
@@ -178,7 +191,7 @@ A few implications follow:
 
 ## No Open Handle State
 
-After validation, `fopen` simply returns:
+After validation, the public wrapper returns:
 
 ```ocaml
 None
@@ -191,9 +204,9 @@ It does not:
 - snapshot the open flags for later calls
 - establish any per-open cleanup contract
 
-This matches the rest of the current `Drive` design, where later operations
-like `read` and `write` re-resolve by path instead of dereferencing an object
-created by `fopen`.
+This matches the rest of the current `Drive` design, where later operations like
+`read` and `write` re-resolve by path instead of dereferencing an object created
+by `fopen`.
 
 ## Relationship To `Drive.read`, `Drive.write`, And `Drive.truncate`
 
@@ -243,3 +256,11 @@ Keep both levels in mind when changing access behavior.
 The current design relies on `fopen` to reject disallowed write-capable access
 before `write` or `truncate` mutate local state. If that assumption changes,
 those later paths may need their own stronger guards.
+
+### Test Boundary
+
+`test/testDriveOpens.ml` exercises `DriveOpens` through fake ports. The tests
+cover read-only and write-capable opens, global read-only mode, per-resource
+editability, Google document editability, large-file read-only policy, trash
+path normalization, missing-resource propagation, and the current
+`List.mem Unix.O_RDONLY flags` request-mode rule.
