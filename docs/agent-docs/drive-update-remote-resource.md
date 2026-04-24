@@ -8,8 +8,10 @@ The repository has two closely related `update_remote_resource` wrappers:
 - `DriveMutations.Make.update_remote_resource` in `src/driveMutations.ml` for
   the rename/delete mutation paths
 
-`DriveXattrs` also receives an `update_remote_resource` port. In production,
-that port delegates to `DriveMutations.Make.update_remote_resource`.
+`DriveMetadataMutations` and `DriveXattrs` also receive
+`update_remote_resource` ports. In production, the metadata-mutation port
+delegates to `Drive.update_remote_resource`, and the xattr port delegates to
+`DriveMutations.Make.update_remote_resource`.
 
 This document describes the shared wrapper pattern these paths use.
 
@@ -21,9 +23,9 @@ It is used when a mutation path needs to:
 
 Current callers are:
 
-- `utime`
-- `chmod`
-- `chown`
+- `DriveMetadataMutations.utime`
+- `DriveMetadataMutations.chmod`
+- `DriveMetadataMutations.chown`
 - `DriveXattrs.set_xattr`
 - `DriveXattrs.remove_xattr`
 - `DriveMutations.trash_resource`
@@ -41,9 +43,8 @@ See `docs/agent-docs/drive-delete-remote-resource.md` for the higher-level
 policy wrapper that decides when deletion requests reach `trash_resource`
 versus `delete_resource`.
 
-See `docs/agent-docs/drive-chmod-chown-utime.md` for the thin public metadata
-entrypoints that use the `Drive`-side wrapper for `utime`, `chmod`, and
-`chown`.
+See `docs/agent-docs/drive-chmod-chown-utime.md` for the concrete metadata
+mutation paths.
 
 See `docs/agent-docs/drive-xattr.md` for the concrete xattr read/mutate paths.
 
@@ -68,6 +69,13 @@ val DriveMutations.update_remote_resource :
   (CacheData.Resource.t -> GapiDriveV3Model.File.t option GapiMonad.SessionM.m) ->
   unit GapiMonad.SessionM.m
 
+val DriveMetadataMutationPorts.update_remote_resource :
+  DriveMetadataMutations.runtime ->
+  string ->
+  ?update_file_in_cache:(string -> unit) ->
+  (CacheData.Resource.t -> GapiDriveV3Model.File.t option GapiMonad.SessionM.m) ->
+  unit GapiMonad.SessionM.m
+
 val DriveXattrPorts.update_remote_resource :
   DriveXattrs.runtime ->
   string ->
@@ -81,10 +89,10 @@ The common contract is:
 - optionally override cache-reconciliation hooks
 - run one `do_remote_update` callback that performs the remote mutation
 
-The `Drive`-side wrapper has one extra `update_file_in_cache` hook because
-`utime` may need to touch an existing local cache file after a successful
-remote metadata patch. The mutation-core wrapper and xattr port do not expose
-that hook.
+The `Drive`-side wrapper and metadata-mutation port have one extra
+`update_file_in_cache` hook because `DriveMetadataMutations.utime` may need to
+touch an existing local cache file after a successful remote metadata patch.
+The mutation-core wrapper and xattr port do not expose that hook.
 
 ## High-Level Flow
 
@@ -153,9 +161,9 @@ Most metadata-patch operations return `Some patched_file` after a
 
 That includes:
 
-- `utime`
-- `chmod`
-- `chown`
+- `DriveMetadataMutations.utime`
+- `DriveMetadataMutations.chmod`
+- `DriveMetadataMutations.chown`
 - `DriveXattrs.set_xattr`
 - `DriveXattrs.remove_xattr`
 - `DriveMutations.trash_resource`
@@ -191,8 +199,9 @@ So by default, a successful remote mutation:
 1. rebuilds the cache row from the returned Drive file
 2. writes that updated row back into the cache
 
-This default is enough for simple in-place metadata changes such as `chmod`,
-`chown`, `DriveXattrs.set_xattr`, and `DriveXattrs.remove_xattr`.
+This default is enough for simple in-place metadata changes such as
+`DriveMetadataMutations.chmod`, `DriveMetadataMutations.chown`,
+`DriveXattrs.set_xattr`, and `DriveXattrs.remove_xattr`.
 
 More complex callers override it:
 
@@ -227,7 +236,8 @@ That makes `None` effectively the "resource disappeared" branch.
 
 ### `update_file_in_cache`
 
-This optional hook exists only on `Drive.update_remote_resource`.
+This optional hook exists only on `Drive.update_remote_resource` and the
+`DriveMetadataMutationPorts.update_remote_resource` port.
 
 It lets a caller mutate the local cached content file after a successful remote
 metadata update.
@@ -240,7 +250,8 @@ The wrapper only invokes it when both conditions hold:
 So the hook does not create a cache file, and it does not run for dirty or
 transitional resource states.
 
-`utime` uses it to mirror the new timestamps onto the local cache file:
+`DriveMetadataMutations.utime` uses it to mirror the new timestamps onto the
+local cache file:
 
 ```ocaml
 ~update_file_in_cache:(fun content_path ->
@@ -265,13 +276,13 @@ These callers all:
 
 They are:
 
-- `chmod`
-- `chown`
+- `DriveMetadataMutations.chmod`
+- `DriveMetadataMutations.chown`
 - `DriveXattrs.set_xattr`
 - `DriveXattrs.remove_xattr`
 
-`utime` belongs to the same category, but also uses `update_file_in_cache` to
-touch the local cache file.
+`DriveMetadataMutations.utime` belongs to the same category, but also uses
+`update_file_in_cache` to touch the local cache file.
 
 ### Soft Delete
 
@@ -339,6 +350,8 @@ outside this hook or a change to the wrapper contract.
 ## Source Pointers
 
 - `src/drive.ml`: `update_remote_resource`
+- `src/driveMetadataMutations.ml`: metadata callers using the
+  `update_remote_resource` port
 - `src/driveMutations.ml`: `update_remote_resource`
 - `src/driveXattrs.ml`: xattr callers using the `update_remote_resource` port
 - `docs/agent-docs/drive-rename.md`

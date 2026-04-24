@@ -19,8 +19,8 @@ Read these files in order:
 12. `drive-upload-path.md` for dirty-state, dispatch, and content upload flow
 13. `drive-create-remote-resource.md` for file/folder/symlink creation semantics in the mutation core
 14. `drive-rename.md` for move/rename semantics and cache surgery in the mutation core
-15. `drive-update-remote-resource.md` for the shared mutation-wrapper pattern used by `Drive` metadata updates, xattr mutations, and the delete/rename mutation core
-16. `drive-chmod-chown-utime.md` for the thin metadata-mutation entrypoints over `update_remote_resource`
+15. `drive-update-remote-resource.md` for the shared mutation-wrapper pattern used by metadata mutations, xattr mutations, and the delete/rename mutation core
+16. `drive-chmod-chown-utime.md` for `DriveMetadataMutations` timestamp, mode, and owner metadata updates
 17. `drive-download-resource.md` for local content materialization and reuse
 18. `drive-read.md` for stream-vs-cache read policy and read-ahead behavior
 19. `drive-write.md` for local mutation, dirty-state updates, and write buffers in the file-mutation core

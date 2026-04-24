@@ -90,6 +90,8 @@ The `Makefile` is only a small wrapper around these dune commands.
     `DriveDirectoryReadPorts`.
   - `write` and `truncate` delegate into `DriveFileMutations` through
     `DriveFileMutationPorts`.
+  - `utime`, `chmod`, and `chown` delegate into `DriveMetadataMutations`
+    through `DriveMetadataMutationPorts`.
   - `flush`, `fsync`, `release`, and rename-replace upload handoff delegate
     into `DriveUploadDispatch` through `DriveUploadDispatchPorts`.
   - `get_xattr`, `set_xattr`, `list_xattr`, and `remove_xattr` delegate into
@@ -121,6 +123,13 @@ The `Makefile` is only a small wrapper around these dune commands.
   - Local file-mutation core for `write` and `truncate`.
   - Owns write-sink selection, dirty-state updates, and size/accounting
     changes for local content mutation.
+
+- `src/driveMetadataMutations.ml`
+  - Metadata-mutation core for `utime`, `chmod`, and `chown`.
+  - Owns modified-time patches, mode app-property patches, uid/gid sentinel
+    handling, and uid/gid app-property patch construction.
+  - Functorized over a narrow boundary so metadata mutation behavior can be
+    unit tested without real `Context`, Drive API requests, or cache files.
 
 - `src/driveUploadDispatch.ml`
   - Upload-dispatch core for dirty-state gating and sync-vs-async handoff.
@@ -228,6 +237,7 @@ Current tests are in:
 - `test/testConfigStore.ml`
 - `test/testDriveDirectoryReads.ml`
 - `test/testDriveFileMutations.ml`
+- `test/testDriveMetadataMutations.ml`
 - `test/testDriveXattrs.ml`
 - `test/testDriveUploadDispatch.ml`
 - `test/testDriveMutations.ml`
@@ -252,12 +262,13 @@ There are no end-to-end tests for:
 - OAuth flows
 - rename/delete semantics against live Drive state
 
-The mutation, read-side, file-mutation, upload-dispatch, and xattr cores are
-covered by focused unit tests in `test/testDriveMutations.ml`,
+The mutation, read-side, file-mutation, metadata-mutation, upload-dispatch, and
+xattr cores are covered by focused unit tests in `test/testDriveMutations.ml`,
 `test/testDriveViews.ml`, `test/testDriveDirectoryReads.ml`,
-`test/testDriveFileMutations.ml`, `test/testDriveUploadDispatch.ml`, and
-`test/testDriveXattrs.ml`, but live Drive and FUSE integration need manual
-validation for behavior changes in those paths.
+`test/testDriveFileMutations.ml`, `test/testDriveMetadataMutations.ml`,
+`test/testDriveUploadDispatch.ml`, and `test/testDriveXattrs.ml`, but live
+Drive and FUSE integration need manual validation for behavior changes in those
+paths.
 
 Any change in those areas should be reasoned carefully and ideally verified
 manually.

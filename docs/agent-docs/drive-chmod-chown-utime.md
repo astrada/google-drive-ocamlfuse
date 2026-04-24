@@ -1,17 +1,51 @@
-# `Drive.chmod`, `Drive.chown`, And `Drive.utime`
+# Metadata Mutations
 
 ## Purpose
 
-`Drive.chmod`, `Drive.chown`, and `Drive.utime` are the FUSE-facing metadata
+`Drive.utime`, `Drive.chmod`, and `Drive.chown` are the FUSE-facing metadata
 mutation entrypoints for existing resources.
 
-They are thinner than the full read/write paths, but they are not pure
-one-liners. Each one builds one small metadata patch for the resolved remote
-file and then delegates the shared path normalization, read-only enforcement,
-resource lookup, and cache reconciliation to `Drive.update_remote_resource`.
+The public `Drive` functions are thin wrappers over `DriveMetadataMutations`.
+They build a `DriveMetadataMutations.runtime` from `Context`, call
+`MetadataMutationOps`, and execute the session through `do_request`:
 
-So these functions are best understood as narrow metadata-patch adapters over
-the shared update wrapper.
+```ocaml
+let chmod path mode =
+  do_request
+    (MetadataMutationOps.chmod (drive_metadata_mutation_runtime ()) path mode)
+  |> ignore
+```
+
+`MetadataMutationOps` is
+`DriveMetadataMutations.Make(DriveMetadataMutationPorts)`.
+
+## Implementation Boundary
+
+`DriveMetadataMutations` owns the metadata-specific behavior:
+
+- building the `utime` modified-time patch
+- building the `chmod` mode app-property patch
+- converting `chown` sentinel ids into omitted app properties
+- building the `chown` uid/gid app-property patch
+- passing the `utime` local-cache timestamp hook into the update wrapper
+
+The production ports in `DriveMetadataMutationPorts` own the surrounding
+effects:
+
+- resource-key header construction
+- retried `FilesResource.update` calls
+- shared `update_remote_resource` control flow
+- local cache-file timestamp updates through `Unix.utimes`
+
+The runtime passed to `DriveMetadataMutations` contains the cache handle and
+config:
+
+```ocaml
+type runtime = {
+  cache : CacheData.t;
+  config : Config.t;
+}
+```
 
 ## Signatures And FUSE Boundary
 
@@ -46,31 +80,32 @@ So all three:
 
 None of the three entrypoints contains its own special exception translation.
 
-## Shared Shape In `Drive`
+## Shared Shape
 
-All three functions follow the same high-level pattern:
+All three `DriveMetadataMutations` operations follow the same high-level
+pattern:
 
 1. define a callback that receives the resolved `resource`
 2. derive `remote_id` from that resource
 3. build a `File` patch
-4. call `FilesResource.update`
+4. call the `remote_update` port
 5. return `Some patched_file`
-6. pass that callback into `update_remote_resource`
-7. execute the request through `do_request`
+6. pass that callback into the `update_remote_resource` port
 
-That means they all inherit the same wrapper behavior:
+That means they inherit the wrapper behavior:
 
 - filesystem read-only rejection
 - visible-path normalization through `get_path_in_cache`
 - current-resource lookup through `get_resource`
-- default cache-row refresh from the returned `File`, unless overridden
+- default cache-row refresh from the returned `File`
 
 See `docs/agent-docs/drive-update-remote-resource.md` for that shared control
 flow.
 
 ## Shared Remote Update Shape
 
-All three callbacks issue a Drive metadata patch of the form:
+All three callbacks issue a Drive metadata patch through the `remote_update`
+port. In production, that port calls:
 
 ```ocaml
 FilesResource.update
@@ -90,9 +125,10 @@ They do not:
 - enqueue upload work
 - create a new remote file shell
 
-## `Drive.utime`
+## `utime`
 
-`utime path atime mtime` is the timestamp mutation entrypoint.
+`DriveMetadataMutations.utime runtime path atime mtime` is the timestamp
+mutation path.
 
 Its remote patch is:
 
@@ -110,15 +146,17 @@ This is the main semantic limitation to remember:
 
 ### Local Cache File Hook
 
-`utime` is the only one of the three that uses
-`update_remote_resource ~update_file_in_cache`.
+`utime` is the only one of the three operations that passes
+`~update_file_in_cache` into the update wrapper.
 
 It passes:
 
 ```ocaml
 ~update_file_in_cache:(fun content_path ->
-  Unix.utimes content_path atime mtime)
+  P.update_file_times content_path atime mtime)
 ```
+
+In production, `P.update_file_times` is `Unix.utimes`.
 
 So if a synchronized local cache file already exists on disk, `utime` mirrors
 both timestamps onto that local file after the remote patch succeeds.
@@ -132,9 +170,10 @@ when:
 So `atime` is a local-cache consistency detail, not a persisted remote Drive
 attribute.
 
-## `Drive.chmod`
+## `chmod`
 
-`chmod path mode` builds a one-property app-properties patch:
+`DriveMetadataMutations.chmod runtime path mode` builds a one-property
+app-properties patch:
 
 ```ocaml
 let file_patch =
@@ -152,12 +191,12 @@ It does not mask or reinterpret the mode locally first.
 Any later visible permission masking happens in `Drive.get_attr` when the cache
 row is converted back into `st_perm`.
 
-## `Drive.chown`
+## `chown`
 
-`chown path uid gid` builds app-properties patches for the cached uid/gid
-metadata.
+`DriveMetadataMutations.chown runtime path uid gid` builds app-properties
+patches for the cached uid/gid metadata.
 
-The key detail is the helper:
+The key detail is the id conversion helper:
 
 ```ocaml
 let id_to_string id =
@@ -176,6 +215,7 @@ After that conversion:
 
 - `uid` is included only if its string is non-empty
 - `gid` is included only if its string is non-empty
+- when both are present, the patch order is uid first, then gid
 
 That matches the usual POSIX `chown` convention where one side can be left
 unchanged.
@@ -197,7 +237,8 @@ See `docs/agent-docs/drive-get-attr.md` for the read-side view.
 
 ## What These Functions Do Not Do
 
-`Drive.chmod`, `Drive.chown`, and `Drive.utime` do not:
+`DriveMetadataMutations.utime`, `DriveMetadataMutations.chmod`, and
+`DriveMetadataMutations.chown` do not:
 
 - mark the resource `ToUpload`
 - use the upload queue
@@ -205,6 +246,17 @@ See `docs/agent-docs/drive-get-attr.md` for the read-side view.
 - perform custom cache surgery like rename or delete paths do
 
 They are in-place metadata mutations on an already existing resource.
+
+## Test Coverage
+
+`test/testDriveMetadataMutations.ml` covers the metadata behavior through fake
+ports:
+
+- `utime` remote modified-time patching
+- `utime` local-cache timestamp hook wiring
+- `chmod` mode app-property patching
+- `chown` uid/gid app-property patching and ordering
+- `chown` handling for `-1` and unsigned 32-bit all-ones sentinels
 
 ## Related Docs
 
@@ -214,9 +266,10 @@ They are in-place metadata mutations on an already existing resource.
 
 ## Source Pointers
 
-- `src/drive.ml`: `utime`
-- `src/drive.ml`: `chmod`
-- `src/drive.ml`: `chown`
+- `src/driveMetadataMutations.ml`: `utime`
+- `src/driveMetadataMutations.ml`: `chmod`
+- `src/driveMetadataMutations.ml`: `chown`
+- `src/drive.ml`: `DriveMetadataMutationPorts`
 - `src/drive.ml`: `update_remote_resource`
 - `bin/gdfuseFuse.ml`: `utime`
 - `bin/gdfuseFuse.ml`: `chmod`

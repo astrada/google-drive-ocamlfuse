@@ -11,8 +11,8 @@ The executable mounts a FUSE filesystem whose operations are implemented in
 - background work such as uploads and folder prefetching
 
 The mutation-heavy create/delete/rename paths, the read-side view/listing
-paths, the local file-mutation paths, the upload-dispatch paths, and the xattr
-paths are separated:
+paths, the local file-mutation paths, the metadata-mutation paths, the
+upload-dispatch paths, and the xattr paths are separated:
 
 - `Drive` is the public FUSE-facing module
 - `src/driveMutations.ml` holds the mutation core for create/delete/rename
@@ -22,14 +22,17 @@ paths are separated:
 - `src/driveDirectoryReads.ml` holds the directory-listing core for `read_dir`
 - `src/driveFileMutations.ml` holds the local file-mutation core for `write`
   and `truncate`
+- `src/driveMetadataMutations.ml` holds the metadata-mutation core for
+  `utime`, `chmod`, and `chown`
 - `src/driveUploadDispatch.ml` holds the upload-dispatch core for
   `start_uploading_if_dirty`, `upload_with_retry`, and `queue_upload`
 - `src/driveXattrs.ml` holds the extended-attribute core for xattr reads,
   validation, and Drive app-property patches
 - `src/drive.ml` provides the production `DriveMutationPorts`,
   `DriveViewPorts`, `DriveDirectoryReadPorts`, `DriveFileMutationPorts`, and
-  `DriveUploadDispatchPorts`, and `DriveXattrPorts`, builds the small runtimes
-  from `Context`, and executes those sessions through `Oauth2.do_request`
+  `DriveMetadataMutationPorts`, `DriveUploadDispatchPorts`, and
+  `DriveXattrPorts`, builds the small runtimes from `Context`, and executes
+  those sessions through `Oauth2.do_request`
 
 The design is stateful. A global `Context.t` stores the current config, state,
 cache handle, memory buffers, locks, and background threads.
@@ -204,7 +207,7 @@ Filesystem-wide capacity reporting lives in `Drive.statfs`; see
 `docs/agent-docs/drive-statfs.md`.
 
 Metadata-only `utime` / `chmod` / `chown` requests enter through thin wrappers
-over `Drive.update_remote_resource`; see
+over `DriveMetadataMutations`; see
 `docs/agent-docs/drive-chmod-chown-utime.md`.
 
 Path-level stat synthesis lives in the thin `Drive.get_attr` wrapper over

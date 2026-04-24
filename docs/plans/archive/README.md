@@ -17,6 +17,9 @@
 - `drive-write-path-extraction/plan.md`: archived completed plan for
   extracting `DriveFileMutations` and `DriveUploadDispatch` and making the
   write-side file-mutation and upload-dispatch paths unit testable.
+- `drive-metadata-mutation-extraction/plan.md`: archived completed plan for
+  extracting `DriveMetadataMutations` and making timestamp, mode, and owner
+  metadata mutations unit testable.
 - `drive-xattr-extraction/plan.md`: archived completed plan for extracting
   `DriveXattrs` and making xattr behavior unit testable.
 - `gdfuse-cli-error-handling/plan.md`: archived completed plan for restoring

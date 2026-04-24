@@ -1875,33 +1875,39 @@ let update_remote_resource path ?update_file_in_cache
 
 (* Update operations *)
 
+module DriveMetadataMutationPorts = struct
+  let build_resource_keys_header_from_resource =
+    build_resource_keys_header_from_resource
+
+  let remote_update ~custom_headers ~fileId file_patch =
+    with_retry_default
+      (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
+         ~std_params:file_std_params ~custom_headers ~fileId file_patch)
+
+  let update_remote_resource _runtime path ?update_file_in_cache
+      do_remote_update =
+    update_remote_resource path ?update_file_in_cache do_remote_update
+
+  let update_file_times = Unix.utimes
+end
+
+module MetadataMutationOps =
+  DriveMetadataMutations.Make (DriveMetadataMutationPorts)
+
+let drive_metadata_mutation_runtime () =
+  let context = Context.get_ctx () in
+  {
+    DriveMetadataMutations.cache = context.Context.cache;
+    config = context |. Context.config_lens;
+  }
+
 (* utime *)
 let utime path atime mtime =
-  let update =
-    let touch resource =
-      let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
-      Utils.log_with_header
-        "BEGIN: Updating file mtime (remote id=%s, mtime=%f)\n%!" remote_id
-        mtime;
-      let file_patch =
-        File.empty |> File.modifiedTime ^= Netdate.create mtime
-      in
-      let custom_headers = build_resource_keys_header_from_resource resource in
-      with_retry_default
-        (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~custom_headers ~fileId:remote_id
-           file_patch)
-      >>= fun patched_file ->
-      Utils.log_with_header
-        "END: Updating file mtime (remote id=%s, mtime=%f)\n%!" remote_id mtime;
-      SessionM.return (Some patched_file)
-    in
-    update_remote_resource
-      ~update_file_in_cache:(fun content_path ->
-        Unix.utimes content_path atime mtime)
-      path touch
-  in
-  do_request update |> ignore
+  do_request
+    (MetadataMutationOps.utime
+       (drive_metadata_mutation_runtime ())
+       path atime mtime)
+  |> ignore
 
 (* END utime *)
 
@@ -2327,71 +2333,19 @@ let truncate path size =
 
 (* chmod *)
 let chmod path mode =
-  let update =
-    let chmod resource =
-      let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
-      Utils.log_with_header "BEGIN: Updating mode (remote id=%s, mode=%o)\n%!"
-        remote_id mode;
-      let file_patch =
-        File.empty
-        |> File.appProperties
-           ^= [ CacheData.Resource.mode_to_app_property mode ]
-      in
-      let custom_headers = build_resource_keys_header_from_resource resource in
-      with_retry_default
-        (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~custom_headers ~fileId:remote_id
-           file_patch)
-      >>= fun patched_file ->
-      Utils.log_with_header "END: Updating mode (remote id=%s, mode=%o)\n%!"
-        remote_id mode;
-      SessionM.return (Some patched_file)
-    in
-    update_remote_resource path chmod
-  in
-  do_request update |> ignore
+  do_request
+    (MetadataMutationOps.chmod (drive_metadata_mutation_runtime ()) path mode)
+  |> ignore
 
 (* END chmod *)
 
 (* chown *)
 let chown path uid gid =
-  let update =
-    let chown resource =
-      let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
-      let id_to_string id =
-        let id64 = Int64.of_int id in
-        let minus_one_32_unsigned = Int64.pred (Int64.shift_left 1L 32) in
-        if id64 = Int64.minus_one || id64 = minus_one_32_unsigned then ""
-        else string_of_int id
-      in
-      let uid_string = id_to_string uid in
-      let gid_string = id_to_string gid in
-      Utils.log_with_header
-        "BEGIN: Updating owner (remote id=%s, uid=%s gid=%s)\n%!" remote_id
-        uid_string gid_string;
-      let app_properties =
-        if gid_string = "" then []
-        else [ CacheData.Resource.gid_to_app_property gid_string ]
-      in
-      let app_properties =
-        if uid_string = "" then app_properties
-        else CacheData.Resource.uid_to_app_property uid_string :: app_properties
-      in
-      let file_patch = File.empty |> File.appProperties ^= app_properties in
-      let custom_headers = build_resource_keys_header_from_resource resource in
-      with_retry_default
-        (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~custom_headers ~fileId:remote_id
-           file_patch)
-      >>= fun patched_file ->
-      Utils.log_with_header
-        "End: Updating owner (remote id=%s, uid=%d gid=%d)\n%!" remote_id uid
-        gid;
-      SessionM.return (Some patched_file)
-    in
-    update_remote_resource path chown
-  in
-  do_request update |> ignore
+  do_request
+    (MetadataMutationOps.chown
+       (drive_metadata_mutation_runtime ())
+       path uid gid)
+  |> ignore
 
 (* END chown *)
 

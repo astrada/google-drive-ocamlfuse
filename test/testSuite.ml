@@ -11,6 +11,7 @@ let _ =
            TestGdfuseFlow.suite;
            TestDriveUploadDispatch.suite;
            TestDriveFileMutations.suite;
+           TestDriveMetadataMutations.suite;
            TestDriveXattrs.suite;
            TestDriveMutations.suite;
            TestDriveViews.suite;
