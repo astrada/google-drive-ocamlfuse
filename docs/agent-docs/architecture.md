@@ -25,6 +25,8 @@ paths are separated:
 - `src/driveDirectoryReads.ml` holds the directory-listing core for `read_dir`
 - `src/driveReads.ml` holds the regular-file read core for direct streaming,
   memory-buffered streaming, local cache-file reads, and read-ahead scheduling
+- `src/driveDownloads.ml` holds the local-content materialization core for
+  `download_resource`
 - `src/driveFileMutations.ml` holds the local file-mutation core for `write`
   and `truncate`
 - `src/driveMetadataMutations.ml` holds the metadata-mutation core for
@@ -35,9 +37,10 @@ paths are separated:
   validation, and Drive app-property patches
 - `src/drive.ml` provides the production `DriveMutationPorts`,
   `DriveOpenPorts`, `DriveViewPorts`, `DriveDirectoryReadPorts`,
-  `DriveReadPorts`, `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,
-  `DriveUploadDispatchPorts`, and `DriveXattrPorts`, builds the small runtimes
-  from `Context`, and executes those sessions through `Oauth2.do_request`
+  `DriveReadPorts`, `DriveDownloadPorts`, `DriveFileMutationPorts`,
+  `DriveMetadataMutationPorts`, `DriveUploadDispatchPorts`, and
+  `DriveXattrPorts`, builds the small runtimes from `Context`, and executes
+  those sessions through `Oauth2.do_request`
 
 The design is stateful. A global `Context.t` stores the current config, state,
 cache handle, memory buffers, locks, and background threads.
@@ -292,7 +295,8 @@ materialization path behind the local-file branch.
 The path is:
 
 1. Resolve resource.
-2. Ensure local content exists via `download_resource`.
+2. Ensure local content exists via the thin `download_resource` wrapper over
+   `DriveDownloads`.
 3. Write data:
    - to memory blocks if `config.write_buffers = true`
    - otherwise directly to the cache file
@@ -317,8 +321,8 @@ all of which call the `Drive`-level `upload_if_dirty` wrapper over
 See `docs/agent-docs/drive-flush-fsync-release.md` for the thin file-callback
 layer that gates upload dispatch on the `ToUpload` state.
 
-See `docs/agent-docs/drive-download-resource.md` for the helper that ensures the
-local cache file exists before write-side mutation begins.
+See `docs/agent-docs/drive-download-resource.md` for the `DriveDownloads` core
+that ensures the local cache file exists before write-side mutation begins.
 
 ## Upload Path
 

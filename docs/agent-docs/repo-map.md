@@ -90,6 +90,8 @@ The `Makefile` is only a small wrapper around these dune commands.
   - `read_dir` delegates into `DriveDirectoryReads` through
     `DriveDirectoryReadPorts`.
   - `read` delegates into `DriveReads` through `DriveReadPorts`.
+  - `download_resource` delegates into `DriveDownloads` through
+    `DriveDownloadPorts`.
   - `write` and `truncate` delegate into `DriveFileMutations` through
     `DriveFileMutationPorts`.
   - `utime`, `chmod`, and `chown` delegate into `DriveMetadataMutations`
@@ -134,6 +136,16 @@ The `Makefile` is only a small wrapper around these dune commands.
     cache-file reads, and read-ahead scheduling.
   - Functorized over a narrow boundary so read policy can be unit tested
     without real `Context`, cache files, network calls, or background threads.
+
+- `src/driveDownloads.ml`
+  - Local-content materialization core for `download_resource`.
+  - Owns the state machine for existing-file reuse, dirty-state reuse,
+    `ToDownload` MD5 checks, `Downloading` polling, desktop/document/media
+    materialization branches, cache-size accounting order, and final state
+    transitions.
+  - Functorized over a narrow boundary so materialization policy can be unit
+    tested without real `Context`, Drive API requests, cache files, locks, or
+    sleeps.
 
 - `src/driveFileMutations.ml`
   - Local file-mutation core for `write` and `truncate`.
@@ -252,6 +264,7 @@ Current tests are in:
 - `test/testConfigRuntime.ml`
 - `test/testConfigStore.ml`
 - `test/testDriveDirectoryReads.ml`
+- `test/testDriveDownloads.ml`
 - `test/testDriveOpens.ml`
 - `test/testDriveReads.ml`
 - `test/testDriveFileMutations.ml`
@@ -280,10 +293,11 @@ There are no end-to-end tests for:
 - OAuth flows
 - rename/delete semantics against live Drive state
 
-The mutation, open-validation, read-side, file-mutation, metadata-mutation,
-upload-dispatch, and xattr cores are covered by focused unit tests in
-`test/testDriveMutations.ml`, `test/testDriveOpens.ml`,
-`test/testDriveViews.ml`, `test/testDriveDirectoryReads.ml`,
+The mutation, open-validation, read-side, download/materialization,
+file-mutation, metadata-mutation, upload-dispatch, and xattr cores are covered
+by focused unit tests in `test/testDriveMutations.ml`,
+`test/testDriveOpens.ml`, `test/testDriveViews.ml`,
+`test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
 `test/testDriveReads.ml`, `test/testDriveFileMutations.ml`,
 `test/testDriveMetadataMutations.ml`, `test/testDriveUploadDispatch.ml`, and
 `test/testDriveXattrs.ml`, but live Drive and FUSE integration need manual

@@ -5,6 +5,19 @@
 `Drive.download_resource` is the shared helper that ensures a
 `CacheData.Resource.t` has usable local content in the cache directory.
 
+The production helper in `src/drive.ml` is a thin adapter over
+`DriveDownloads`:
+
+```ocaml
+let download_resource resource =
+  DownloadOps.download_resource (drive_download_runtime ()) resource
+```
+
+`DriveDownloads` owns the local-content materialization state machine.
+`DriveDownloadPorts` connects that policy to production cache access,
+filesystem checks and writes, Drive API export/download calls, per-resource
+locking, backoff, and exception mapping.
+
 Its job is not just "download bytes from Drive". Depending on the resource and
 its current cache state, it may instead:
 
@@ -49,6 +62,15 @@ That path is keyed by the resource's remote id in the cache directory. The main
 question is whether the function needs to create or refresh the file at that
 path before returning it.
 
+Inside the core, the operation is parameterized by the current runtime:
+
+```ocaml
+DriveDownloads.download_resource :
+  DriveDownloads.runtime ->
+  CacheData.Resource.t ->
+  string GapiMonad.SessionM.m
+```
+
 ## Typical Call Pattern
 
 Most callers do not invoke `download_resource` directly. They wrap it with
@@ -72,8 +94,8 @@ Common callers are:
 
 ## High-Level Contract
 
-`download_resource` should be read as an idempotent "ensure local content
-exists" helper, not as an unconditional network operation.
+`DriveDownloads.download_resource` should be read as an idempotent "ensure
+local content exists" helper, not as an unconditional network operation.
 
 At a high level it does this:
 
@@ -93,7 +115,8 @@ Two consequences matter:
 ## Per-File Locking
 
 Actual file materialization is serialized by a mutex stored in
-`Context.file_locks`, keyed by remote id.
+`Context.file_locks`, keyed by remote id. `DriveDownloads` reaches that mutex
+through the production `DriveDownloadPorts.with_resource_lock` port.
 
 The lock path is:
 
@@ -161,8 +184,8 @@ At that point there is no content to materialize locally.
 
 ## The Materialization Path
 
-When `check_state` decides a refresh is needed, it runs `do_download` under the
-per-file mutex.
+When the state check decides a refresh is needed, `DriveDownloads` runs the
+materialization request through the per-file lock port.
 
 That path always starts by logging and reserving cache space through:
 
@@ -218,7 +241,8 @@ download into `content_path`.
 
 Before the API call it sets the resource state to `Downloading`.
 
-The actual transfer uses `download_media`, which normally issues
+The actual transfer uses the production `download_media_to_file` port, backed
+by `download_media`, which normally issues
 `FilesResource.get ... ~media_download`.
 
 There is one important exception path: if Drive rejects the request with
@@ -241,8 +265,8 @@ for a useless network round trip.
 
 ## Cache Size Accounting For Documents
 
-`download_resource` calls `update_cache_size_for_documents` both before and
-after materialization.
+`DriveDownloads` calls the production `update_cache_size_for_documents` port
+both before and after materialization.
 
 That helper only matters when:
 
@@ -316,3 +340,12 @@ document", not raw Drive bytes.
 Only the materialization path runs under the per-file mutex. The outer
 state-check loop intentionally stays outside that critical section so threads
 can notice that another worker has already finished the work.
+
+### Test Boundary
+
+`test/testDriveDownloads.ml` exercises the materialization state machine through
+fake ports. The tests cover existing-file reuse, dirty-state reuse, MD5 shortcut
+reuse, `Downloading` polling and stuck recovery, `NotFound`, desktop and HTML
+document representations, export-link and export-call document downloads,
+ordinary media downloads, zero-byte file creation, failure rollback to
+`ToDownload`, and resources without a remote id.

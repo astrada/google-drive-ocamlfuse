@@ -1458,7 +1458,7 @@ let with_retry f resource =
   loop resource 0
 
 let is_desktop_format resource config =
-  CacheData.Resource.get_format resource config = "desktop"
+  DriveDownloads.is_desktop_format config resource
 
 let create_desktop_entry resource content_path config =
   Utils.with_out_channel ~mode:[ Open_creat; Open_trunc; Open_wronly ]
@@ -1528,129 +1528,68 @@ let flush_memory_buffers resource =
       (resource.CacheData.Resource.remote_id |> Option.get)
       memory_buffers
 
-let download_resource resource =
-  let context = Context.get_ctx () in
-  let cache = context.Context.cache in
-  let config = context |. Context.config_lens in
-  let content_path = Cache.get_content_path cache resource in
-  let shrink_cache_before_downloading () =
-    let file_size = Option.default 0L resource.CacheData.Resource.size in
-    shrink_cache ~file_size ();
-    SessionM.return ()
-  in
-  let do_api_download () =
+module DriveDownloadPorts = struct
+  let get_content_path = Cache.get_content_path
+
+  let select_first_resource_with_remote_id cache remote_id =
+    Cache.Resource.select_first_resource_with_remote_id cache remote_id
+
+  let file_exists = Sys.file_exists
+  let check_md5_checksum = check_md5_checksum
+  let update_cached_resource_state = update_cached_resource_state
+  let update_cache_size_for_documents = update_cache_size_for_documents
+  let shrink_cache ?file_size () = shrink_cache ?file_size ()
+
+  let with_resource_lock resource request =
+    let context = Context.get_ctx () in
+    let mutex =
+      Context.with_ctx_lock (fun () ->
+          let remote_id = resource.CacheData.Resource.remote_id |> Option.get in
+          match Utils.safe_find context.Context.file_locks remote_id with
+          | None ->
+              let mutex = Mutex.create () in
+              Hashtbl.add context.Context.file_locks remote_id mutex;
+              mutex
+          | Some mutex -> mutex)
+    in
+    Utils.with_lock_m mutex request
+
+  let create_desktop_entry = create_desktop_entry
+  let create_html_with_redirect = create_html_with_redirect
+
+  let download_export_link_to_file content_path export_link =
     let destination = GapiMediaResource.TargetFile content_path in
     let media_download = { GapiMediaResource.destination; range_spec = "" } in
-    let fileId = resource.CacheData.Resource.remote_id |> Option.get in
-    if CacheData.Resource.is_document resource then
-      let fmt = CacheData.Resource.get_format resource config in
-      let mimeType = CacheData.Resource.mime_type_of_format fmt in
-      let export_links =
-        CacheData.Resource.parse_export_links
-          (Option.default "" resource.CacheData.Resource.export_links)
-      in
-      try
-        let export_link = List.assoc mimeType export_links in
-        GapiService.get ~media_download export_link
-          GapiRequest.parse_empty_response
-      with Not_found ->
-        with_retry_default
-          (FilesResource.export ~media_download ~fileId ~mimeType)
-        >>= fun () -> SessionM.return ()
-    else if Option.default 0L resource.CacheData.Resource.size > 0L then
-      download_media media_download resource >>= fun _ -> SessionM.return ()
-    else (
-      Utils.log_with_header
-        "BEGIN: Creating resource without content (path=%s)\n%!" content_path;
-      close_out (open_out content_path);
-      SessionM.return ())
-  in
-  let do_download =
-    SessionM.return () >>= fun () ->
-    Utils.log_with_header "BEGIN: Downloading resource (id=%Ld) to %s\n%!"
-      resource.CacheData.Resource.id content_path;
-    (if is_desktop_format resource config then (
-       shrink_cache_before_downloading () >>= fun () ->
-       update_cache_size_for_documents cache resource content_path Int64.neg;
-       if config.Config.desktop_entry_as_html then
-         create_html_with_redirect resource content_path config
-       else create_desktop_entry resource content_path config;
-       SessionM.return ())
-     else
-       shrink_cache_before_downloading () >>= fun () ->
-       update_cached_resource_state cache CacheData.Resource.State.Downloading
-         resource.CacheData.Resource.id;
-       update_cache_size_for_documents cache resource content_path Int64.neg;
-       Utils.try_with_m (do_api_download ()) (fun e ->
-           update_cached_resource_state cache
-             CacheData.Resource.State.ToDownload resource.CacheData.Resource.id;
-           handle_default_exceptions e))
-    >>= fun () ->
-    update_cache_size_for_documents cache resource content_path Std.identity;
-    Utils.log_with_header "END: Downloading resource (id=%Ld) to %s\n%!"
-      resource.CacheData.Resource.id content_path;
-    update_cached_resource_state cache CacheData.Resource.State.Synchronized
-      resource.CacheData.Resource.id;
-    SessionM.return ()
-  in
-  let get_lock () =
-    let context = Context.get_ctx () in
-    Context.with_ctx_lock (fun () ->
-        let remote_id = resource.CacheData.Resource.remote_id |> Option.get in
-        match Utils.safe_find context.Context.file_locks remote_id with
-        | None ->
-            let mutex = Mutex.create () in
-            Hashtbl.add context.Context.file_locks remote_id mutex;
-            mutex
-        | Some mutex -> mutex)
-  in
-  let do_download_with_lock () =
-    let mutex = get_lock () in
-    Utils.with_lock_m mutex do_download
-  in
-  let rec check_state n =
-    let reloaded_resource =
-      Option.map_default
-        (Cache.Resource.select_first_resource_with_remote_id cache)
-        (Some resource) resource.CacheData.Resource.remote_id
-    in
-    let reloaded_state =
-      match reloaded_resource with
-      | None -> CacheData.Resource.State.NotFound
-      | Some r -> r.CacheData.Resource.state
-    in
-    let download_if_not_updated () =
-      let r = reloaded_resource |> Option.get in
-      if check_md5_checksum r cache then (
-        update_cached_resource_state cache CacheData.Resource.State.Synchronized
-          resource.CacheData.Resource.id;
-        SessionM.return ())
-      else do_download_with_lock ()
-    in
-    match reloaded_state with
-    | CacheData.Resource.State.Synchronized | CacheData.Resource.State.ToUpload
-    | CacheData.Resource.State.Uploading ->
-        if Sys.file_exists content_path then SessionM.return ()
-        else do_download_with_lock ()
-    | CacheData.Resource.State.ToDownload -> download_if_not_updated ()
-    | CacheData.Resource.State.Downloading ->
-        if n > 300 then (
-          Utils.log_with_header
-            "Still downloading resource (id=%Ld) after about 5 hours: start \
-             downloading again\n\
-             %!"
-            resource.CacheData.Resource.id;
-          download_if_not_updated ())
-        else (
-          Utils.log_with_header
-            "Already downloading resource (id=%Ld): check number %d\n%!"
-            resource.CacheData.Resource.id n;
-          let n' = min n 6 in
-          GapiUtils.wait_exponential_backoff n';
-          check_state (n + 1))
-    | CacheData.Resource.State.NotFound -> Utils.raise_m File_not_found
-  in
-  check_state 0 >>= fun () -> SessionM.return content_path
+    GapiService.get ~media_download export_link GapiRequest.parse_empty_response
+
+  let export_document_to_file content_path ~file_id ~mime_type =
+    let destination = GapiMediaResource.TargetFile content_path in
+    let media_download = { GapiMediaResource.destination; range_spec = "" } in
+    with_retry_default
+      (FilesResource.export ~media_download ~fileId:file_id ~mimeType:mime_type)
+    >>= fun () -> SessionM.return ()
+
+  let download_media_to_file content_path resource =
+    let destination = GapiMediaResource.TargetFile content_path in
+    let media_download = { GapiMediaResource.destination; range_spec = "" } in
+    download_media media_download resource >>= fun _ -> SessionM.return ()
+
+  let create_empty_file content_path = close_out (open_out content_path)
+  let wait_exponential_backoff = GapiUtils.wait_exponential_backoff
+  let handle_download_exception e = handle_default_exceptions e
+end
+
+module DownloadOps = DriveDownloads.Make (DriveDownloadPorts)
+
+let drive_download_runtime () =
+  let context = Context.get_ctx () in
+  {
+    DriveDownloads.cache = context.Context.cache;
+    config = context |. Context.config_lens;
+  }
+
+let download_resource resource =
+  DownloadOps.download_resource (drive_download_runtime ()) resource
 
 let stream_resource offset buffer resource =
   let length = Bigarray.Array1.dim buffer in

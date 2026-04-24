@@ -21,7 +21,7 @@ Read these files in order:
 14. `drive-rename.md` for move/rename semantics and cache surgery in the mutation core
 15. `drive-update-remote-resource.md` for the shared mutation-wrapper pattern used by metadata mutations, xattr mutations, and the delete/rename mutation core
 16. `drive-chmod-chown-utime.md` for `DriveMetadataMutations` timestamp, mode, and owner metadata updates
-17. `drive-download-resource.md` for local content materialization and reuse
+17. `drive-download-resource.md` for `DriveDownloads` local content materialization and reuse
 18. `drive-read.md` for `DriveReads` stream-vs-cache read policy and read-ahead behavior
 19. `drive-write.md` for local mutation, dirty-state updates, and write buffers in the file-mutation core
 20. `drive-truncate.md` for local size mutation and signed cache-size updates in the file-mutation core
