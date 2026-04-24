@@ -79,7 +79,7 @@ The `Makefile` is only a small wrapper around these dune commands.
 - `src/drive.ml`
   - The main implementation module.
   - Contains most filesystem behavior: lookup, listing, reads, writes, upload,
-    xattrs, symlinks, metadata mapping, Google Drive API requests, and the
+    symlinks, metadata mapping, Google Drive API requests, and the
     production wiring for extracted filesystem cores.
   - Create/delete/rename enter through public `Drive` functions here, and
     those wrappers delegate into `DriveMutations` through
@@ -92,6 +92,8 @@ The `Makefile` is only a small wrapper around these dune commands.
     `DriveFileMutationPorts`.
   - `flush`, `fsync`, `release`, and rename-replace upload handoff delegate
     into `DriveUploadDispatch` through `DriveUploadDispatchPorts`.
+  - `get_xattr`, `set_xattr`, `list_xattr`, and `remove_xattr` delegate into
+    `DriveXattrs` through `DriveXattrPorts`.
   - If a user-visible filesystem operation changes behavior, the fix is
     probably here.
 
@@ -124,6 +126,14 @@ The `Makefile` is only a small wrapper around these dune commands.
   - Upload-dispatch core for dirty-state gating and sync-vs-async handoff.
   - Owns the `ToUpload -> Uploading` gate, path re-resolution before dispatch,
     and the branch between direct upload and async enqueueing.
+
+- `src/driveXattrs.ml`
+  - Extended-attribute core.
+  - Owns cached-xattr parsing, visible xattr reads, xattr create/replace
+    validation, encoded length checks, and Drive app-property patch
+    construction.
+  - Functorized over a narrow boundary so xattr behavior can be unit tested
+    without real `Context`, Drive API requests, or cache files.
 
 ### Global Runtime State
 
@@ -218,6 +228,7 @@ Current tests are in:
 - `test/testConfigStore.ml`
 - `test/testDriveDirectoryReads.ml`
 - `test/testDriveFileMutations.ml`
+- `test/testDriveXattrs.ml`
 - `test/testDriveUploadDispatch.ml`
 - `test/testDriveMutations.ml`
 - `test/testDriveViews.ml`
@@ -241,12 +252,12 @@ There are no end-to-end tests for:
 - OAuth flows
 - rename/delete semantics against live Drive state
 
-The mutation, read-side, file-mutation, and upload-dispatch cores are covered
-by focused unit tests in `test/testDriveMutations.ml`,
+The mutation, read-side, file-mutation, upload-dispatch, and xattr cores are
+covered by focused unit tests in `test/testDriveMutations.ml`,
 `test/testDriveViews.ml`, `test/testDriveDirectoryReads.ml`,
-`test/testDriveFileMutations.ml`, and `test/testDriveUploadDispatch.ml`, but
-live Drive and FUSE integration need manual validation for behavior changes in
-those paths.
+`test/testDriveFileMutations.ml`, `test/testDriveUploadDispatch.ml`, and
+`test/testDriveXattrs.ml`, but live Drive and FUSE integration need manual
+validation for behavior changes in those paths.
 
 Any change in those areas should be reasoned carefully and ideally verified
 manually.

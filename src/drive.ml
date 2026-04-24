@@ -2234,6 +2234,41 @@ let drive_mutation_runtime () =
     skip_trash = context.Context.skip_trash;
   }
 
+module DriveXattrPorts = struct
+  let max_attribute_length = max_attribute_length
+  let json_length = json_length
+  let get_path_in_cache = get_path_in_cache
+  let get_resource = get_resource
+
+  let build_resource_keys_header_from_resource =
+    build_resource_keys_header_from_resource
+
+  let remote_update ~custom_headers ~fileId file_patch =
+    with_retry_default
+      (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
+         ~std_params:file_std_params ~custom_headers ~fileId file_patch)
+
+  let update_remote_resource runtime path do_remote_update =
+    let mutation_runtime =
+      {
+        DriveMutations.cache = runtime.DriveXattrs.cache;
+        config = runtime.DriveXattrs.config;
+        mountpoint_path = "";
+        skip_trash = false;
+      }
+    in
+    MutationOps.update_remote_resource mutation_runtime path do_remote_update
+end
+
+module XattrOps = DriveXattrs.Make (DriveXattrPorts)
+
+let drive_xattr_runtime () =
+  let context = Context.get_ctx () in
+  {
+    DriveXattrs.cache = context.Context.cache;
+    config = context |. Context.config_lens;
+  }
+
 (* Create resources *)
 let create_remote_resource ?link_target is_folder path mode =
   do_request
@@ -2362,110 +2397,28 @@ let chown path uid gid =
 
 (* getxattr *)
 let get_xattr path name =
-  let config = Context.get_ctx () |. Context.config_lens in
-  let path_in_cache, trashed = get_path_in_cache path config in
-  let fetch_xattr =
-    get_resource path_in_cache trashed >>= fun resource ->
-    let xattrs =
-      CacheData.Resource.parse_xattrs resource.CacheData.Resource.xattrs
-    in
-    let value =
-      try List.assoc name xattrs with Not_found -> raise No_attribute
-    in
-    SessionM.return value
-  in
-  do_request fetch_xattr |> fst
+  do_request (XattrOps.get_xattr (drive_xattr_runtime ()) path name) |> fst
 
 (* END getxattr *)
 
 (* setxattr *)
 let set_xattr path name value xflags =
-  let update =
-    let setxattr resource =
-      let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
-      Utils.log_with_header
-        "BEGIN: Setting xattr (remote id=%s, name=%s value=%s xflags=%s)\n%!"
-        remote_id name value
-        (Utils.xattr_flags_to_string xflags);
-      let xattrs =
-        CacheData.Resource.parse_xattrs resource.CacheData.Resource.xattrs
-      in
-      let existing = List.mem_assoc name xattrs in
-      (match xflags with
-      | Fuse.CREATE -> if existing then raise Existing_attribute
-      | Fuse.REPLACE -> if not existing then raise No_attribute
-      | Fuse.AUTO -> ());
-      let attribute_length = json_length name + json_length value in
-      if attribute_length > max_attribute_length then raise Invalid_operation;
-      let file_patch =
-        File.empty
-        |> File.appProperties
-           ^= [ CacheData.Resource.xattr_to_app_property name value ]
-      in
-      let custom_headers = build_resource_keys_header_from_resource resource in
-      with_retry_default
-        (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~custom_headers ~fileId:remote_id
-           file_patch)
-      >>= fun patched_file ->
-      Utils.log_with_header
-        "END: Setting xattr (remote id=%s, name=%s value=%s xflags=%s)\n%!"
-        remote_id name value
-        (Utils.xattr_flags_to_string xflags);
-      SessionM.return (Some patched_file)
-    in
-    update_remote_resource path setxattr
-  in
-  do_request update |> ignore
+  do_request
+    (XattrOps.set_xattr (drive_xattr_runtime ()) path name value xflags)
+  |> ignore
 
 (* END setxattr *)
 
 (* listxattr *)
 let list_xattr path =
-  let config = Context.get_ctx () |. Context.config_lens in
-  let path_in_cache, trashed = get_path_in_cache path config in
-  let fetch_xattrs =
-    get_resource path_in_cache trashed >>= fun resource ->
-    let xattrs =
-      CacheData.Resource.parse_xattrs resource.CacheData.Resource.xattrs
-    in
-    let keys = List.map (fun (n, _) -> n) xattrs in
-    SessionM.return keys
-  in
-  do_request fetch_xattrs |> fst
+  do_request (XattrOps.list_xattr (drive_xattr_runtime ()) path) |> fst
 
 (* END listxattr *)
 
 (* removexattr *)
 let remove_xattr path name =
-  let update =
-    let removexattr resource =
-      let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
-      Utils.log_with_header "BEGIN: Removing xattr (remote id=%s, name=%s)\n%!"
-        remote_id name;
-      let xattrs =
-        CacheData.Resource.parse_xattrs resource.CacheData.Resource.xattrs
-      in
-      let existing = List.mem_assoc name xattrs in
-      if not existing then raise No_attribute;
-      let file_patch =
-        File.empty
-        |> File.appProperties
-           ^= [ CacheData.Resource.xattr_no_value_to_app_property name ]
-      in
-      let custom_headers = build_resource_keys_header_from_resource resource in
-      with_retry_default
-        (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-           ~std_params:file_std_params ~custom_headers ~fileId:remote_id
-           file_patch)
-      >>= fun patched_file ->
-      Utils.log_with_header "END: Removing xattr (remote id=%s, name=%s)\n%!"
-        remote_id name;
-      SessionM.return (Some patched_file)
-    in
-    update_remote_resource path removexattr
-  in
-  do_request update |> ignore
+  do_request (XattrOps.remove_xattr (drive_xattr_runtime ()) path name)
+  |> ignore
 
 (* END removexattr *)
 

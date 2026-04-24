@@ -17,6 +17,8 @@
 - `drive-write-path-extraction/plan.md`: archived completed plan for
   extracting `DriveFileMutations` and `DriveUploadDispatch` and making the
   write-side file-mutation and upload-dispatch paths unit testable.
+- `drive-xattr-extraction/plan.md`: archived completed plan for extracting
+  `DriveXattrs` and making xattr behavior unit testable.
 - `gdfuse-cli-error-handling/plan.md`: archived completed plan for restoring
   clean CLI handling for `-version`, `-help`, `--help`, and invalid options,
   and for expanding CLI behavior test coverage.

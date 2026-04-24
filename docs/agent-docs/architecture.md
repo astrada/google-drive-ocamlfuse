@@ -11,8 +11,8 @@ The executable mounts a FUSE filesystem whose operations are implemented in
 - background work such as uploads and folder prefetching
 
 The mutation-heavy create/delete/rename paths, the read-side view/listing
-paths, the local file-mutation paths, and the upload-dispatch paths are
-separated:
+paths, the local file-mutation paths, the upload-dispatch paths, and the xattr
+paths are separated:
 
 - `Drive` is the public FUSE-facing module
 - `src/driveMutations.ml` holds the mutation core for create/delete/rename
@@ -24,10 +24,12 @@ separated:
   and `truncate`
 - `src/driveUploadDispatch.ml` holds the upload-dispatch core for
   `start_uploading_if_dirty`, `upload_with_retry`, and `queue_upload`
+- `src/driveXattrs.ml` holds the extended-attribute core for xattr reads,
+  validation, and Drive app-property patches
 - `src/drive.ml` provides the production `DriveMutationPorts`,
   `DriveViewPorts`, `DriveDirectoryReadPorts`, `DriveFileMutationPorts`, and
-  `DriveUploadDispatchPorts`, builds the small runtimes from `Context`, and
-  executes those sessions through `Oauth2.do_request`
+  `DriveUploadDispatchPorts`, and `DriveXattrPorts`, builds the small runtimes
+  from `Context`, and executes those sessions through `Oauth2.do_request`
 
 The design is stateful. A global `Context.t` stores the current config, state,
 cache handle, memory buffers, locks, and background threads.
@@ -220,8 +222,8 @@ Symlink-target reads live in the thin `Drive.read_link` wrapper over
 Symlink creation requests enter through `Drive.symlink`; see
 `docs/agent-docs/drive-symlink.md`.
 
-Extended-attribute handling lives in the xattr paths in `Drive`; see
-`docs/agent-docs/drive-xattr.md`.
+Extended-attribute handling lives in the thin `Drive` wrappers over
+`DriveXattrs`; see `docs/agent-docs/drive-xattr.md`.
 
 Visible delete requests enter through `Drive.unlink` / `Drive.rmdir`; see
 `docs/agent-docs/drive-unlink-rmdir.md`.
