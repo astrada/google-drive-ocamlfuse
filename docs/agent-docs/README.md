@@ -22,7 +22,7 @@ Read these files in order:
 15. `drive-update-remote-resource.md` for the shared mutation-wrapper pattern used by metadata mutations, xattr mutations, and the delete/rename mutation core
 16. `drive-chmod-chown-utime.md` for `DriveMetadataMutations` timestamp, mode, and owner metadata updates
 17. `drive-download-resource.md` for local content materialization and reuse
-18. `drive-read.md` for stream-vs-cache read policy and read-ahead behavior
+18. `drive-read.md` for `DriveReads` stream-vs-cache read policy and read-ahead behavior
 19. `drive-write.md` for local mutation, dirty-state updates, and write buffers in the file-mutation core
 20. `drive-truncate.md` for local size mutation and signed cache-size updates in the file-mutation core
 21. `drive-start-uploading-if-dirty.md` for the tiny `ToUpload -> Uploading` gate in the upload-dispatch core
@@ -56,7 +56,7 @@ Read these files in order:
 49. `drive-unlink-rmdir.md` for the thin FUSE delete entrypoints and `is_folder` contract
 50. `application-flow.md`
 51. `workflows.md`
-52. `config-file-handling.md` for config-format and parser refactors
+52. `config-file-handling.md` for config-format and parser maintenance
 
 The user-facing docs under `docs/wiki/` are the source for installation,
 authorization, and end-user configuration details. The files in

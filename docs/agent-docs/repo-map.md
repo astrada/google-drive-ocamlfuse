@@ -25,9 +25,9 @@ The `Makefile` is only a small wrapper around these dune commands.
 - `bin/gdfuseRuntimeDeps.ml`: production wiring for the `gdfuse` flow functor.
 - `bin/gdfuseFuse.ml`: FUSE callback table and exception mapping.
 - `src/`: core implementation.
-- `test/`: OUnit unit tests. Current tests cover support modules plus
-  `gdfuse` CLI/application-flow behavior, but not full FUSE or Google Drive
-  integration.
+- `test/`: OUnit unit tests. Current tests cover support modules, filesystem
+  core modules, and `gdfuse` CLI/application-flow behavior, but not full FUSE
+  or Google Drive integration.
 - `docs/wiki/`: user-facing documentation imported from the project wiki.
 - `tools/`: helper scripts, currently minimal. Includes `tools/format_ocaml`
   for running `ocamlformat` over tracked `.ml` and `.mli` files in the repo.
@@ -80,7 +80,7 @@ The `Makefile` is only a small wrapper around these dune commands.
   - The main implementation module.
   - Contains most filesystem behavior: lookup, listing, reads, writes, upload,
     symlinks, metadata mapping, Google Drive API requests, and the
-    production wiring for extracted filesystem cores.
+    production wiring for filesystem cores.
   - Create/delete/rename enter through public `Drive` functions here, and
     those wrappers delegate into `DriveMutations` through
     `DriveMutationPorts`.
@@ -88,6 +88,7 @@ The `Makefile` is only a small wrapper around these dune commands.
     through `DriveViewPorts`.
   - `read_dir` delegates into `DriveDirectoryReads` through
     `DriveDirectoryReadPorts`.
+  - `read` delegates into `DriveReads` through `DriveReadPorts`.
   - `write` and `truncate` delegate into `DriveFileMutations` through
     `DriveFileMutationPorts`.
   - `utime`, `chmod`, and `chown` delegate into `DriveMetadataMutations`
@@ -118,6 +119,13 @@ The `Makefile` is only a small wrapper around these dune commands.
   - Owns cache-hit reuse, synthetic-root listing strategy, remote query
     selection, and snapshot rebuild/replacement.
   - Keeps directory-listing policy separate from streaming/content-read logic.
+
+- `src/driveReads.ml`
+  - Regular-file read core for `read`.
+  - Owns the branch between direct streaming, memory-buffer streaming, local
+    cache-file reads, and read-ahead scheduling.
+  - Functorized over a narrow boundary so read policy can be unit tested
+    without real `Context`, cache files, network calls, or background threads.
 
 - `src/driveFileMutations.ml`
   - Local file-mutation core for `write` and `truncate`.
@@ -236,6 +244,7 @@ Current tests are in:
 - `test/testConfigRuntime.ml`
 - `test/testConfigStore.ml`
 - `test/testDriveDirectoryReads.ml`
+- `test/testDriveReads.ml`
 - `test/testDriveFileMutations.ml`
 - `test/testDriveMetadataMutations.ml`
 - `test/testDriveXattrs.ml`
@@ -265,10 +274,10 @@ There are no end-to-end tests for:
 The mutation, read-side, file-mutation, metadata-mutation, upload-dispatch, and
 xattr cores are covered by focused unit tests in `test/testDriveMutations.ml`,
 `test/testDriveViews.ml`, `test/testDriveDirectoryReads.ml`,
-`test/testDriveFileMutations.ml`, `test/testDriveMetadataMutations.ml`,
-`test/testDriveUploadDispatch.ml`, and `test/testDriveXattrs.ml`, but live
-Drive and FUSE integration need manual validation for behavior changes in those
-paths.
+`test/testDriveReads.ml`, `test/testDriveFileMutations.ml`,
+`test/testDriveMetadataMutations.ml`, `test/testDriveUploadDispatch.ml`, and
+`test/testDriveXattrs.ml`, but live Drive and FUSE integration need manual
+validation for behavior changes in those paths.
 
 Any change in those areas should be reasoned carefully and ideally verified
 manually.

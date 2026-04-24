@@ -11,8 +11,9 @@ The executable mounts a FUSE filesystem whose operations are implemented in
 - background work such as uploads and folder prefetching
 
 The mutation-heavy create/delete/rename paths, the read-side view/listing
-paths, the local file-mutation paths, the metadata-mutation paths, the
-upload-dispatch paths, and the xattr paths are separated:
+paths, the content-read paths, the local file-mutation paths, the
+metadata-mutation paths, the upload-dispatch paths, and the xattr paths are
+separated:
 
 - `Drive` is the public FUSE-facing module
 - `src/driveMutations.ml` holds the mutation core for create/delete/rename
@@ -20,6 +21,8 @@ upload-dispatch paths, and the xattr paths are separated:
 - `src/driveViews.ml` holds the read-side view core for `get_attr`,
   `read_link`, and the lookup portion of `opendir`
 - `src/driveDirectoryReads.ml` holds the directory-listing core for `read_dir`
+- `src/driveReads.ml` holds the regular-file read core for direct streaming,
+  memory-buffered streaming, local cache-file reads, and read-ahead scheduling
 - `src/driveFileMutations.ml` holds the local file-mutation core for `write`
   and `truncate`
 - `src/driveMetadataMutations.ml` holds the metadata-mutation core for
@@ -29,10 +32,10 @@ upload-dispatch paths, and the xattr paths are separated:
 - `src/driveXattrs.ml` holds the extended-attribute core for xattr reads,
   validation, and Drive app-property patches
 - `src/drive.ml` provides the production `DriveMutationPorts`,
-  `DriveViewPorts`, `DriveDirectoryReadPorts`, `DriveFileMutationPorts`, and
-  `DriveMetadataMutationPorts`, `DriveUploadDispatchPorts`, and
-  `DriveXattrPorts`, builds the small runtimes from `Context`, and executes
-  those sessions through `Oauth2.do_request`
+  `DriveViewPorts`, `DriveDirectoryReadPorts`, `DriveReadPorts`,
+  `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,
+  `DriveUploadDispatchPorts`, and `DriveXattrPorts`, builds the small runtimes
+  from `Context`, and executes those sessions through `Oauth2.do_request`
 
 The design is stateful. A global `Context.t` stores the current config, state,
 cache handle, memory buffers, locks, and background threads.
@@ -199,6 +202,9 @@ Directory-open validation lives in the thin `Drive.opendir` wrapper over
 `DriveViews`; see
 `docs/agent-docs/drive-opendir.md`.
 
+Regular file reads enter through the thin `Drive.read` wrapper over
+`DriveReads`; see `docs/agent-docs/drive-read.md`.
+
 The directory-side `releasedir` / `fsyncdir` callbacks remain adapter-level
 no-ops in `bin/gdfuseFuse.ml`; see
 `docs/agent-docs/gdfuse-noop-dir-callbacks.md`.
@@ -257,7 +263,8 @@ Special virtual directories are implemented in `Drive`:
 
 ## Read Path
 
-`Drive.read` does not always read from a local file directly.
+`Drive.read` is a thin wrapper over `DriveReads`. The read core does not always
+read from a local file directly.
 
 The path is:
 

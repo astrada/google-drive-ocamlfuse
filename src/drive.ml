@@ -1911,49 +1911,43 @@ let utime path atime mtime =
 
 (* END utime *)
 
-(* read *)
-let read path buf offset file_descr =
-  let config = Context.get_ctx () |. Context.config_lens in
-  let path_in_cache, trashed = get_path_in_cache path config in
+module DriveReadPorts = struct
+  let get_path_in_cache = get_path_in_cache
+  let get_resource = get_resource
 
-  let request_resource =
-    get_resource path_in_cache trashed >>= fun resource ->
-    let to_stream, to_memory_buffer =
-      CacheData.Resource.to_stream config resource
-    in
-    if to_stream then
-      if to_memory_buffer then
-        with_retry (stream_resource_to_memory_buffer offset buf) resource
-        >>= fun () -> SessionM.return ""
-      else
-        with_retry (stream_resource offset buf) resource >>= fun () ->
-        SessionM.return ""
-    else (
-      flush_memory_buffers resource;
-      with_retry download_resource resource)
-  in
+  let stream_resource offset buf resource =
+    with_retry (stream_resource offset buf) resource
 
-  let build_read_ahead_requests =
-    if config.Config.read_ahead_buffers > 0 then
-      get_resource path_in_cache trashed >>= fun resource ->
-      let to_stream, to_memory_buffer =
-        CacheData.Resource.to_stream config resource
-      in
-      if to_stream && to_memory_buffer then
-        stream_resource_to_read_ahead_buffers offset resource
-      else SessionM.return []
-    else SessionM.return []
-  in
+  let stream_resource_to_memory_buffer offset buf resource =
+    with_retry (stream_resource_to_memory_buffer offset buf) resource
 
-  let content_path = do_request request_resource |> fst in
-  let read_ahead_requests = do_request build_read_ahead_requests |> fst in
-  List.iter (fun m -> async_do_request m |> ignore) read_ahead_requests;
-  if content_path <> "" then
+  let stream_resource_to_read_ahead_buffers offset resource =
+    stream_resource_to_read_ahead_buffers offset resource
+
+  let flush_memory_buffers = flush_memory_buffers
+  let ensure_local_content resource = with_retry download_resource resource
+
+  let read_local_file content_path buf offset =
     Utils.with_in_channel content_path (fun ch ->
         let file_descr = Unix.descr_of_in_channel ch in
         Unix.LargeFile.lseek file_descr offset Unix.SEEK_SET |> ignore;
         Fuse.Unix_util.read file_descr buf)
-  else Bigarray.Array1.dim buf
+
+  let enqueue_async_request request = async_do_request request |> ignore
+end
+
+module ReadOps = DriveReads.Make (DriveReadPorts)
+
+let drive_read_runtime () =
+  let context = Context.get_ctx () in
+  {
+    DriveReads.cache = context.Context.cache;
+    config = context |. Context.config_lens;
+  }
+
+(* read *)
+let read path buf offset file_descr =
+  do_request (ReadOps.read (drive_read_runtime ()) path buf offset) |> fst
 
 (* END read *)
 
