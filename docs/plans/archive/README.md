@@ -29,6 +29,9 @@
 - `drive-download-resource-extraction/plan.md`: archived completed plan for
   extracting `DriveDownloads` and making local-content materialization unit
   testable.
+- `drive-update-remote-resource-extraction/plan.md`: archived completed plan
+  for extracting `DriveRemoteUpdates` and making the metadata-side remote
+  update wrapper unit testable.
 - `gdfuse-cli-error-handling/plan.md`: archived completed plan for restoring
   clean CLI handling for `-version`, `-help`, `--help`, and invalid options,
   and for expanding CLI behavior test coverage.

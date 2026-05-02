@@ -2,26 +2,25 @@
 
 ## Purpose
 
-The repository has two closely related `update_remote_resource` wrappers:
+The repository has two `update_remote_resource` wrappers with similar control
+flow and different call-site responsibilities:
 
-- `Drive.update_remote_resource` in `src/drive.ml` for metadata-only mutations
-- `DriveMutations.Make.update_remote_resource` in `src/driveMutations.ml` for
-  the rename/delete mutation paths
+- `DriveRemoteUpdates.Make.update_remote_resource` for the `Drive`-side
+  metadata-update wrapper
+- `DriveMutations.Make.update_remote_resource` for the mutation core used by
+  delete/trash, rename, and xattr mutation paths
 
-`DriveMetadataMutations` and `DriveXattrs` also receive
-`update_remote_resource` ports. In production, the metadata-mutation port
-delegates to `Drive.update_remote_resource`, and the xattr port delegates to
-`DriveMutations.Make.update_remote_resource`.
+`Drive.update_remote_resource` is the production compatibility helper in
+`src/drive.ml`. It builds a `DriveRemoteUpdates.runtime` from `Context` and
+delegates to `RemoteUpdateOps`.
 
-This document describes the shared wrapper pattern these paths use.
-
-It is used when a mutation path needs to:
+Use this document when maintaining code that needs to:
 
 - resolve the current resource for a visible path
 - perform one remote mutation against that resource
-- reconcile the local cache afterwards
+- reconcile local cache state afterwards
 
-Current callers are:
+Current caller groups are:
 
 - `DriveMetadataMutations.utime`
 - `DriveMetadataMutations.chmod`
@@ -32,25 +31,61 @@ Current callers are:
 - `DriveMutations.delete_resource`
 - `DriveMutations.rename`
 
-It is not used for content uploads. Those go through the upload path centered on
-`queue_upload` and `upload_resource_with_retry`.
+Content uploads do not use this wrapper pattern. They go through the upload
+path centered on `queue_upload` and `upload_resource_with_retry`; see
+`docs/agent-docs/drive-upload-path.md`.
 
-See `docs/agent-docs/drive-upload-path.md` for content uploads and
-`docs/agent-docs/drive-rename.md` for the rename-specific cache logic built on
-top of the mutation-core wrapper.
+See `docs/agent-docs/drive-chmod-chown-utime.md` for concrete metadata
+mutations, `docs/agent-docs/drive-xattr.md` for xattr mutations,
+`docs/agent-docs/drive-rename.md` for rename-specific cache surgery, and
+`docs/agent-docs/drive-delete-remote-resource.md` for delete-vs-trash policy
+selection.
 
-See `docs/agent-docs/drive-delete-remote-resource.md` for the higher-level
-policy wrapper that decides when deletion requests reach `trash_resource`
-versus `delete_resource`.
+## Implementation Boundaries
 
-See `docs/agent-docs/drive-chmod-chown-utime.md` for the concrete metadata
-mutation paths.
+### `DriveRemoteUpdates`
 
-See `docs/agent-docs/drive-xattr.md` for the concrete xattr read/mutate paths.
+`src/driveRemoteUpdates.ml` owns the metadata-side wrapper policy:
+
+- visible-path normalization through the injected `get_path_in_cache` port
+- read-only rejection from `runtime.config.Config.read_only`
+- resource resolution through the injected `get_resource` port
+- `Some file` cache-save behavior
+- `None` purge behavior
+- the optional `update_file_in_cache` hook used by `utime`
+
+Production wiring lives in `DriveRemoteUpdatePorts` in `src/drive.ml`.
+
+`DriveMetadataMutationPorts.update_remote_resource` delegates through
+`Drive.update_remote_resource`, so `utime`, `chmod`, and `chown` use this
+wrapper.
+
+### `DriveMutations`
+
+`src/driveMutations.ml` owns the mutation-core wrapper used inside create,
+delete/trash, and rename logic.
+
+Its `update_remote_resource` has the same `Some file` / `None` protocol and
+the same default save/purge shape, but it does not expose
+`update_file_in_cache`. It also receives read-only policy through the
+`is_filesystem_read_only` port.
+
+`DriveXattrPorts.update_remote_resource` adapts xattr mutations onto this
+mutation-core wrapper.
 
 ## Signatures
 
 ```ocaml
+val DriveRemoteUpdates.Make.update_remote_resource :
+  DriveRemoteUpdates.runtime ->
+  string ->
+  ?update_file_in_cache:(string -> unit) ->
+  ?save_to_db:
+    (CacheData.t -> CacheData.Resource.t -> GapiDriveV3Model.File.t -> unit) ->
+  ?purge_cache:(CacheData.t -> CacheData.Resource.t -> unit) ->
+  (CacheData.Resource.t -> GapiDriveV3Model.File.t option GapiMonad.SessionM.m) ->
+  unit GapiMonad.SessionM.m
+
 val Drive.update_remote_resource :
   string ->
   ?update_file_in_cache:(string -> unit) ->
@@ -60,7 +95,7 @@ val Drive.update_remote_resource :
   (CacheData.Resource.t -> GapiDriveV3Model.File.t option GapiMonad.SessionM.m) ->
   unit GapiMonad.SessionM.m
 
-val DriveMutations.update_remote_resource :
+val DriveMutations.Make.update_remote_resource :
   DriveMutations.runtime ->
   string ->
   ?save_to_db:
@@ -68,96 +103,77 @@ val DriveMutations.update_remote_resource :
   ?purge_cache:(CacheData.t -> CacheData.Resource.t -> unit) ->
   (CacheData.Resource.t -> GapiDriveV3Model.File.t option GapiMonad.SessionM.m) ->
   unit GapiMonad.SessionM.m
-
-val DriveMetadataMutationPorts.update_remote_resource :
-  DriveMetadataMutations.runtime ->
-  string ->
-  ?update_file_in_cache:(string -> unit) ->
-  (CacheData.Resource.t -> GapiDriveV3Model.File.t option GapiMonad.SessionM.m) ->
-  unit GapiMonad.SessionM.m
-
-val DriveXattrPorts.update_remote_resource :
-  DriveXattrs.runtime ->
-  string ->
-  (CacheData.Resource.t -> GapiDriveV3Model.File.t option GapiMonad.SessionM.m) ->
-  unit GapiMonad.SessionM.m
 ```
 
 The common contract is:
 
 - take a visible `path`
-- optionally override cache-reconciliation hooks
-- run one `do_remote_update` callback that performs the remote mutation
-
-The `Drive`-side wrapper and metadata-mutation port have one extra
-`update_file_in_cache` hook because `DriveMetadataMutations.utime` may need to
-touch an existing local cache file after a successful remote metadata patch.
-The mutation-core wrapper and xattr port do not expose that hook.
+- normalize it into cache coordinates
+- resolve the current `CacheData.Resource.t`
+- run one caller-supplied remote mutation
+- reconcile cache state based on whether that mutation returns `Some file` or
+  `None`
 
 ## High-Level Flow
 
-The wrapper pattern does four things:
-
-1. reject the operation if the filesystem is read-only
-2. normalize the visible path with `get_path_in_cache`
-3. resolve the current resource with `get_resource`
-4. run the caller-supplied remote mutation and reconcile local cache state
-
-In outline, both implementations look like:
+The shared shape is:
 
 ```ocaml
-if is_filesystem_read_only () then raise Permission_denied;
-get_resource path_in_cache trashed >>= fun resource ->
-do_remote_update resource >>= fun file_option ->
-match file_option with
-| None -> purge_cache cache resource
-| Some file ->
-    maybe_update_local_file resource;
-    save_to_db cache resource file
+let path_in_cache, trashed = get_path_in_cache path config in
+if read_only then raise Permission_denied
+else
+  get_resource path_in_cache trashed >>= fun resource ->
+  do_remote_update resource >>= fun file_option ->
+  (match file_option with
+  | None -> purge_cache cache resource
+  | Some file ->
+      maybe_update_local_file resource;
+      save_to_db cache resource file);
+  SessionM.return ()
 ```
 
-The `maybe_update_local_file` step exists only in the `Drive`-side wrapper.
+The `maybe_update_local_file` step exists only in `DriveRemoteUpdates`.
 
-Because the wrappers always go through `get_resource`, they inherit the normal
-resource lookup rules:
-
-- metadata may be refreshed first through `get_metadata`
-- virtual namespaces like trash are already mapped into cache coordinates
-- stale cache rows may be refreshed before the mutation runs
-
-See `docs/agent-docs/drive-get-resource.md` for the resolution semantics these
-wrappers depend on.
+Because both wrappers resolve by path before the remote mutation runs, they
+inherit normal resource lookup semantics: trash-view mapping, metadata refresh,
+and stale-cache behavior come from `get_path_in_cache` and `get_resource`.
+See `docs/agent-docs/drive-get-resource.md`.
 
 ## Read-Only Enforcement
 
-The read-only guard sits at the wrapper boundary:
+The read-only guard sits at the wrapper boundary.
+
+For `DriveRemoteUpdates`, the guard uses:
 
 ```ocaml
-if is_filesystem_read_only () then raise Permission_denied else update_file
+runtime.config.Config.read_only
 ```
 
-That means all current callers inherit the same policy automatically. Callers
-do not need to re-check filesystem mutability themselves before constructing
-the remote request.
+For `DriveMutations`, the guard uses the injected:
+
+```ocaml
+P.is_filesystem_read_only ()
+```
+
+Path normalization happens before this guard in both wrappers. Resource lookup
+and the remote mutation callback happen only when the filesystem is writable.
 
 ## The `do_remote_update` Contract
 
-`do_remote_update` receives the resolved `CacheData.Resource.t` and is
-responsible for the actual Drive side effect.
+`do_remote_update` receives the resolved `CacheData.Resource.t` and performs the
+remote side effect. Its return value controls local reconciliation:
 
-Its return value controls which post-processing branch runs:
+- `Some file`: the remote resource still exists; refresh or otherwise reconcile
+  the cache row from the returned Drive metadata
+- `None`: the remote resource is considered gone; call `purge_cache`
 
-- `Some file`: the remote resource still exists, and the returned Drive file
-  metadata should drive local cache reconciliation
-- `None`: the remote resource is considered gone, so the wrapper calls
-  `purge_cache`
+Exceptions from resource lookup or `do_remote_update` propagate. The wrappers
+do not run save, purge, or local-file hooks after those failures.
 
-This is the central protocol of the helper.
+## `Some file`
 
-### `Some file`
-
-Most metadata-patch operations return `Some patched_file` after a
-`FilesResource.update` call.
+Most metadata-patch operations return `Some patched_file` after
+`FilesResource.update`.
 
 That includes:
 
@@ -169,190 +185,154 @@ That includes:
 - `DriveMutations.trash_resource`
 - `DriveMutations.rename`
 
-### `None`
-
-`DriveMutations.delete_resource` returns `None` after `FilesResource.delete`.
-
-That tells the wrapper there is no replacement metadata to save, and the local
-cache should instead be cleaned up through `purge_cache`.
-
-## Post-Update Hooks
-
-The metadata-side wrapper in `Drive` exposes three extension points. The
-mutation-core wrapper exposes the same `save_to_db` and `purge_cache` hooks,
-but not `update_file_in_cache`.
-
-### `save_to_db`
-
-This is the main post-success hook.
-
-The default implementation is:
+The default save behavior is:
 
 ```ocaml
 let default_save_resource_to_db cache resource file =
-  let updated_resource = update_resource_from_file resource file in
-  update_cached_resource cache updated_resource
+  let updated_resource = P.update_resource_from_file resource file in
+  P.update_cached_resource cache updated_resource
 ```
 
-So by default, a successful remote mutation:
+Callers can replace this with `save_to_db` when the returned Drive metadata is
+not enough to preserve local invariants.
 
-1. rebuilds the cache row from the returned Drive file
-2. writes that updated row back into the cache
+Examples:
 
-This default is enough for simple in-place metadata changes such as
-`DriveMetadataMutations.chmod`, `DriveMetadataMutations.chown`,
-`DriveXattrs.set_xattr`, and `DriveXattrs.remove_xattr`.
+- `DriveMutations.trash_resource` marks the row trashed, invalidates the trash
+  root cache, and trashes cached descendants for folders
+- `DriveMutations.rename` rewrites path and parent fields, handles target
+  replacement cases, clears destination `NotFound` rows, and removes stale
+  folder subtree entries
 
-More complex callers override it:
+## `None`
 
-- `DriveMutations.trash_resource` marks the row trashed, invalidates the
-  trash-bin cache, and trashes cached descendants for folders
-- `DriveMutations.rename` rewrites path and parent fields, handles replacement
-  cases, clears destination `NotFound` rows, and removes stale folder subtree
-  entries
+`DriveMutations.delete_resource` returns `None` after `FilesResource.delete`.
 
-The key design point is that the wrapper owns the control flow, while the
-caller owns any operation-specific cache invariants.
-
-### `purge_cache`
-
-This hook runs only when `do_remote_update` returns `None`.
-
-Its default value is a no-op:
+That selects the purge branch:
 
 ```ocaml
-fun cache resource -> ()
+purge_cache cache resource
 ```
 
-So returning `None` without overriding `purge_cache` will leave local cache
-state untouched.
+The default purge is a no-op:
 
-`DriveMutations.delete_resource` supplies the meaningful purge behavior:
+```ocaml
+fun _cache _resource -> ()
+```
 
-- remove the resource row itself
-- if deleting a folder, also remove cached descendants under the old path
+So any caller that returns `None` and needs local cleanup must supply
+`purge_cache`.
 
-That makes `None` effectively the "resource disappeared" branch.
+## Local File Hook
 
-### `update_file_in_cache`
+`DriveRemoteUpdates` exposes:
 
-This optional hook exists only on `Drive.update_remote_resource` and the
-`DriveMetadataMutationPorts.update_remote_resource` port.
+```ocaml
+?update_file_in_cache:(string -> unit)
+```
 
-It lets a caller mutate the local cached content file after a successful remote
-metadata update.
-
-The wrapper only invokes it when both conditions hold:
-
-- `resource.state = Synchronized`
-- the content file already exists on disk
-
-So the hook does not create a cache file, and it does not run for dirty or
-transitional resource states.
-
-`DriveMetadataMutations.utime` uses it to mirror the new timestamps onto the
-local cache file:
+`DriveMetadataMutations.utime` uses this hook to mirror timestamps onto an
+existing local cache file after a successful remote metadata patch:
 
 ```ocaml
 ~update_file_in_cache:(fun content_path ->
   Unix.utimes content_path atime mtime)
 ```
 
-That keeps on-disk cache metadata aligned with the successful remote patch when
-the file already exists locally.
+The hook runs only when all of these are true:
+
+- the hook is provided
+- `resource.state = CacheData.Resource.State.Synchronized`
+- `P.file_exists content_path = true`
+
+The content path comes from:
+
+```ocaml
+P.get_content_path runtime.cache resource
+```
+
+The hook does not create cache files and does not run for dirty or transitional
+states such as `ToDownload`, `Downloading`, `ToUpload`, `Uploading`, or
+`NotFound`.
 
 ## Caller Categories
 
-Although the wrapper pattern is generic, its current callers fall into a small
-number of patterns.
+### Metadata Patches
 
-### In-Place Metadata Patches
+`DriveMetadataMutations.chmod`, `DriveMetadataMutations.chown`, and
+`DriveMetadataMutations.utime` use `DriveRemoteUpdates` through
+`DriveMetadataMutationPorts.update_remote_resource`.
 
-These callers all:
+`utime` additionally passes `update_file_in_cache`; `chmod` and `chown` rely on
+the default save path.
 
-- patch remote file metadata with `FilesResource.update`
-- return `Some patched_file`
-- rely on the default `save_to_db`
+### Xattr Patches
 
-They are:
-
-- `DriveMetadataMutations.chmod`
-- `DriveMetadataMutations.chown`
-- `DriveXattrs.set_xattr`
-- `DriveXattrs.remove_xattr`
-
-`DriveMetadataMutations.utime` belongs to the same category, but also uses
-`update_file_in_cache` to touch the local cache file.
+`DriveXattrs.set_xattr` and `DriveXattrs.remove_xattr` use the
+`DriveXattrPorts.update_remote_resource` port. In production that port delegates
+to `MutationOps.update_remote_resource`.
 
 ### Soft Delete
 
-`DriveMutations.trash_resource` also returns `Some trashed_file`, but it cannot
-use the default save path because local cache state needs extra bookkeeping:
-
-- mark the row trashed locally
-- invalidate the special trash-bin listing
-- trash cached descendants when the target is a folder
-
-This is a good example of a caller that still has a normal remote return value
-but needs custom cache reconciliation.
+`DriveMutations.trash_resource` returns `Some trashed_file`, but supplies custom
+cache reconciliation so local rows move into the trash namespace correctly.
 
 ### Hard Delete
 
-`DriveMutations.delete_resource` is the pure `None` case:
-
-- remote side-effect is `FilesResource.delete`
-- no replacement file metadata exists afterwards
-- local cleanup happens through `purge_cache`
+`DriveMutations.delete_resource` returns `None` and supplies `purge_cache` to
+remove the cached row and, for folders, cached descendants.
 
 ### Move/Rename
 
-`DriveMutations.rename` is the most complex caller.
+`DriveMutations.rename` uses the mutation-core wrapper with custom
+`save_to_db`. The custom save hook handles move-vs-rename composition,
+replacement behavior, path rewrites, parent rewrites, and folder subtree cache
+cleanup.
 
-It uses the same shared wrapper, but almost all of its correctness depends on
-the custom `save_to_db` hook rather than the wrapper itself. That hook handles:
+## Test Coverage
 
-- move-versus-rename composition
-- `mv_keep_target` replacement cases
-- path and parent rewrites
-- folder subtree cache cleanup
+`test/testDriveRemoteUpdates.ml` covers the `DriveRemoteUpdates` wrapper with
+fake ports:
 
-See `docs/agent-docs/drive-rename.md` for the rename-specific details.
+- path normalization and trash-path lookup
+- read-only rejection ordering
+- resource lookup and remote mutation exception propagation
+- default save behavior
+- `save_to_db` override behavior
+- `update_file_in_cache` conditions and ordering
+- custom and default `purge_cache` behavior
+
+`test/testDriveMutations.ml` covers the mutation-core wrapper indirectly
+through create/delete/rename behavior.
 
 ## Maintenance Notes
 
-There are a few non-obvious rules worth preserving if this helper pattern
-changes.
-
 ### Path Resolution Happens Before Mutation
 
-The wrapper resolves the current resource by path before the remote mutation
-runs. So a caller that wants to operate on some other object identity cannot use
-this helper directly without first making that object discoverable at the input
-path.
+The wrappers resolve the current resource by path before the remote mutation
+runs. A caller that needs to operate on a different object identity needs a
+different helper or must first make that object discoverable at the input path.
 
-### Returning `None` Is Not Enough By Itself
+### Returning `None` Is Only Branch Selection
 
-`None` only selects the purge branch. It does not define the purge behavior.
-
-If a new caller returns `None` but forgets to override `purge_cache`, local
-metadata will remain behind.
+`None` does not define cleanup by itself. It only selects the purge branch.
+Callers that delete or otherwise remove remote resources must supply meaningful
+`purge_cache` behavior.
 
 ### Local File Updates Are Deliberately Narrow
 
-`update_file_in_cache` is intentionally conservative:
-
-- only synchronized resources qualify
-- only existing cache files are touched
-
-If a future operation needs broader local file repair, it will need custom logic
-outside this hook or a change to the wrapper contract.
+`update_file_in_cache` is intentionally conservative. It touches only existing
+cache files for synchronized resources. Broader local file repair belongs in a
+separate operation-specific path.
 
 ## Source Pointers
 
-- `src/drive.ml`: `update_remote_resource`
+- `src/driveRemoteUpdates.ml`: metadata-side wrapper
+- `src/drive.ml`: `DriveRemoteUpdatePorts`, `RemoteUpdateOps`, and
+  `Drive.update_remote_resource`
 - `src/driveMetadataMutations.ml`: metadata callers using the
   `update_remote_resource` port
-- `src/driveMutations.ml`: `update_remote_resource`
+- `src/driveMutations.ml`: mutation-core wrapper for delete/trash and rename
 - `src/driveXattrs.ml`: xattr callers using the `update_remote_resource` port
-- `docs/agent-docs/drive-rename.md`
-- `docs/agent-docs/drive-delete-remote-resource.md`
+- `test/testDriveRemoteUpdates.ml`
+- `test/testDriveMutations.ml`

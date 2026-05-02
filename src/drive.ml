@@ -1775,38 +1775,34 @@ let opendir path flags =
 (* END opendir *)
 
 (* Update operations *)
-let default_save_resource_to_db cache resource file =
-  let updated_resource = update_resource_from_file resource file in
-  update_cached_resource cache updated_resource
+module DriveRemoteUpdatePorts = struct
+  let get_path_in_cache = get_path_in_cache
+  let get_resource = get_resource
+  let get_content_path = Cache.get_content_path
+  let file_exists = Sys.file_exists
 
-let update_remote_resource path ?update_file_in_cache
-    ?(save_to_db = default_save_resource_to_db)
-    ?(purge_cache = fun cache resource -> ()) do_remote_update =
+  let update_resource_from_file resource file =
+    update_resource_from_file resource file
+
+  let update_cached_resource = update_cached_resource
+end
+
+module RemoteUpdateOps = DriveRemoteUpdates.Make (DriveRemoteUpdatePorts)
+
+let drive_remote_update_runtime () =
   let context = Context.get_ctx () in
-  let cache = context.Context.cache in
-  let config = context |. Context.config_lens in
-  let path_in_cache, trashed = get_path_in_cache path config in
-  let update_file =
-    get_resource path_in_cache trashed >>= fun resource ->
-    do_remote_update resource >>= fun file_option ->
-    (match file_option with
-    | None -> purge_cache cache resource
-    | Some file ->
-        (match update_file_in_cache with
-        | None -> ()
-        | Some go ->
-            if
-              resource.CacheData.Resource.state
-              = CacheData.Resource.State.Synchronized
-            then
-              let content_path = Cache.get_content_path cache resource in
-              if Sys.file_exists content_path then go content_path);
-        save_to_db cache resource file);
-    SessionM.return ()
-  in
-  if is_filesystem_read_only () then raise Permission_denied else update_file
+  {
+    DriveRemoteUpdates.cache = context.Context.cache;
+    config = context |. Context.config_lens;
+  }
 
-(* Update operations *)
+let update_remote_resource path ?update_file_in_cache ?save_to_db ?purge_cache
+    do_remote_update =
+  RemoteUpdateOps.update_remote_resource
+    (drive_remote_update_runtime ())
+    path ?update_file_in_cache ?save_to_db ?purge_cache do_remote_update
+
+(* END Update operations *)
 
 module DriveMetadataMutationPorts = struct
   let build_resource_keys_header_from_resource =

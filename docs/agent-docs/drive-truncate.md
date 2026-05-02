@@ -249,8 +249,8 @@ See `docs/agent-docs/drive-write.md` for the ordinary write path.
 
 ## Permission Model
 
-Unlike `Drive.update_remote_resource`, `truncate` does not contain an explicit
-`is_filesystem_read_only ()` guard.
+Unlike the remote-update wrappers, `truncate` does not contain an explicit
+read-only guard.
 
 Unlike `Drive.write`, it also does not rely on an open-file handle path inside
 this function itself.
@@ -258,8 +258,7 @@ this function itself.
 So the implementation currently assumes permission checks have already happened
 outside this function, typically through the filesystem/open layer.
 
-That is an implementation fact worth remembering if write-access rules are ever
-tightened or refactored.
+That is an implementation fact worth remembering if write-access rules change.
 
 See `docs/agent-docs/drive-fopen.md` for the open-time access gate this path
 currently relies on.

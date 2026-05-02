@@ -92,6 +92,8 @@ The `Makefile` is only a small wrapper around these dune commands.
   - `read` delegates into `DriveReads` through `DriveReadPorts`.
   - `download_resource` delegates into `DriveDownloads` through
     `DriveDownloadPorts`.
+  - The metadata-side `update_remote_resource` helper delegates into
+    `DriveRemoteUpdates` through `DriveRemoteUpdatePorts`.
   - `write` and `truncate` delegate into `DriveFileMutations` through
     `DriveFileMutationPorts`.
   - `utime`, `chmod`, and `chown` delegate into `DriveMetadataMutations`
@@ -146,6 +148,15 @@ The `Makefile` is only a small wrapper around these dune commands.
   - Functorized over a narrow boundary so materialization policy can be unit
     tested without real `Context`, Drive API requests, cache files, locks, or
     sleeps.
+
+- `src/driveRemoteUpdates.ml`
+  - Metadata-side remote-update wrapper.
+  - Owns path normalization, read-only rejection, resource lookup before remote
+    mutation, `Some file` cache save behavior, `None` purge behavior, and the
+    optional local-cache file hook used by `utime`.
+  - Functorized over a narrow boundary so wrapper control flow can be unit
+    tested without real `Context`, Drive API requests, cache files, or
+    filesystem checks.
 
 - `src/driveFileMutations.ml`
   - Local file-mutation core for `write` and `truncate`.
@@ -265,6 +276,7 @@ Current tests are in:
 - `test/testConfigStore.ml`
 - `test/testDriveDirectoryReads.ml`
 - `test/testDriveDownloads.ml`
+- `test/testDriveRemoteUpdates.ml`
 - `test/testDriveOpens.ml`
 - `test/testDriveReads.ml`
 - `test/testDriveFileMutations.ml`
@@ -294,14 +306,15 @@ There are no end-to-end tests for:
 - rename/delete semantics against live Drive state
 
 The mutation, open-validation, read-side, download/materialization,
-file-mutation, metadata-mutation, upload-dispatch, and xattr cores are covered
-by focused unit tests in `test/testDriveMutations.ml`,
+remote-update-wrapper, file-mutation, metadata-mutation, upload-dispatch, and
+xattr cores are covered by focused unit tests in `test/testDriveMutations.ml`,
 `test/testDriveOpens.ml`, `test/testDriveViews.ml`,
 `test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
-`test/testDriveReads.ml`, `test/testDriveFileMutations.ml`,
-`test/testDriveMetadataMutations.ml`, `test/testDriveUploadDispatch.ml`, and
-`test/testDriveXattrs.ml`, but live Drive and FUSE integration need manual
-validation for behavior changes in those paths.
+`test/testDriveRemoteUpdates.ml`, `test/testDriveReads.ml`,
+`test/testDriveFileMutations.ml`, `test/testDriveMetadataMutations.ml`,
+`test/testDriveUploadDispatch.ml`, and `test/testDriveXattrs.ml`, but live
+Drive and FUSE integration need manual validation for behavior changes in those
+paths.
 
 Any change in those areas should be reasoned carefully and ideally verified
 manually.

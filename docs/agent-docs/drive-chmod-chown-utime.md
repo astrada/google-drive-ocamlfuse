@@ -34,7 +34,7 @@ effects:
 
 - resource-key header construction
 - retried `FilesResource.update` calls
-- shared `update_remote_resource` control flow
+- shared `DriveRemoteUpdates` control flow through `update_remote_resource`
 - local cache-file timestamp updates through `Unix.utimes`
 
 The runtime passed to `DriveMetadataMutations` contains the cache handle and
@@ -269,8 +269,9 @@ ports:
 - `src/driveMetadataMutations.ml`: `utime`
 - `src/driveMetadataMutations.ml`: `chmod`
 - `src/driveMetadataMutations.ml`: `chown`
+- `src/driveRemoteUpdates.ml`: metadata-side `update_remote_resource`
 - `src/drive.ml`: `DriveMetadataMutationPorts`
-- `src/drive.ml`: `update_remote_resource`
+- `src/drive.ml`: `DriveRemoteUpdatePorts`
 - `bin/gdfuseFuse.ml`: `utime`
 - `bin/gdfuseFuse.ml`: `chmod`
 - `bin/gdfuseFuse.ml`: `chown`

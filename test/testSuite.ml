@@ -10,6 +10,7 @@ let _ =
            TestGdfuseApp.suite;
            TestGdfuseFlow.suite;
            TestDriveDownloads.suite;
+           TestDriveRemoteUpdates.suite;
            TestDriveUploadDispatch.suite;
            TestDriveFileMutations.suite;
            TestDriveMetadataMutations.suite;
