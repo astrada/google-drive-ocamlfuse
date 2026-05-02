@@ -1260,130 +1260,83 @@ let get_resource_with_id remote_id cache =
   | Some r -> SessionM.return r
   | None -> get_resource_with_id_from_server remote_id
 
-let get_resource_from_server parent_folder_id name new_resource trashed cache =
-  get_file_from_server parent_folder_id name trashed >>= fun file ->
-  match file with
-  | None ->
-      Utils.log_with_header
-        "BEGIN: Saving not found resource to db (name=%s)\n%!" name;
-      let resource =
-        new_resource
-        |> CacheData.Resource.trashed ^= Some trashed
-        |> CacheData.Resource.state ^= CacheData.Resource.State.NotFound
-      in
-      let inserted = Cache.Resource.insert_resource cache resource in
-      Utils.log_with_header "END: Saving not found resource to db (name=%s)\n%!"
-        name;
-      SessionM.return inserted
-  | Some entry ->
-      let inserted = insert_resource_into_cache cache new_resource entry in
-      SessionM.return inserted
+module DriveResourceResolverPorts = struct
+  let root_directory = root_directory
+  let lost_and_found_directory = lost_and_found_directory
+  let shared_with_me_directory = shared_with_me_directory
+  let get_metadata = get_metadata
+
+  let current_metadata_last_update () =
+    Context.get_ctx () |. Context.metadata_last_update_lens
+
+  let get_root_folder_id = get_root_folder_id_from_context
+  let get_well_known_resource = get_well_known_resource
+  let is_lost_and_found_root = is_lost_and_found_root
+  let is_shared_with_me_root = is_shared_with_me_root
+  let lookup_resource _cache path trashed = lookup_resource path trashed
+  let create_resource = create_resource
+
+  let insert_resource cache resource =
+    Utils.log_with_header "BEGIN: Saving not found resource to db (name=%s)\n%!"
+      (Filename.basename resource.CacheData.Resource.path);
+    let inserted = Cache.Resource.insert_resource cache resource in
+    Utils.log_with_header "END: Saving not found resource to db (name=%s)\n%!"
+      (Filename.basename resource.CacheData.Resource.path);
+    inserted
+
+  let insert_resource_from_file cache resource file =
+    insert_resource_into_cache cache resource file
+
+  let update_resource_from_file resource file =
+    update_resource_from_file resource file
+
+  let update_cached_resource = update_cached_resource
+  let delete_cached_resource = delete_cached_resource
+
+  let select_first_resource_with_remote_id =
+    Cache.Resource.select_first_resource_with_remote_id
+
+  let find_file_in_folder ~parent_folder_id ~name ~trashed =
+    get_file_from_server parent_folder_id name trashed
+
+  let get_file_by_remote_id remote_id =
+    Utils.log_with_header "BEGIN: Getting file from server (remote id=%s)\n%!"
+      remote_id;
+    with_retry_default
+      (FilesResource.get ~supportsAllDrives:true ~std_params:file_std_params
+         ~fileId:remote_id)
+    >>= fun file ->
+    Utils.log_with_header "END: Getting file from server (remote id=%s)\n%!"
+      remote_id;
+    SessionM.return file
+
+  let with_default_retry = with_retry_default
+end
+
+module ResourceResolverOps =
+  DriveResourceResolver.Make (DriveResourceResolverPorts)
+
+let drive_resource_resolver_runtime ?cache () =
+  let context = Context.get_ctx () in
+  {
+    DriveResourceResolver.cache = Option.default context.Context.cache cache;
+    config = context |. Context.config_lens;
+  }
 
 let check_resource_in_cache cache path trashed =
-  let metadata_last_update =
-    Context.get_ctx () |. Context.metadata_last_update_lens
-  in
-  match lookup_resource path trashed with
-  | None -> false
-  | Some resource ->
-      if CacheData.Resource.is_valid resource metadata_last_update then
-        if CacheData.Resource.is_folder resource then
-          resource.CacheData.Resource.state
-          = CacheData.Resource.State.Synchronized
-        else true
-      else false
+  ResourceResolverOps.check_resource_in_cache
+    (drive_resource_resolver_runtime ~cache ())
+    path trashed
 
-let rec get_folder_id path trashed =
-  if path = root_directory then
-    let root_folder_id = get_root_folder_id_from_context () in
-    SessionM.return root_folder_id
-  else
-    get_resource path trashed >>= fun resource ->
-    let remote_id =
-      resource |. CacheData.Resource.remote_id |. GapiLens.option_get
-    in
-    SessionM.return remote_id
+let get_folder_id path trashed =
+  ResourceResolverOps.get_folder_id
+    (drive_resource_resolver_runtime ())
+    path trashed
 
-and get_resource path trashed =
-  let config = Context.get_ctx () |. Context.config_lens in
-  let metadata_last_update =
-    get_metadata () |. CacheData.Metadata.last_update
-  in
-
-  let get_new_resource cache =
-    let parent_path = Filename.dirname path in
-    if check_resource_in_cache cache parent_path trashed then
-      (* If parent_path is up to date, all resources are already cached,
-       * so a new resource must be a "not found" one. *)
-      Utils.raise_m File_not_found
-    else
-      let new_resource = create_resource path in
-      let name = Filename.basename path in
-      get_folder_id new_resource.CacheData.Resource.parent_path trashed
-      >>= fun parent_folder_id ->
-      get_resource_from_server parent_folder_id name new_resource trashed cache
-      >>= fun resource -> SessionM.return resource
-  in
-
-  let refresh_resource resource cache =
-    (if Option.is_some resource.CacheData.Resource.remote_id then (
-       let remote_id = resource.CacheData.Resource.remote_id |> Option.get in
-       Utils.log_with_header
-         "BEGIN: Getting file from server (remote id=%s)\n%!" remote_id;
-       with_retry_default
-         (FilesResource.get ~supportsAllDrives:true ~std_params:file_std_params
-            ~fileId:remote_id)
-       >>= fun file ->
-       Utils.log_with_header "END: Getting file from server (remote id=%s)\n%!"
-         remote_id;
-       SessionM.return (Some file))
-     else SessionM.return None)
-    >>= fun refreshed_file ->
-    match refreshed_file with
-    | None ->
-        delete_cached_resource resource;
-        get_new_resource cache
-    | Some file ->
-        let reloaded_resource =
-          Option.map_default
-            (Cache.Resource.select_first_resource_with_remote_id cache)
-            (Some resource) resource.CacheData.Resource.remote_id
-          |> Option.default resource
-        in
-        let updated_resource =
-          update_resource_from_file reloaded_resource file
-        in
-        update_cached_resource cache updated_resource;
-        Utils.log_with_header "END: Refreshing resource (id=%Ld)\n%!"
-          updated_resource.CacheData.Resource.id;
-        SessionM.return updated_resource
-  in
-
-  if path = root_directory then
-    let root_resource = get_well_known_resource root_directory trashed in
-    SessionM.return root_resource
-  else if is_lost_and_found_root path trashed config then
-    let lost_and_found_resource =
-      get_well_known_resource lost_and_found_directory trashed
-    in
-    SessionM.return lost_and_found_resource
-  else if is_shared_with_me_root path trashed config then
-    let shared_with_me_resource =
-      get_well_known_resource shared_with_me_directory trashed
-    in
-    SessionM.return shared_with_me_resource
-  else
-    let cache = Context.get_cache () in
-    (match lookup_resource path trashed with
-      | None -> get_new_resource cache
-      | Some resource ->
-          if CacheData.Resource.is_valid resource metadata_last_update then
-            SessionM.return resource
-          else with_retry_default (refresh_resource resource cache))
-    >>= fun resource ->
-    match resource.CacheData.Resource.state with
-    | CacheData.Resource.State.NotFound -> Utils.raise_m File_not_found
-    | _ -> SessionM.return resource
+let get_resource path trashed =
+  ResourceResolverOps.get_resource
+    (drive_resource_resolver_runtime ())
+    path trashed
 
 let check_md5_checksum resource cache =
   let path = resource.CacheData.Resource.path in

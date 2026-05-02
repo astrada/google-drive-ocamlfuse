@@ -81,6 +81,8 @@ The `Makefile` is only a small wrapper around these dune commands.
   - Contains most filesystem behavior: lookup, listing, reads, writes, upload,
     symlinks, metadata mapping, Google Drive API requests, and the
     production wiring for filesystem cores.
+  - `get_resource`, `get_folder_id`, and `check_resource_in_cache` delegate
+    into `DriveResourceResolver` through `DriveResourceResolverPorts`.
   - Create/delete/rename enter through public `Drive` functions here, and
     those wrappers delegate into `DriveMutations` through
     `DriveMutationPorts`.
@@ -106,6 +108,16 @@ The `Makefile` is only a small wrapper around these dune commands.
     `DriveXattrs` through `DriveXattrPorts`.
   - If a user-visible filesystem operation changes behavior, the fix is
     probably here.
+
+- `src/driveResourceResolver.ml`
+  - Path-to-resource resolver core for `get_resource`, `get_folder_id`, and
+    `check_resource_in_cache`.
+  - Owns metadata freshness boundaries, well-known root dispatch, ordinary
+    cache lookup, negative-cache insertion, recursive parent lookup, and stale
+    remote-id refresh.
+  - Functorized over a narrow boundary so path-resolution behavior can be unit
+    tested without real `Context`, Drive API requests, cache files, or retry
+    wrappers.
 
 - `src/driveMutations.ml`
   - Create/delete/rename core.

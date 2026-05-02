@@ -34,6 +34,8 @@
   update wrapper unit testable.
 - `drive-upload-extraction/plan.md`: archived completed plan for extracting
   `DriveUploads` and making the concrete upload attempt unit testable.
+- `drive-resource-resolver-extraction/plan.md`: archived completed plan for
+  extracting `DriveResourceResolver` and making path resolution unit testable.
 - `gdfuse-cli-error-handling/plan.md`: archived completed plan for restoring
   clean CLI handling for `-version`, `-help`, `--help`, and invalid options,
   and for expanding CLI behavior test coverage.

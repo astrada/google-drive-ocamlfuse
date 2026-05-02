@@ -205,6 +205,7 @@ to `queue_upload`.
 
 - `src/driveUploadDispatch.ml`: `upload_with_retry`
 - `src/drive.ml`: `get_path_in_cache`
-- `src/drive.ml`: `get_resource`
+- `src/driveResourceResolver.ml`: `get_resource` policy
+- `src/drive.ml`: thin `get_resource` wrapper
 - `src/driveUploadDispatch.ml`: `queue_upload`
 - `src/drive.ml`: `upload_if_dirty`

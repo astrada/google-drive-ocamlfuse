@@ -1,9 +1,11 @@
-# `Drive.get_resource`
+# `DriveResourceResolver` / `Drive.get_resource`
 
 ## Purpose
 
-`Drive.get_resource` is the core path-to-resource resolver for the filesystem
-implementation.
+`DriveResourceResolver` owns the core path-to-resource resolution policy for
+the filesystem implementation. `Drive.get_resource`, `Drive.get_folder_id`, and
+`Drive.check_resource_in_cache` are the production-facing wrappers that build a
+resolver runtime from `Context` and delegate into that module.
 
 Most higher-level Drive operations rely on it after translating the visible FUSE
 path into cache coordinates. It is the function that answers:
@@ -19,6 +21,22 @@ snapshot.
 
 ```ocaml
 val get_resource : string -> bool -> CacheData.Resource.t GapiMonad.SessionM.m
+val get_folder_id : string -> bool -> string GapiMonad.SessionM.m
+val check_resource_in_cache : CacheData.t -> string -> bool -> bool
+```
+
+The resolver module exposes the same behavior through a functorized runtime:
+
+```ocaml
+type runtime = { cache : CacheData.t; config : Config.t }
+
+module Make (P : PORTS) : sig
+  val get_resource :
+    runtime -> string -> bool -> CacheData.Resource.t GapiMonad.SessionM.m
+
+  val get_folder_id : runtime -> string -> bool -> string GapiMonad.SessionM.m
+  val check_resource_in_cache : runtime -> string -> bool -> bool
+end
 ```
 
 The parameters are:
@@ -41,7 +59,7 @@ On failure it raises `File_not_found`.
 
 ## High-Level Algorithm
 
-At a high level, `get_resource` does this:
+At a high level, the resolver does this:
 
 1. refresh global metadata if needed
 2. short-circuit well-known virtual roots
@@ -55,11 +73,11 @@ The function does not just trust the local row timestamp in isolation.
 
 ## Step 1: Metadata Refresh First
 
-The first thing `get_resource` does is:
+The first thing `DriveResourceResolver.get_resource` does is:
 
 ```ocaml
 let metadata_last_update =
-  get_metadata () |. CacheData.Metadata.last_update
+  (P.get_metadata ()).CacheData.Metadata.last_update
 ```
 
 `get_metadata` is more than a getter:
@@ -87,8 +105,9 @@ Before ordinary cache lookup, `get_resource` special-cases:
 - `"/lost+found"`
 - `"/.shared"`
 
-Those are handled by `get_well_known_resource`, which inserts a synthetic cache
-row on first access and reuses it afterwards.
+Those are handled through the `get_well_known_resource` port. In production,
+that port delegates to the `get_well_known_resource` helper in `src/drive.ml`,
+which inserts a synthetic cache row on first access and reuses it afterwards.
 
 Important details:
 
@@ -102,7 +121,7 @@ Important details:
 For normal paths, the function reads:
 
 ```ocaml
-match lookup_resource path trashed with
+match P.lookup_resource runtime.cache path trashed with
 ```
 
 There are three cases:
@@ -130,7 +149,7 @@ If `lookup_resource` returns `None`, `get_resource` runs `get_new_resource`.
 That logic first checks the parent directory:
 
 ```ocaml
-if check_resource_in_cache cache parent_path trashed then
+if check_resource_in_cache runtime parent_path trashed then
   File_not_found
 else
   ...
@@ -145,18 +164,16 @@ as absent immediately, with no extra server lookup.
 If the parent is not known-good, `get_resource` does a server lookup:
 
 1. build a provisional `new_resource = create_resource path`
-2. resolve the parent folder id with `get_folder_id parent_path trashed`
+2. resolve the parent folder id with `get_folder_id runtime parent_path trashed`
 3. query Drive by parent folder id plus basename
 4. insert the result into cache, or insert a `NotFound` tombstone
 
-The server-side lookup helper is `get_resource_from_server`.
+## Server Lookup Under Parent
 
-## `get_resource_from_server`
+The miss path performs a name-based lookup under one parent through the
+`find_file_in_folder` port.
 
-`get_resource_from_server parent_folder_id name new_resource trashed cache`
-performs a name-based lookup under one parent.
-
-It uses `get_file_from_server`, which queries either:
+The production port delegates to `get_file_from_server`, which queries either:
 
 - `name='<name>' and '<parent_id>' in parents and trashed=<bool>`
 - or `name='<name>' and sharedWithMe = true` for the special shared view
@@ -197,8 +214,8 @@ If a cached row exists but is stale relative to `metadata_last_update`,
 
 The refresh strategy is by remote id, not by path:
 
-- if `resource.remote_id` exists, fetch the file directly with
-  `FilesResource.get`
+- if `resource.remote_id` exists, fetch the file directly through the
+  `get_file_by_remote_id` port
 - then rebuild the cached row with `update_resource_from_file`
 - then save it back with `update_cached_resource`
 
@@ -215,7 +232,7 @@ During refresh, the code does:
 
 ```ocaml
 let reloaded_resource =
-  Cache.Resource.select_first_resource_with_remote_id cache remote_id
+  P.select_first_resource_with_remote_id runtime.cache remote_id
 ```
 
 before updating from the fetched file.
@@ -230,8 +247,8 @@ There is a fallback branch:
 
 ```ocaml
 | None ->
-    delete_cached_resource resource;
-    get_new_resource cache
+    P.delete_cached_resource resource;
+    get_new_resource ()
 ```
 
 That path only applies when a stale cached row has no `remote_id`.
@@ -304,11 +321,12 @@ This implies a maintenance constraint:
   locally disambiguated path from scratch
 
 That is an inference from the current source, not an explicitly documented API
-contract, but it is important when refactoring path-resolution behavior.
+contract, but it is important when changing path-resolution behavior.
 
 ## Maintenance Notes
 
-When changing `get_resource`, watch these invariants:
+When changing `DriveResourceResolver` or its production ports, watch these
+invariants:
 
 - callers are expected to pass normalized `(path_in_cache, trashed)` values
 - metadata refresh and resource freshness are coupled
@@ -326,9 +344,10 @@ When changing `get_resource`, watch these invariants:
 
 ## Source Pointers
 
-- `src/drive.ml`: `get_resource`
-- `src/drive.ml`: `get_folder_id`
-- `src/drive.ml`: `get_resource_from_server`
+- `src/driveResourceResolver.ml`: path-resolution policy
+- `src/drive.ml`: `DriveResourceResolverPorts`
+- `src/drive.ml`: thin `get_resource`, `get_folder_id`, and
+  `check_resource_in_cache` wrappers
 - `src/drive.ml`: `get_file_from_server`
 - `src/drive.ml`: `get_metadata`
 - `src/drive.ml`: `get_well_known_resource`
