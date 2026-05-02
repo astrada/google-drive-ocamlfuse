@@ -833,9 +833,42 @@ let get_well_known_resource path trashed =
       inserted
   | Some resource -> resource
 
-let get_metadata () =
-  let config = Context.get_ctx () |. Context.config_lens in
-  let request_new_start_page_token =
+module DriveMetadataRefreshPorts = struct
+  let with_metadata_lock f =
+    let context = Context.get_ctx () in
+    Utils.with_lock context.Context.metadata_lock f
+
+  let get_context_metadata () = (Context.get_ctx ()).Context.metadata
+
+  let set_context_metadata metadata =
+    Context.update_ctx (Context.metadata ^= metadata)
+
+  let select_metadata = Cache.Metadata.select_metadata
+  let insert_metadata = Cache.Metadata.insert_metadata
+  let compute_cache_size = Cache.compute_cache_size
+  let metadata_is_valid = CacheData.Metadata.is_valid
+  let now = Unix.gettimeofday
+  let run_request request = do_request request |> fst
+  let with_default_retry = with_retry_default
+
+  let request_account_metadata () =
+    let std_params =
+      {
+        GapiService.StandardParameters.default with
+        GapiService.StandardParameters.fields =
+          "user(displayName),storageQuota(limit,usage)";
+      }
+    in
+    with_retry_default (AboutResource.get ~std_params) >>= fun about ->
+    SessionM.return
+      {
+        DriveMetadataRefresh.display_name = about.About.user.User.displayName;
+        storage_quota_limit = about.About.storageQuota.About.StorageQuota.limit;
+        storage_quota_usage = about.About.storageQuota.About.StorageQuota.usage;
+      }
+
+  let request_new_start_page_token () =
+    let config = Context.get_ctx () |. Context.config_lens in
     let std_params =
       {
         GapiService.StandardParameters.default with
@@ -847,334 +880,79 @@ let get_metadata () =
          ~driveId:config.Config.team_drive_id ~std_params)
     >>= fun startPageToken ->
     SessionM.return startPageToken.StartPageToken.startPageToken
-  in
 
-  let get_start_page_token start_page_token_db =
-    if start_page_token_db = "" then request_new_start_page_token
-    else SessionM.return start_page_token_db
-  in
-
-  let request_metadata start_page_token_db cache_size =
-    let std_params =
-      {
-        GapiService.StandardParameters.default with
-        GapiService.StandardParameters.fields =
-          "user(displayName),storageQuota(limit,usage)";
-      }
-    in
-    with_retry_default (AboutResource.get ~std_params) >>= fun about ->
-    get_start_page_token start_page_token_db >>= fun start_page_token ->
-    let metadata =
-      {
-        CacheData.Metadata.display_name = about.About.user.User.displayName;
-        storage_quota_limit = about.About.storageQuota.About.StorageQuota.limit;
-        storage_quota_usage = about.About.storageQuota.About.StorageQuota.usage;
-        start_page_token;
-        cache_size;
-        last_update = Unix.gettimeofday ();
-        clean_shutdown = false;
-      }
-    in
-    SessionM.return metadata
-  in
-
-  let context = Context.get_ctx () in
-  let cache = context.Context.cache in
-  let config = context |. Context.config_lens in
-
-  let update_resource_cache new_metadata old_metadata =
-    let get_all_changes =
-      let rec loop pageToken accu =
-        with_retry_default
-          (ChangesResource.list ~supportsAllDrives:true
-             ~driveId:config.Config.team_drive_id
-             ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
-             ~std_params:changes_std_params ~includeRemoved:true ~pageToken)
-        >>= fun change_list ->
-        let changes = change_list.ChangeList.changes @ accu in
-        if change_list.ChangeList.nextPageToken = "" then
-          SessionM.return (changes, change_list.ChangeList.newStartPageToken)
-        else loop change_list.ChangeList.nextPageToken changes
-      in
-      loop new_metadata.CacheData.Metadata.start_page_token []
-    in
-
-    let request_changes =
-      Utils.log_with_header "BEGIN: Getting changes from server\n%!";
-      get_all_changes >>= fun (changes, new_start_page_token) ->
-      Utils.log_with_header "END: Getting changes from server\n%!";
-      SessionM.return (changes, new_start_page_token)
-    in
-
-    let get_resources_and_files_to_update change =
-      let selected_resources =
-        Cache.Resource.select_resources_with_remote_id cache
-          change.Change.fileId
-      in
-      List.filter
-        (fun r ->
-          change.Change.file.File.version > 0L
-          && change.Change.file.File.version
-             > Option.default 0L r.CacheData.Resource.version)
-        selected_resources
-      |> List.map (fun r -> Some (r, change.Change.file))
-    in
-
-    let get_resource_from_change change =
-      Cache.Resource.select_resources_with_remote_id cache change.Change.fileId
-      |> List.map (fun r -> Some r)
-    in
-
-    let get_new_resource_from_change change =
-      match
-        Cache.Resource.select_resources_with_remote_id cache
-          change.Change.fileId
-      with
-      | [] -> (
-          let parent_resources =
-            let parent_remote_ids =
-              match change.Change.file.File.parents with [] -> [] | ids -> ids
-            in
-            List.map
-              (Cache.Resource.select_resources_with_remote_id cache)
-              parent_remote_ids
-            |> List.concat
-            |> List.filter (fun r ->
-                r.CacheData.Resource.state
-                = CacheData.Resource.State.Synchronized)
-          in
-          match parent_resources with
-          | [] -> []
-          | prs ->
-              let parent_path = List.hd prs |. CacheData.Resource.path in
-              let filename_table, _ = build_resource_tables parent_path false in
-              let filename =
-                get_unique_filename_from_file change.Change.file filename_table
-              in
-              let resource_path = Filename.concat parent_path filename in
-              let resource = create_resource resource_path in
-              [ Some (resource, change.Change.file) ])
-      | _ -> []
-    in
-
-    let request_remaining_changes start_page_token_db =
-      if start_page_token_db = "" then SessionM.return (false, true)
-      else
-        let std_params =
-          {
-            GapiService.StandardParameters.default with
-            GapiService.StandardParameters.fields = "newStartPageToken";
-          }
-        in
-        with_retry_default
-          (ChangesResource.list ~supportsAllDrives:true
-             ~driveId:config.Config.team_drive_id
-             ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
-             ~std_params ~includeRemoved:true ~pageSize:change_limit
-             ~pageToken:start_page_token_db)
-        >>= fun change_list ->
-        let no_changes, over_limit =
-          ( change_list.ChangeList.newStartPageToken = start_page_token_db,
-            change_list.ChangeList.newStartPageToken = "" )
-        in
-        SessionM.return (no_changes, over_limit)
-    in
-
-    request_remaining_changes new_metadata.CacheData.Metadata.start_page_token
-    >>= fun (no_changes, over_limit) ->
-    if no_changes then (
-      Utils.log_with_header
-        "END: Getting metadata: No need to update resource cache\n%!";
-      Utils.log_with_header "BEGIN: Updating timestamps\n%!";
-      Cache.Resource.update_all_timestamps cache
-        new_metadata.CacheData.Metadata.last_update;
-      Utils.log_with_header "END: Updating timestamps\n%!";
-      SessionM.return new_metadata)
-    else if over_limit then (
-      Utils.log_with_header "END: Getting metadata: Too many changes\n";
-      Utils.log_with_header "BEGIN: Getting new start page token\n%!";
-      get_start_page_token "" >>= fun new_start_page_token ->
-      Utils.log_with_header "END: Getting new start page token (%s)\n%!"
-        new_start_page_token;
-      Utils.log_with_header "BEGIN: Invalidating resources\n%!";
-      Cache.Resource.invalidate_all cache;
-      Utils.log_with_header "END: Invalidating resources\n%!";
-      SessionM.return
+  let probe_remaining_changes ~start_page_token =
+    if start_page_token = "" then SessionM.return ""
+    else
+      let config = Context.get_ctx () |. Context.config_lens in
+      let std_params =
         {
-          new_metadata with
-          CacheData.Metadata.start_page_token = new_start_page_token;
-        })
-    else (
-      Utils.log_with_header "BEGIN: Updating timestamps\n%!";
-      Cache.Resource.update_all_timestamps cache
-        new_metadata.CacheData.Metadata.last_update;
-      Utils.log_with_header "END: Updating timestamps\n%!";
-      match old_metadata with
-      | None -> SessionM.return new_metadata
-      | Some _ ->
-          request_changes >>= fun (changes, new_start_page_token) ->
-          let update_resource_cache_from_changes filter_changes map_change
-              update_cache =
-            let filtered_changes = List.filter filter_changes changes in
-            let xs =
-              List.fold_left
-                (fun xs change ->
-                  let mapped_changes = map_change change in
-                  List.fold_left
-                    (fun xs' c ->
-                      match c with
-                      | None -> xs'
-                      | Some x -> if not (List.mem x xs') then x :: xs' else xs')
-                    xs mapped_changes)
-                [] filtered_changes
-            in
-            update_cache cache xs
-          in
-
-          Utils.log_with_header "BEGIN: Adding new resources to cache\n%!";
-          update_resource_cache_from_changes
-            (fun change ->
-              (not change.Change.removed) && not change.Change.file.File.trashed)
-            get_new_resource_from_change
-            (fun cache resources_and_files ->
-              List.iter
-                (fun (resource, file) ->
-                  insert_resource_into_cache cache resource file |> ignore)
-                resources_and_files);
-          Utils.log_with_header "END: Adding new resources to cache\n";
-          Utils.log_with_header "BEGIN: Updating resource cache\n%!";
-          update_resource_cache_from_changes
-            (fun change ->
-              (not change.Change.removed) && not change.Change.file.File.trashed)
-            get_resources_and_files_to_update
-            (fun cache resources_and_files ->
-              List.iter
-                (fun (r, f) ->
-                  Utils.log_with_header
-                    "BEGIN: Refreshing resource (id=%Ld)\n%!"
-                    r.CacheData.Resource.id;
-                  let updated_resource = update_resource_from_file r f in
-                  update_cached_resource cache updated_resource;
-                  Utils.log_with_header "END: Refreshing resource (id=%Ld)\n%!"
-                    updated_resource.CacheData.Resource.id)
-                resources_and_files;
-              let ids =
-                List.map
-                  (fun (r, _) -> r.CacheData.Resource.id)
-                  resources_and_files
-              in
-              Utils.log_with_header "Invalidating resources: ids=%s\n%!"
-                (String.concat ", " (List.map Int64.to_string ids));
-              Cache.Resource.invalidate_resources cache ids);
-          Utils.log_with_header "END: Updating resource cache\n";
-          Utils.log_with_header "BEGIN: Updating trashed resources\n%!";
-          update_resource_cache_from_changes
-            (fun change -> change.Change.file.File.trashed)
-            get_resource_from_change
-            (fun cache resources ->
-              Utils.log_with_header "Trashing resources: ids=%s\n%!"
-                (String.concat ", "
-                   (List.map
-                      (fun r -> Int64.to_string r.CacheData.Resource.id)
-                      resources));
-              Cache.Resource.trash_resources cache resources);
-          Utils.log_with_header "END: Updating trashed resources\n";
-          Utils.log_with_header "BEGIN: Removing deleted resources\n%!";
-          update_resource_cache_from_changes
-            (fun change -> change.Change.removed)
-            get_resource_from_change
-            (fun cache resources ->
-              Utils.log_with_header "Deleting resources: ids=%s\n%!"
-                (String.concat ", "
-                   (List.map
-                      (fun r -> Int64.to_string r.CacheData.Resource.id)
-                      resources));
-              delete_cached_resources new_metadata cache resources);
-          Utils.log_with_header "END: Removing deleted resources\n%!";
-          if List.length changes > 0 then (
-            if not config.Config.disable_trash then (
-              Utils.log_with_header "BEGIN: Invalidating trash bin resource\n%!";
-              Cache.Resource.invalidate_trash_bin cache;
-              Utils.log_with_header "END: Invalidating trash bin resource\n%!");
-            if config.Config.lost_and_found then (
-              Utils.log_with_header
-                "BEGIN: Invalidating lost+found resource\n%!";
-              Cache.Resource.invalidate_path cache lost_and_found_directory;
-              Utils.log_with_header "END: Invalidating lost+found resource\n%!");
-            Utils.log_with_header "BEGIN: Invalidating .shared resource\n%!";
-            Cache.Resource.invalidate_path cache shared_with_me_directory;
-            Utils.log_with_header "END: Invalidating .shared resource\n%!");
-          SessionM.return
-            {
-              new_metadata with
-              CacheData.Metadata.start_page_token = new_start_page_token;
-            })
-  in
-
-  let refresh_metadata old_metadata =
-    let start_page_token =
-      Option.map_default CacheData.Metadata.start_page_token.GapiLens.get ""
-        old_metadata
-    in
-    let cache_size =
-      Option.map_default CacheData.Metadata.cache_size.GapiLens.get 0L
-        old_metadata
-    in
-    Utils.log_with_header "BEGIN: Refreshing metadata\n%!";
-    with_retry_default (request_metadata start_page_token cache_size)
-    >>= fun server_metadata ->
-    Utils.log_with_header "END: Refreshing metadata\n";
-    update_resource_cache server_metadata old_metadata
-    >>= fun updated_metadata ->
-    Utils.log_with_header "BEGIN: Updating metadata in db\n%!";
-    Cache.Metadata.insert_metadata context.Context.cache updated_metadata;
-    Utils.log_with_header "END: Updating metadata in db\n";
-    Utils.log_with_header "BEGIN: Updating context\n%!";
-    Context.update_ctx (Context.metadata ^= Some updated_metadata);
-    Utils.log_with_header "END: Updating context\n%!";
-    SessionM.return updated_metadata
-  in
-
-  let resync_cache_size db_metadata =
-    let old_cache_size = db_metadata.CacheData.Metadata.cache_size in
-    Utils.log_with_header "BEGIN: Recalculating cache size (old value=%Ld)\n%!"
-      old_cache_size;
-    let cache_size = Cache.compute_cache_size context.Context.cache in
-    Utils.log_with_header "END: Recalculating cache size (new value=%Ld)\n%!"
-      cache_size;
-    db_metadata |> CacheData.Metadata.cache_size ^= cache_size
-  in
-
-  Utils.with_lock context.Context.metadata_lock (fun () ->
-      let metadata =
-        let context = Context.get_ctx () in
-        if Option.is_none context.Context.metadata then (
-          Utils.log_with_header "BEGIN: Loading metadata from db\n%!";
-          let db_metadata =
-            Cache.Metadata.select_metadata context.Context.cache
-          in
-          let db_metadata = Option.map resync_cache_size db_metadata in
-          Context.update_ctx (Context.metadata ^= db_metadata);
-          db_metadata)
-        else (
-          Utils.log_with_header "BEGIN: Getting metadata from context\n%!";
-          context.Context.metadata)
+          GapiService.StandardParameters.default with
+          GapiService.StandardParameters.fields = "newStartPageToken";
+        }
       in
+      with_retry_default
+        (ChangesResource.list ~supportsAllDrives:true
+           ~driveId:config.Config.team_drive_id
+           ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
+           ~std_params ~includeRemoved:true ~pageSize:change_limit
+           ~pageToken:start_page_token)
+      >>= fun change_list ->
+      SessionM.return change_list.ChangeList.newStartPageToken
 
-      match metadata with
-      | None ->
-          Utils.log_with_header "END: Getting metadata: Not found\n%!";
-          do_request (refresh_metadata metadata) |> fst
-      | Some m ->
-          let metadata_cache_time =
-            context |. Context.config_lens |. Config.metadata_cache_time
-          in
-          if CacheData.Metadata.is_valid metadata_cache_time m then (
-            Utils.log_with_header "END: Getting metadata: Valid\n%!";
-            m)
-          else (
-            Utils.log_with_header "END: Getting metadata: Not valid\n%!";
-            do_request (refresh_metadata metadata) |> fst))
+  let list_changes ~start_page_token =
+    let config = Context.get_ctx () |. Context.config_lens in
+    let rec loop pageToken accu =
+      with_retry_default
+        (ChangesResource.list ~supportsAllDrives:true
+           ~driveId:config.Config.team_drive_id
+           ~includeItemsFromAllDrives:(config.Config.team_drive_id <> "")
+           ~std_params:changes_std_params ~includeRemoved:true ~pageToken)
+      >>= fun change_list ->
+      let changes = change_list.ChangeList.changes @ accu in
+      if change_list.ChangeList.nextPageToken = "" then
+        SessionM.return (changes, change_list.ChangeList.newStartPageToken)
+      else loop change_list.ChangeList.nextPageToken changes
+    in
+    loop start_page_token []
+
+  let update_all_timestamps = Cache.Resource.update_all_timestamps
+  let invalidate_all_resources = Cache.Resource.invalidate_all
+  let invalidate_resources = Cache.Resource.invalidate_resources
+  let invalidate_trash_bin = Cache.Resource.invalidate_trash_bin
+  let invalidate_path = Cache.Resource.invalidate_path
+
+  let select_resources_with_remote_id =
+    Cache.Resource.select_resources_with_remote_id
+
+  let trash_resources = Cache.Resource.trash_resources
+  let delete_cached_resources = delete_cached_resources
+  let build_resource_tables = build_resource_tables
+  let get_unique_filename_from_file = get_unique_filename_from_file
+  let create_resource = create_resource
+
+  let insert_resource_from_file cache resource file =
+    insert_resource_into_cache cache resource file
+
+  let update_resource_from_file resource file =
+    update_resource_from_file resource file
+
+  let update_cached_resource = update_cached_resource
+  let lost_and_found_directory = lost_and_found_directory
+  let shared_with_me_directory = shared_with_me_directory
+end
+
+module MetadataRefreshOps = DriveMetadataRefresh.Make (DriveMetadataRefreshPorts)
+
+let drive_metadata_refresh_runtime () =
+  let context = Context.get_ctx () in
+  {
+    DriveMetadataRefresh.cache = context.Context.cache;
+    config = context |. Context.config_lens;
+  }
+
+let get_metadata () =
+  MetadataRefreshOps.get_metadata (drive_metadata_refresh_runtime ())
 
 let statfs () =
   let metadata = get_metadata () in

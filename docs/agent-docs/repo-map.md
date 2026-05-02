@@ -83,6 +83,8 @@ The `Makefile` is only a small wrapper around these dune commands.
     production wiring for filesystem cores.
   - `get_resource`, `get_folder_id`, and `check_resource_in_cache` delegate
     into `DriveResourceResolver` through `DriveResourceResolverPorts`.
+  - `get_metadata` delegates into `DriveMetadataRefresh` through
+    `DriveMetadataRefreshPorts`.
   - Create/delete/rename enter through public `Drive` functions here, and
     those wrappers delegate into `DriveMutations` through
     `DriveMutationPorts`.
@@ -118,6 +120,16 @@ The `Makefile` is only a small wrapper around these dune commands.
   - Functorized over a narrow boundary so path-resolution behavior can be unit
     tested without real `Context`, Drive API requests, cache files, or retry
     wrappers.
+
+- `src/driveMetadataRefresh.ml`
+  - Metadata freshness and Drive change-feed replay core for `get_metadata`.
+  - Owns Context/DB metadata selection policy, cache-size resync, metadata
+    validity checks, account metadata refresh, start-page-token handling,
+    no-change/over-limit/incremental replay branches, and synthetic view
+    invalidation.
+  - Functorized over a narrow boundary so metadata refresh behavior can be unit
+    tested without real `Context`, Drive API requests, cache files, locks, or
+    retry wrappers.
 
 - `src/driveMutations.ml`
   - Create/delete/rename core.

@@ -349,6 +349,7 @@ invariants:
 - `src/drive.ml`: thin `get_resource`, `get_folder_id`, and
   `check_resource_in_cache` wrappers
 - `src/drive.ml`: `get_file_from_server`
-- `src/drive.ml`: `get_metadata`
+- `src/driveMetadataRefresh.ml`: `get_metadata` policy
+- `src/drive.ml`: thin `get_metadata` wrapper
 - `src/drive.ml`: `get_well_known_resource`
 - `src/cacheData.ml`: `CacheData.Resource.is_valid`

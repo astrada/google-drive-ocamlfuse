@@ -11,15 +11,17 @@ The executable mounts a FUSE filesystem whose operations are implemented in
 - background work such as uploads and folder prefetching
 
 The mutation-heavy create/delete/rename paths, the resource-resolution path,
-the metadata remote-update wrapper, the open-validation paths, the read-side
-view/listing paths, the content-read paths, the local file-mutation paths, the
-metadata-mutation paths, the upload-dispatch paths, the concrete upload-attempt
-path, and the xattr paths are separated:
+the metadata-refresh path, the metadata remote-update wrapper, the
+open-validation paths, the read-side view/listing paths, the content-read paths,
+the local file-mutation paths, the metadata-mutation paths, the upload-dispatch
+paths, the concrete upload-attempt path, and the xattr paths are separated:
 
 - `Drive` is the public FUSE-facing module
 - `src/driveResourceResolver.ml` holds the path-to-resource resolver for
   `get_resource`, `get_folder_id`, cache validity checks, negative-cache
   insertion, recursive parent lookup, and stale remote-id refresh
+- `src/driveMetadataRefresh.ml` holds the metadata freshness gate and Drive
+  change-feed replay policy for `get_metadata`
 - `src/driveMutations.ml` holds the mutation core for create/delete/rename
   policy and cache reconciliation
 - `src/driveOpens.ml` holds the open-time access-validation core for `fopen`
@@ -46,12 +48,13 @@ path, and the xattr paths are separated:
 - `src/driveXattrs.ml` holds the extended-attribute core for xattr reads,
   validation, and Drive app-property patches
 - `src/drive.ml` provides the production `DriveMutationPorts`,
-  `DriveResourceResolverPorts`, `DriveOpenPorts`, `DriveViewPorts`,
-  `DriveDirectoryReadPorts`, `DriveReadPorts`, `DriveDownloadPorts`,
-  `DriveRemoteUpdatePorts`, `DriveFileMutationPorts`,
-  `DriveMetadataMutationPorts`, `DriveUploadDispatchPorts`,
-  `DriveUploadPorts`, and `DriveXattrPorts`, builds the small runtimes from
-  `Context`, and executes those sessions through `Oauth2.do_request`
+  `DriveResourceResolverPorts`, `DriveMetadataRefreshPorts`,
+  `DriveOpenPorts`, `DriveViewPorts`, `DriveDirectoryReadPorts`,
+  `DriveReadPorts`, `DriveDownloadPorts`, `DriveRemoteUpdatePorts`,
+  `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,
+  `DriveUploadDispatchPorts`, `DriveUploadPorts`, and `DriveXattrPorts`, builds
+  the small runtimes from `Context`, and executes those sessions through
+  `Oauth2.do_request`
 
 The design is stateful. A global `Context.t` stores the current config, state,
 cache handle, memory buffers, locks, and background threads.

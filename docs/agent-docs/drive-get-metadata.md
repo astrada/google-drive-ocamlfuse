@@ -1,8 +1,11 @@
-# `Drive.get_metadata`
+# `DriveMetadataRefresh` / `Drive.get_metadata`
 
 ## Purpose
 
-`Drive.get_metadata` is the global freshness gate for the filesystem.
+`DriveMetadataRefresh` owns the global metadata freshness and change-feed
+reconciliation policy for the filesystem. `Drive.get_metadata` is the
+production-facing wrapper that builds a refresh runtime from `Context` and
+delegates into that module.
 
 It does not just return account metadata. It also decides whether the cached
 resource graph can still be trusted, and if not, reconciles it against the
@@ -36,7 +39,8 @@ Two fields are especially important for runtime behavior:
 
 ## APIs Used
 
-`get_metadata` combines three different Google Drive API calls:
+The production ports behind `get_metadata` combine three different Google Drive
+API calls:
 
 - `AboutResource.get` for account display name and quota
 - `ChangesResource.getStartPageToken` for a fresh change checkpoint
@@ -49,7 +53,7 @@ The request field sets are defined at the top of `src/drive.ml`:
 
 ## High-Level Flow
 
-At a high level, `get_metadata` does this:
+At a high level, `DriveMetadataRefresh.get_metadata` does this:
 
 1. take `Context.metadata_lock`
 2. load metadata from `Context` if already present, otherwise from the cache DB
@@ -66,7 +70,7 @@ The lock matters because metadata refresh mutates both:
 
 ## Locking And Storage Layers
 
-The function runs under:
+The refresh module runs under the injected metadata lock. In production that is:
 
 ```ocaml
 Utils.with_lock context.Context.metadata_lock (fun () -> ...)
@@ -75,9 +79,8 @@ Utils.with_lock context.Context.metadata_lock (fun () -> ...)
 Inside that critical section it prefers the in-memory `Context.metadata` value.
 If the context has no metadata yet, it loads the metadata row from the cache DB:
 
-```ocaml
-Cache.Metadata.select_metadata context.Context.cache
-```
+The DB lookup is provided by the production `select_metadata` port, which
+delegates to `Cache.Metadata.select_metadata`.
 
 and stores the result back into `Context`.
 
@@ -111,7 +114,8 @@ If it is missing or stale, it runs the refresh path.
 
 ## Refresh Path
 
-The refresh path is `refresh_metadata old_metadata`.
+The refresh path is `DriveMetadataRefresh`'s internal
+`refresh_metadata old_metadata`.
 
 That helper:
 
@@ -124,7 +128,8 @@ That helper:
 7. stores the final metadata in the cache DB
 8. updates `Context.metadata`
 
-The new metadata row is created by `request_metadata`.
+The new metadata row is created from the injected account-metadata and
+start-page-token request ports.
 
 ## Start Page Token Handling
 
@@ -140,7 +145,8 @@ So the token logic is:
 
 ## Resource-Cache Reconciliation
 
-The main policy lives in `update_resource_cache new_metadata old_metadata`.
+The main policy lives in `DriveMetadataRefresh`'s internal
+`update_resource_cache new_metadata old_metadata`.
 
 This function does not always fetch the full change list immediately. It first
 performs a cheap preflight check with `request_remaining_changes`.
@@ -341,7 +347,8 @@ those metadata fields into a synthetic `statvfs` record.
 
 ## Maintenance Notes
 
-When changing `get_metadata`, watch these invariants:
+When changing `DriveMetadataRefresh` or its production ports, watch these
+invariants:
 
 - metadata freshness and resource freshness are intentionally coupled
 - `update_all_timestamps` is required to keep unchanged resources reusable
@@ -359,9 +366,10 @@ When changing `get_metadata`, watch these invariants:
 
 ## Source Pointers
 
-- `src/drive.ml`: `get_metadata`
-- `src/drive.ml`: `request_metadata`
-- `src/drive.ml`: `update_resource_cache`
+- `src/driveMetadataRefresh.ml`: metadata freshness and change-feed replay
+  policy
+- `src/drive.ml`: `DriveMetadataRefreshPorts`
+- `src/drive.ml`: thin `get_metadata` wrapper
 - `src/cacheData.ml`: `CacheData.Metadata`
 - `src/cacheData.ml`: `CacheData.Metadata.is_valid`
 - `src/cache.ml`: metadata/resource cache dispatch

@@ -221,6 +221,7 @@ record.
 
 - `src/drive.ml`: `f_bsize`
 - `src/drive.ml`: `statfs`
-- `src/drive.ml`: `get_metadata`
+- `src/driveMetadataRefresh.ml`: `get_metadata` policy
+- `src/drive.ml`: thin `get_metadata` wrapper
 - `src/cacheData.ml`: `CacheData.Metadata`
 - `bin/gdfuseFuse.ml`: `statfs`

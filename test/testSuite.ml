@@ -15,6 +15,7 @@ let _ =
            TestDriveRemoteUpdates.suite;
            TestDriveUploadDispatch.suite;
            TestDriveFileMutations.suite;
+           TestDriveMetadataRefresh.suite;
            TestDriveMetadataMutations.suite;
            TestDriveOpens.suite;
            TestDriveReads.suite;
