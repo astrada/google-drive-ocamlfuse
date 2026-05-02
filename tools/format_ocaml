@@ -4,6 +4,7 @@ set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "$script_dir/.." && pwd)
+invocation_dir=$PWD
 
 if ! command -v ocamlformat >/dev/null 2>&1; then
   echo "ocamlformat is not installed or not in PATH" >&2
@@ -12,10 +13,33 @@ fi
 
 cd "$repo_root"
 
-mapfile -d '' files < <(git ls-files -z -- '*.ml' '*.mli')
+if [ "$#" -eq 0 ]; then
+  mapfile -d '' files < <(git ls-files -z -- '*.ml' '*.mli')
+else
+  files=()
+
+  for file in "$@"; do
+    case "$file" in
+      *.ml | *.mli)
+        if [ -f "$file" ]; then
+          files+=("$file")
+        elif [ -f "$invocation_dir/$file" ]; then
+          files+=("$invocation_dir/$file")
+        else
+          echo "OCaml source file not found: $file" >&2
+          exit 1
+        fi
+        ;;
+    esac
+  done
+fi
 
 if [ "${#files[@]}" -eq 0 ]; then
-  echo "No tracked .ml or .mli files found"
+  if [ "$#" -eq 0 ]; then
+    echo "No tracked .ml or .mli files found"
+  else
+    echo "No .ml or .mli files provided"
+  fi
   exit 0
 fi
 
