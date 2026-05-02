@@ -2,6 +2,6 @@
 
 Active plans:
 
-- [Extract Drive Download Resource](extract-drive-download-resource.md)
+- None
 
 The `archive/` folder contains archived plans.
