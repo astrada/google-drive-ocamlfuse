@@ -1,210 +1,217 @@
-# `Drive.upload`
+# Concrete Upload Attempt
 
 ## Purpose
 
-`Drive.upload` is the actual network-upload function in the content upload
+`DriveUploads` owns the concrete network-upload attempt in the content upload
 lifecycle.
 
-It is the helper that turns:
+It turns:
 
 - one resolved cached resource row
 - one on-disk cache file
 
-into a `FilesResource.update` request against Google Drive, then reconciles the
-returned metadata back into the local cache.
+into a Drive `FilesResource.update` request, then reconciles the returned
+metadata back into the local cache.
 
-So this is the point where the upload pipeline stops being about dispatch and
-retry policy and actually performs the remote file update.
-
-## Signature
+The public helper in `src/drive.ml` remains:
 
 ```ocaml
 val upload : CacheData.Resource.t -> unit GapiMonad.SessionM.m
 ```
 
-The input is already a resolved cached resource row.
+In production that helper builds a `DriveUploads.runtime` from `Context` and
+delegates to `UploadOps.upload`.
 
-This helper does not resolve a visible path and does not create its own retry
-loop. It assumes the caller has already reached the actual upload stage.
+## Boundary
 
-## Entire Implementation
+`DriveUploads` does not resolve visible paths, decide whether a resource is
+dirty, choose sync-vs-async dispatch, flush memory buffers, or retry failures.
 
-At a high level, the body does this:
+Those surrounding responsibilities live in:
+
+- `DriveUploadDispatch`
+- `Drive.upload_resource_with_retry`
+- `Drive.upload_resource_by_id`
+- `UploadQueue`
+
+`DriveUploads` owns one concrete upload attempt and the cache reconciliation
+that follows a successful Drive response.
+
+## Runtime And Ports
+
+The runtime is:
+
+```ocaml
+type runtime = {
+  cache : CacheData.t;
+  config : Config.t;
+}
+```
+
+Production wiring lives in `DriveUploadPorts` in `src/drive.ml`.
+
+Important ports include:
+
+- `get_content_path`
+- `create_file_resource`
+- `update_cached_resource_state_and_size`
+- `build_resource_keys_header_from_resource`
+- `remote_update`
+- `update_resource_from_file`
+- `select_first_resource_with_remote_id`
+- `update_cached_resource`
+- `shrink_cache`
+
+The production `remote_update` port is the only place in this boundary that
+mentions `FilesResource.update`, `file_std_params`, `with_retry_default`,
+`enforceSingleParent`, or `supportsAllDrives`.
+
+## High-Level Flow
+
+`DriveUploads.Make(P).upload runtime resource` does this:
 
 1. compute the cache-file path
 2. choose the outgoing MIME type
 3. create the media resource from the cache file
 4. update cached state and size to `Uploading`
 5. build the Drive metadata patch
-6. call `FilesResource.update`
-7. rebuild and save the cached row from the returned `File`
-8. run `shrink_cache ()`
-
-That is the whole purpose of the function.
+6. call the `remote_update` port
+7. rebuild from the returned `File`
+8. reload the current cache row by returned remote id
+9. conditionally return `Uploading` to `Synchronized`
+10. write the final cache row
+11. run `shrink_cache ()`
 
 ## Preconditions
 
-`upload` assumes a few things are already true.
+### Existing Remote Id
 
-### 1. The Resource Already Has A Remote Id
-
-It reads:
+The helper reads:
 
 ```ocaml
-let remote_id = resource |. CacheData.Resource.remote_id |> Option.get
+resource |. CacheData.Resource.remote_id |> Option.get
 ```
 
-So this helper is only for updating an existing remote file, not for initial
-remote object creation.
+So it updates an existing Drive object. It is not the creation path for new
+remote files.
 
-### 2. The Cache File Is The Upload Source
+### Cache File Source
 
-It reads:
+The source bytes come from:
 
 ```ocaml
-let content_path = Cache.get_content_path cache resource
+P.get_content_path runtime.cache resource
 ```
 
-So the source of truth for bytes at this stage is the local cache file on disk.
+`upload_resource_with_retry` flushes memory buffers before this helper runs so
+the on-disk cache file is current.
 
-The surrounding wrapper `upload_resource_with_retry` flushes memory buffers
-before this function runs so that the cache file is up to date.
+### Path Resolution Already Happened
 
-### 3. Path Resolution Already Happened Earlier
-
-This helper does not call `get_resource`.
-
-By the time execution reaches `upload`, the path-based and dispatch layers have
-already supplied the resource row that should be uploaded.
+This helper does not call `get_resource`. By the time execution reaches
+`DriveUploads`, the dispatch layer has already supplied the resource row to
+upload.
 
 ## MIME Type Selection
 
-The first real policy branch is content type selection.
+`DriveUploads.content_type_for_upload runtime resource content_path` preserves
+the current branch order.
 
 ### Editable Exported Google Documents
 
 If the resource is a Google document and `config.editable_docs = true`, the
-function ignores the ordinary MIME autodetection path and instead derives the
-outgoing MIME type from the configured export format for that document type:
-
-- `document_format`
-- `drawing_format`
-- `form_format`
-- `presentation_format`
-- `spreadsheet_format`
-- `map_format`
-- `fusion_table_format`
-- `apps_script_format`
-
-In outline, that branch is:
+helper derives the outgoing MIME type from the configured export format:
 
 ```ocaml
 let fmt = CacheData.Resource.get_format resource config in
 CacheData.Resource.mime_type_of_format fmt
 ```
 
-So writable Google-native resources are uploaded back using the MIME type of
-their exported representation rather than the original Drive-native MIME type.
-
-This branch is only safe for non-`desktop` document formats. The write-open
-path rejects desktop-formatted Google documents earlier through
+This branch does not create a preliminary media resource for MIME detection.
+The write-open path rejects desktop-formatted Google documents earlier through
 `is_file_read_only`.
 
 ### `autodetect_mime = true`
 
-Otherwise, if:
+If autodetection is enabled, the selected content type is:
 
 ```ocaml
-config.Config.autodetect_mime = true
+""
 ```
 
-then:
-
-```ocaml
-let content_type = ""
-```
-
-So Drive is allowed to infer the MIME type.
+The final media resource is still created with that explicit empty content
+type, preserving the existing Drive-inference behavior.
 
 ### `autodetect_mime = false`
 
-Otherwise, the function creates a file media resource and compares:
+Otherwise, the helper creates a preliminary file media resource and compares:
 
 - the cached resource MIME type
-- the MIME type inferred from the local file resource
+- the MIME type detected from the local file
 
-The rule is:
+It prefers the cached MIME type when it is non-empty, otherwise it uses the
+detected MIME type. This keeps uploads aligned with cached Drive metadata when
+possible.
 
-- if the cached resource MIME type is present and non-empty, prefer it
-- otherwise use the file helper's detected content type
+## Media Source
 
-This is the implementation's MIME-type workaround for keeping uploads aligned
-with the cached resource metadata when possible.
-
-## Media Resource Creation
-
-After choosing the content type, the function builds:
+After choosing the content type, the helper builds the actual upload source:
 
 ```ocaml
 let file_source =
-  GapiMediaResource.create_file_resource ~content_type content_path
+  P.create_file_resource ~content_type content_path
 ```
 
-and then reads:
+The upload size comes from:
 
 ```ocaml
-let size = file_source.GapiMediaResource.content_length
+P.media_content_length file_source
 ```
 
-So the upload size is determined from the local cache file, not from the cached
-`resource.size` field.
+That size is authoritative for the upload attempt, even if
+`resource.CacheData.Resource.size` says something else.
 
-## Early Cache Update: State And Size
+## Early Cache Update
 
-Before the network request is sent, the function does:
+Before the network request, the helper calls:
 
 ```ocaml
-update_cached_resource_state_and_size cache CacheData.Resource.State.Uploading
-  size resource.CacheData.Resource.id
+P.update_cached_resource_state_and_size runtime.cache
+  CacheData.Resource.State.Uploading
+  size
+  resource.CacheData.Resource.id
 ```
 
-So entering the real upload function has two immediate local consequences:
-
-- state becomes `Uploading`
-- cached size is updated to the actual media-source length
-
-This means the cache row is moved into its in-progress upload state before the
-Drive request completes.
+So each concrete upload attempt moves the cached row into `Uploading` and
+updates cached size to the actual media-source length before Drive responds.
 
 ## Zero-Byte Uploads
 
-The function then chooses:
+The media body is selected as:
 
 ```ocaml
 let media_source =
-  if file_source.GapiMediaResource.content_length = 0L then None
-  else Some file_source
+  if size = 0L then None else Some file_source
 ```
 
-So zero-byte uploads are handled as:
-
-- metadata patch only
-- no media body
-
-This lets empty files still update remote metadata such as modified time
-without sending a file payload.
+Zero-byte uploads still patch metadata such as `modifiedTime`, but omit the
+media body.
 
 ## Request Shape
 
-The Drive patch is:
+The metadata patch is:
 
 ```ocaml
-let file_patch = File.empty |> File.modifiedTime ^= GapiDate.now ()
+File.empty |> File.modifiedTime ^= P.now ()
 ```
 
-So the only explicit metadata field forced here is `modifiedTime`.
+Headers come from:
 
-The request itself is:
+```ocaml
+P.build_resource_keys_header_from_resource resource
+```
+
+The production request is:
 
 ```ocaml
 FilesResource.update
@@ -217,147 +224,90 @@ FilesResource.update
   file_patch
 ```
 
-Two details matter:
+## Reconciliation
 
-- `custom_headers` comes from `build_resource_keys_header_from_resource`
-- `media_source` is omitted entirely for zero-byte uploads
-
-## Immediate Post-Request Rebuild
-
-After `FilesResource.update` returns, the function first does:
+After `remote_update` returns a Drive `File`, the helper first rebuilds the
+input resource from the response:
 
 ```ocaml
-let resource = update_resource_from_file resource file
+let resource = P.update_resource_from_file resource file
 ```
 
-So the returned `File` is immediately treated as the new remote truth for the
-resource row.
-
-It then logs the successful upload using the returned MIME type.
-
-## Why It Reloads By Remote Id
-
-After that immediate rebuild, the function still does an extra cache lookup:
+It then reloads by returned remote id:
 
 ```ocaml
 let reloaded_resource =
-  Cache.Resource.select_first_resource_with_remote_id cache file.File.id
-```
-
-and then:
-
-```ocaml
+  P.select_first_resource_with_remote_id runtime.cache file.File.id
+in
 let resource = Option.default resource reloaded_resource
 ```
 
-This is a subtle but important step.
-
-It means the final cache write is based on:
-
-- the freshly rebuilt resource row from the response, unless
-- some newer cache row for the same remote id is already present
-
-So the function gives the cache one chance to preserve more recent local state
-that may have been written while the network request was in flight.
+That gives the cache one chance to preserve a newer local row for the same
+remote object.
 
 ## Conditional Return To `Synchronized`
 
-The next step is:
+The state transition is deliberately conditional:
 
 ```ocaml
-let state =
-  match resource.CacheData.Resource.state with
-  | CacheData.Resource.State.Uploading ->
-      Some CacheData.Resource.State.Synchronized
-  | _ -> None
+match resource.CacheData.Resource.state with
+| CacheData.Resource.State.Uploading ->
+    Some CacheData.Resource.State.Synchronized
+| _ -> None
 ```
 
-Then:
+Then the final row is rebuilt and saved:
 
 ```ocaml
-let updated_resource = update_resource_from_file ?state resource file in
-update_cached_resource cache updated_resource
+let updated_resource = P.update_resource_from_file ?state resource file in
+P.update_cached_resource runtime.cache updated_resource
 ```
 
-This is one of the most important correctness guards in the function.
+This means:
 
-It means:
+- if the current row is still `Uploading`, the upload completion marks it
+  `Synchronized`
+- if a newer local state such as `ToUpload` is present, that state is preserved
 
-- if the most recent row for this remote id is still `Uploading`, the function
-  marks it back to `Synchronized`
-- otherwise it preserves whatever newer state already exists
-
-So a later local change is not blindly overwritten by a stale "upload
-completed" conclusion.
+This guard prevents a stale upload completion from overwriting a later local
+change.
 
 ## Final Cache Accounting
 
-At the end, the function calls:
+After the final cache row is saved, the helper calls:
 
 ```ocaml
-shrink_cache ()
+P.shrink_cache ()
 ```
 
-This is the normal post-upload cache-maintenance step after the cache row has
-been reconciled.
-
-The helper then returns:
-
-```ocaml
-SessionM.return ()
-```
-
-## Relationship To `upload_resource_with_retry`
-
-`upload` does not flush memory buffers or retry failures itself.
-
-Those concerns live one layer up in:
-
-- `upload_resource_with_retry`
-
-So the split is:
-
-- `upload_resource_with_retry`: flush + normalize errors + retry temporary failures
-- `upload`: perform one concrete upload attempt and reconcile the result
-
-See `docs/agent-docs/drive-upload-resource-with-retry.md` for that wrapper.
-
-## Relationship To `queue_upload`
-
-`queue_upload` decides whether this helper is reached:
-
-- immediately in synchronous mode
-- later through the async worker path
-
-But once execution enters `upload`, those earlier dispatch differences no
-longer matter. The actual request and reconciliation logic is shared.
-
-See `docs/agent-docs/drive-queue-upload.md` for the dispatch side.
+`shrink_cache` runs only after the final cache update succeeds.
 
 ## Error Surface
 
-`upload` has no local exception handling of its own.
+`DriveUploads.upload` has no local exception handling of its own.
 
 Possible failures come from:
 
-- media-source creation
-- `FilesResource.update`
+- content-path or media-source creation
+- the `remote_update` port
 - cache update helpers
 
-The surrounding wrapper layers decide which of those failures are retried or
-translated.
+Failure normalization and retry live in `Drive.upload_resource_with_retry`.
 
-## What `Drive.upload` Does Not Do
+## Test Coverage
 
-`Drive.upload` does not:
+`test/testDriveUploads.ml` covers the concrete upload attempt with fake ports:
 
-- resolve a visible path
-- decide whether upload should start
-- flush memory buffers itself
-- retry failures itself
-- choose sync vs async dispatch itself
-
-It only performs one upload attempt and reconciles the returned metadata.
+- MIME selection for editable documents, autodetect mode, cached MIME, and
+  detected MIME fallback
+- final media-source construction and zero-byte media omission
+- early `Uploading` state/size update
+- request headers, remote id, and modified-time patch wiring
+- reload-by-returned-remote-id behavior
+- conditional `Uploading -> Synchronized` transition
+- preservation of reloaded `ToUpload` state
+- final cache update before shrink
+- failure ordering for media creation, remote update, and final cache update
 
 ## Related Docs
 
@@ -368,8 +318,7 @@ It only performs one upload attempt and reconciles the returned metadata.
 
 ## Source Pointers
 
-- `src/drive.ml`: `upload`
-- `src/drive.ml`: `update_cached_resource_state_and_size`
-- `src/drive.ml`: `update_resource_from_file`
-- `src/drive.ml`: `update_cached_resource`
-- `src/drive.ml`: `build_resource_keys_header_from_resource`
+- `src/driveUploads.ml`: concrete upload attempt
+- `src/drive.ml`: `DriveUploadPorts`, `UploadOps`, and `upload`
+- `src/drive.ml`: `upload_resource_with_retry`
+- `test/testDriveUploads.ml`

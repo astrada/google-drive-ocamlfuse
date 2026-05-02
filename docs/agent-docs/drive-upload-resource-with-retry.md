@@ -92,7 +92,8 @@ The actual network operation is delegated to:
 upload r
 ```
 
-That deeper helper owns:
+In production, `Drive.upload` is a thin wrapper around `DriveUploads`. That
+deeper boundary owns:
 
 - MIME/media selection
 - `FilesResource.update`
@@ -176,7 +177,8 @@ Upstream:
 
 Downstream:
 
-- `upload` performs the actual `FilesResource.update`
+- `Drive.upload` delegates to `DriveUploads`, which performs the actual
+  `FilesResource.update`
 
 Once execution enters `upload_resource_with_retry`, the direct path and the
 async worker path share the same flush, normalization, and retry behavior.
@@ -204,6 +206,7 @@ It only wraps one upload attempt with the shared flush and retry policy.
 
 - `src/drive.ml`: `upload_resource_with_retry`
 - `src/drive.ml`: `upload`
+- `src/driveUploads.ml`: concrete upload attempt
 - `src/drive.ml`: `with_retry`
 - `src/drive.ml`: `try_with_default`
 - `src/drive.ml`: `upload_resource_by_id`

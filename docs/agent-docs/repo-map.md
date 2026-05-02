@@ -100,6 +100,8 @@ The `Makefile` is only a small wrapper around these dune commands.
     through `DriveMetadataMutationPorts`.
   - `flush`, `fsync`, `release`, and rename-replace upload handoff delegate
     into `DriveUploadDispatch` through `DriveUploadDispatchPorts`.
+  - The concrete upload attempt delegates into `DriveUploads` through
+    `DriveUploadPorts`.
   - `get_xattr`, `set_xattr`, `list_xattr`, and `remove_xattr` delegate into
     `DriveXattrs` through `DriveXattrPorts`.
   - If a user-visible filesystem operation changes behavior, the fix is
@@ -174,6 +176,16 @@ The `Makefile` is only a small wrapper around these dune commands.
   - Upload-dispatch core for dirty-state gating and sync-vs-async handoff.
   - Owns the `ToUpload -> Uploading` gate, path re-resolution before dispatch,
     and the branch between direct upload and async enqueueing.
+
+- `src/driveUploads.ml`
+  - Concrete upload-attempt core for existing remote resources.
+  - Owns outgoing MIME/media selection, upload size detection, early
+    `Uploading` state/size updates, zero-byte media omission,
+    `FilesResource.update` request shape, reload-by-remote-id reconciliation,
+    conditional `Uploading -> Synchronized` transition, and final cache shrink.
+  - Functorized over a narrow boundary so upload-attempt behavior can be unit
+    tested without real `Context`, Drive API requests, cache files, or
+    filesystem checks.
 
 - `src/driveXattrs.ml`
   - Extended-attribute core.
@@ -277,6 +289,7 @@ Current tests are in:
 - `test/testDriveDirectoryReads.ml`
 - `test/testDriveDownloads.ml`
 - `test/testDriveRemoteUpdates.ml`
+- `test/testDriveUploads.ml`
 - `test/testDriveOpens.ml`
 - `test/testDriveReads.ml`
 - `test/testDriveFileMutations.ml`
@@ -306,11 +319,13 @@ There are no end-to-end tests for:
 - rename/delete semantics against live Drive state
 
 The mutation, open-validation, read-side, download/materialization,
-remote-update-wrapper, file-mutation, metadata-mutation, upload-dispatch, and
-xattr cores are covered by focused unit tests in `test/testDriveMutations.ml`,
+remote-update-wrapper, file-mutation, metadata-mutation, upload-dispatch,
+upload-attempt, and xattr cores are covered by focused unit tests in
+`test/testDriveMutations.ml`,
 `test/testDriveOpens.ml`, `test/testDriveViews.ml`,
 `test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
-`test/testDriveRemoteUpdates.ml`, `test/testDriveReads.ml`,
+`test/testDriveRemoteUpdates.ml`, `test/testDriveUploads.ml`,
+`test/testDriveReads.ml`,
 `test/testDriveFileMutations.ml`, `test/testDriveMetadataMutations.ml`,
 `test/testDriveUploadDispatch.ml`, and `test/testDriveXattrs.ml`, but live
 Drive and FUSE integration need manual validation for behavior changes in those

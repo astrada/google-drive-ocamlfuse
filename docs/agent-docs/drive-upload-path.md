@@ -189,7 +189,7 @@ Once execution reaches `upload_resource_with_retry`, the synchronous path and
 the async worker path share the same downstream behavior:
 
 1. flush memory buffers to disk
-2. run `upload`
+2. run `Drive.upload`, which delegates to `DriveUploads`
 3. normalize request failures through `try_with_default`
 4. retry only `Utils.Temporary_error` through `with_retry`
 
@@ -197,7 +197,8 @@ See `docs/agent-docs/drive-upload-resource-with-retry.md` for that wrapper.
 
 ### 7. Concrete Network Upload
 
-`Drive.upload` is the actual remote update attempt.
+`DriveUploads` is the actual remote update attempt. `Drive.upload` is the
+Drive-level helper that builds the production runtime and delegates to it.
 
 At a high level it:
 
@@ -300,4 +301,5 @@ When changing this area, watch these invariants:
 - `src/drive.ml`: `upload_resource_by_id`
 - `src/drive.ml`: `upload_resource_with_retry`
 - `src/drive.ml`: `upload`
+- `src/driveUploads.ml`: concrete upload attempt
 - `src/uploadQueue.ml`: async queue polling and worker dispatch

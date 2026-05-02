@@ -13,7 +13,8 @@ The executable mounts a FUSE filesystem whose operations are implemented in
 The mutation-heavy create/delete/rename paths, the metadata remote-update
 wrapper, the open-validation paths, the read-side view/listing paths, the
 content-read paths, the local file-mutation paths, the metadata-mutation paths,
-the upload-dispatch paths, and the xattr paths are separated:
+the upload-dispatch paths, the concrete upload-attempt path, and the xattr
+paths are separated:
 
 - `Drive` is the public FUSE-facing module
 - `src/driveMutations.ml` holds the mutation core for create/delete/rename
@@ -36,14 +37,18 @@ the upload-dispatch paths, and the xattr paths are separated:
   `utime`, `chmod`, and `chown`
 - `src/driveUploadDispatch.ml` holds the upload-dispatch core for
   `start_uploading_if_dirty`, `upload_with_retry`, and `queue_upload`
+- `src/driveUploads.ml` holds the concrete upload-attempt core for MIME/media
+  selection, `FilesResource.update` request shape, and post-upload cache
+  reconciliation
 - `src/driveXattrs.ml` holds the extended-attribute core for xattr reads,
   validation, and Drive app-property patches
 - `src/drive.ml` provides the production `DriveMutationPorts`,
   `DriveOpenPorts`, `DriveViewPorts`, `DriveDirectoryReadPorts`,
   `DriveReadPorts`, `DriveDownloadPorts`, `DriveRemoteUpdatePorts`,
   `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,
-  `DriveUploadDispatchPorts`, and `DriveXattrPorts`, builds the small runtimes
-  from `Context`, and executes those sessions through `Oauth2.do_request`
+  `DriveUploadDispatchPorts`, `DriveUploadPorts`, and `DriveXattrPorts`,
+  builds the small runtimes from `Context`, and executes those sessions through
+  `Oauth2.do_request`
 
 The design is stateful. A global `Context.t` stores the current config, state,
 cache handle, memory buffers, locks, and background threads.
@@ -333,9 +338,10 @@ that ensures the local cache file exists before write-side mutation begins.
 
 ## Upload Path
 
-Upload-dispatch logic lives in `DriveUploadDispatch`. Concrete upload execution
-lives in `Drive.upload`, `Drive.upload_resource_with_retry`,
-`Drive.upload_resource_by_id`, and `UploadQueue`.
+Upload-dispatch logic lives in `DriveUploadDispatch`. The concrete upload
+attempt lives in `DriveUploads`, with `Drive.upload_resource_with_retry`,
+`Drive.upload_resource_by_id`, and `UploadQueue` providing surrounding flush,
+retry, and async-worker behavior.
 
 The file-level entrypoints that trigger this path are `Drive.flush`,
 `Drive.fsync`, and `Drive.release`; see

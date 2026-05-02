@@ -156,7 +156,7 @@ same downstream behavior as the synchronous upload path:
 - flush buffered writes to disk
 - normalize request failures
 - retry temporary failures
-- delegate the actual media update to `upload`
+- delegate the actual media update through `Drive.upload` into `DriveUploads`
 
 See `docs/agent-docs/drive-upload-resource-with-retry.md` for that common
 wrapper.
@@ -199,6 +199,7 @@ That is the id stored in the upload queue and the one resolved through
 - choose sync vs async mode
 - manipulate upload-queue entry state directly
 - build the `FilesResource.update` request
+- reconcile the returned Drive metadata itself
 
 It only reloads the queued resource row and runs the normal upload wrapper for
 it.
@@ -214,6 +215,7 @@ it.
 ## Source Pointers
 
 - `src/drive.ml`: `upload_resource_by_id`
+- `src/driveUploads.ml`: concrete upload attempt reached downstream
 - `src/drive.ml`: `init_filesystem`
 - `src/uploadQueue.ml`: `upload_resource`
 - `src/uploadQueue.ml`: `start_async_upload_thread`

@@ -1922,70 +1922,46 @@ let write path buf offset file_descr =
 
 (* END write *)
 
-let upload resource =
+module DriveUploadPorts = struct
+  let get_content_path = Cache.get_content_path
+  let create_file_resource = GapiMediaResource.create_file_resource
+  let media_content_type media = media |. GapiMediaResource.content_type
+  let media_content_length media = media.GapiMediaResource.content_length
+
+  let update_cached_resource_state_and_size =
+    update_cached_resource_state_and_size
+
+  let build_resource_keys_header_from_resource =
+    build_resource_keys_header_from_resource
+
+  let now = GapiDate.now
+
+  let remote_update ~media_source ~custom_headers ~fileId file_patch =
+    with_retry_default
+      (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
+         ~std_params:file_std_params ?media_source ~custom_headers ~fileId
+         file_patch)
+
+  let update_resource_from_file ?state resource file =
+    update_resource_from_file ?state resource file
+
+  let select_first_resource_with_remote_id =
+    Cache.Resource.select_first_resource_with_remote_id
+
+  let update_cached_resource = update_cached_resource
+  let shrink_cache () = shrink_cache ()
+end
+
+module UploadOps = DriveUploads.Make (DriveUploadPorts)
+
+let drive_upload_runtime () =
   let context = Context.get_ctx () in
-  let cache = context.Context.cache in
-  let content_path = Cache.get_content_path cache resource in
-  let config = context |. Context.config_lens in
-  let content_type =
-    if CacheData.Resource.is_document resource && config.Config.editable_docs
-    then
-      let fmt = CacheData.Resource.get_format resource config in
-      CacheData.Resource.mime_type_of_format fmt
-    else if config.Config.autodetect_mime then ""
-    else
-      let file_source = GapiMediaResource.create_file_resource content_path in
-      let resource_mime_type =
-        resource |. CacheData.Resource.mime_type |> Option.get
-      in
-      let content_type = file_source |. GapiMediaResource.content_type in
-      (* Workaround to set the correct MIME type *)
-      if resource_mime_type <> "" then resource_mime_type else content_type
-  in
-  let file_source =
-    GapiMediaResource.create_file_resource ~content_type content_path
-  in
-  let size = file_source.GapiMediaResource.content_length in
-  update_cached_resource_state_and_size cache CacheData.Resource.State.Uploading
-    size resource.CacheData.Resource.id;
-  let remote_id = resource |. CacheData.Resource.remote_id |> Option.get in
-  let media_source =
-    if file_source.GapiMediaResource.content_length = 0L then None
-    else Some file_source
-  in
-  Utils.log_with_header
-    "BEGIN: Uploading file (id=%Ld, path=%s, cache path=%s, content type=%s, \
-     content_length=%Ld).\n\
-     %!"
-    resource.CacheData.Resource.id resource.CacheData.Resource.path content_path
-    (if content_type = "" then "autodetect" else content_type)
-    size;
-  let file_patch = File.empty |> File.modifiedTime ^= GapiDate.now () in
-  let custom_headers = build_resource_keys_header_from_resource resource in
-  with_retry_default
-    (FilesResource.update ~enforceSingleParent:true ~supportsAllDrives:true
-       ~std_params:file_std_params ?media_source ~custom_headers
-       ~fileId:remote_id file_patch)
-  >>= fun file ->
-  let resource = update_resource_from_file resource file in
-  Utils.log_with_header
-    "END: Uploading file (id=%Ld, path=%s, cache path=%s, content type=%s).\n%!"
-    resource.CacheData.Resource.id resource.CacheData.Resource.path content_path
-    file.File.mimeType;
-  let reloaded_resource =
-    Cache.Resource.select_first_resource_with_remote_id cache file.File.id
-  in
-  let resource = Option.default resource reloaded_resource in
-  let state =
-    match resource.CacheData.Resource.state with
-    | CacheData.Resource.State.Uploading ->
-        Some CacheData.Resource.State.Synchronized
-    | _ -> None
-  in
-  let updated_resource = update_resource_from_file ?state resource file in
-  update_cached_resource cache updated_resource;
-  shrink_cache ();
-  SessionM.return ()
+  {
+    DriveUploads.cache = context.Context.cache;
+    config = context |. Context.config_lens;
+  }
+
+let upload resource = UploadOps.upload (drive_upload_runtime ()) resource
 
 let upload_resource_with_retry resource =
   flush_memory_buffers resource;
