@@ -102,6 +102,9 @@ enough to use. For well-known roots, `get_resource` synthesizes cache entries:
 - `lost+found`
 - `.shared`
 
+Configured root-folder ids and those synthetic rows are handled by
+`DriveRootResolution`.
+
 See `docs/agent-docs/drive-get-resource.md` for the full path-resolution
 contract.
 

@@ -23,6 +23,9 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
 - `src/driveResourceById.ml` holds remote-id resource lookup for shortcut
   target reconstruction, including cache-first lookup, root-id handling,
   parent-chain path reconstruction, and shared-with-me path prefixing
+- `src/driveRootResolution.ml` holds configured root-folder id resolution and
+  synthetic well-known resource rows for root, trash root, lost+found, and
+  shared-with-me
 - `src/driveMetadataRefresh.ml` holds the metadata freshness gate and Drive
   change-feed replay policy for `get_metadata`
 - `src/driveMutations.ml` holds the mutation core for create/delete/rename
@@ -57,7 +60,8 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   cache-resource mapping
 - `src/drive.ml` provides the production `DriveMutationPorts`,
   `DriveResourceByIdPorts`, `DriveResourceResolverPorts`,
-  `DriveMetadataRefreshPorts`, `DriveCacheMaintenancePorts`,
+  `DriveRootResolutionPorts`, `DriveMetadataRefreshPorts`,
+  `DriveCacheMaintenancePorts`,
   `DriveOpenPorts`, `DriveViewPorts`, `DriveDirectoryReadPorts`,
   `DriveReadPorts`, `DriveDownloadPorts`, `DriveRemoteUpdatePorts`,
   `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,

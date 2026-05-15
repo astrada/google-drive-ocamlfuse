@@ -47,6 +47,9 @@
 - `drive-cache-maintenance-extraction/plan.md`: archived completed plan for
   extracting `DriveCacheMaintenance` and making cache-size accounting, cache
   shrink, cached-file deletion, and resource cleanup unit testable.
+- `drive-root-resolution-extraction/plan.md`: archived completed plan for
+  extracting `DriveRootResolution` and making configured root-folder ids and
+  synthetic well-known resource rows unit testable.
 - `gdfuse-cli-error-handling/plan.md`: archived completed plan for restoring
   clean CLI handling for `-version`, `-help`, `--help`, and invalid options,
   and for expanding CLI behavior test coverage.

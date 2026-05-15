@@ -88,6 +88,9 @@ The `Makefile` is only a small wrapper around these dune commands.
     into `DriveResourceResolver` through `DriveResourceResolverPorts`.
   - Remote-id resource lookup for shortcut targets delegates into
     `DriveResourceById` through `DriveResourceByIdPorts`.
+  - Configured root-folder id resolution and synthetic well-known resource
+    creation delegate into `DriveRootResolution` through
+    `DriveRootResolutionPorts`.
   - `get_metadata` delegates into `DriveMetadataRefresh` through
     `DriveMetadataRefreshPorts`.
   - Create/delete/rename enter through public `Drive` functions here, and
@@ -136,6 +139,14 @@ The `Makefile` is only a small wrapper around these dune commands.
     Drive-file mapping to a cache resource.
   - Functorized over a narrow boundary so remote-id lookup behavior can be unit
     tested without real `Context`, cache files, OAuth, or Drive API requests.
+
+- `src/driveRootResolution.ml`
+  - Configured root-folder and well-known resource core.
+  - Owns device-scope root discovery/creation, team-drive and configured
+    root-folder resolution, context root-id memoization, and synthetic rows for
+    root, trash root, lost+found, and shared-with-me.
+  - Functorized over a narrow boundary so root behavior can be unit tested
+    without real `Context`, cache files, OAuth, or Drive API requests.
 
 - `src/driveMetadataRefresh.ml`
   - Metadata freshness and Drive change-feed replay core for `get_metadata`.
@@ -338,6 +349,7 @@ Current tests are in:
 - `test/testDriveDownloads.ml`
 - `test/testDriveCacheMaintenance.ml`
 - `test/testDriveResourceById.ml`
+- `test/testDriveRootResolution.ml`
 - `test/testDriveRemoteUpdates.ml`
 - `test/testDriveUploads.ml`
 - `test/testDriveOpens.ml`
@@ -369,14 +381,14 @@ There are no end-to-end tests for:
 - rename/delete semantics against live Drive state
 
 The mutation, open-validation, read-side, download/materialization,
-cache-maintenance, remote-id lookup, remote-update-wrapper, file-mutation,
-metadata-mutation, upload-dispatch, upload-attempt, and xattr cores are covered
-by focused unit tests in
+cache-maintenance, remote-id lookup, root-resolution, remote-update-wrapper,
+file-mutation, metadata-mutation, upload-dispatch, upload-attempt, and xattr
+cores are covered by focused unit tests in
 `test/testDriveMutations.ml`,
 `test/testDriveOpens.ml`, `test/testDriveViews.ml`,
 `test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
 `test/testDriveCacheMaintenance.ml`,
-`test/testDriveResourceById.ml`,
+`test/testDriveResourceById.ml`, `test/testDriveRootResolution.ml`,
 `test/testDriveRemoteUpdates.ml`, `test/testDriveUploads.ml`,
 `test/testDriveReads.ml`,
 `test/testDriveFileMutations.ml`, `test/testDriveMetadataMutations.ml`,

@@ -149,6 +149,9 @@ That reuse is deliberate. Prefetching is not a separate folder-sync code path;
 it simply drives the same public `Drive.read_dir` path that a foreground
 `readdir` request would use. That public wrapper delegates the main
 directory-refresh logic into `DriveDirectoryReads`.
+If prefetch reaches the root or a well-known synthetic view, configured root id
+resolution and synthetic rows are handled by `DriveRootResolution` through the
+normal `Drive.read_dir` path.
 
 The folder-fetch loop repeatedly:
 

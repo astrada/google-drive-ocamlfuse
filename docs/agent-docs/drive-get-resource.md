@@ -106,8 +106,8 @@ Before ordinary cache lookup, `get_resource` special-cases:
 - `"/.shared"`
 
 Those are handled through the `get_well_known_resource` port. In production,
-that port delegates to the `get_well_known_resource` helper in `src/drive.ml`,
-which inserts a synthetic cache row on first access and reuses it afterwards.
+that port delegates through `DriveRootResolution`, which inserts a synthetic
+cache row on first access and reuses it afterwards.
 
 Important details:
 
@@ -354,13 +354,15 @@ invariants:
 - `src/driveResourceResolver.ml`: path-resolution policy
 - `src/driveResourceById.ml`: remote-id lookup used by shortcut target
   reconstruction
+- `src/driveRootResolution.ml`: configured root-folder ids and synthetic
+  well-known resources
 - `src/drive.ml`: `DriveResourceResolverPorts`
 - `src/drive.ml`: `DriveResourceByIdPorts`
+- `src/drive.ml`: `DriveRootResolutionPorts`
 - `src/drive.ml`: thin `get_resource`, `get_folder_id`, and
   `check_resource_in_cache` wrappers
 - `src/drive.ml`: `get_file_from_server`
 - `src/driveResourceMapping.ml`: resource construction and Drive-file mapping
 - `src/driveMetadataRefresh.ml`: `get_metadata` policy
 - `src/drive.ml`: thin `get_metadata` wrapper
-- `src/drive.ml`: `get_well_known_resource`
 - `src/cacheData.ml`: `CacheData.Resource.is_valid`
