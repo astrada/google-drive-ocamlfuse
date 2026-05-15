@@ -6,26 +6,6 @@ plans into `docs/plans/archive/`.
 
 ## Candidates
 
-### Resource Lookup By Remote Id
-
-Extract the `get_resource_with_id` path and remote-id path reconstruction logic.
-
-Likely scope:
-
-- `get_resource_with_id`
-- `get_resource_with_id_from_server`
-- remote parent traversal
-- shared-with-me path reconstruction
-- root-id special case
-
-Why it helps:
-
-- compact extraction target
-- covers symlink/shortcut target resolution dependencies
-- isolates Drive API traversal from read-side view code
-
-Suggested module: `DriveResourceById`.
-
 ### Root And Well-Known Resource Resolution
 
 Extract root-folder and synthetic resource handling.
@@ -72,7 +52,5 @@ Suggested module: `DriveCacheMaintenance`.
 
 ## Priority Notes
 
-- Prefer `DriveResourceById` next if shortcut/read-link behavior is the area of
-  concern.
 - Save `DriveCacheMaintenance` for a larger pass because it touches cache files,
   memory buffers, locks, and metadata accounting.

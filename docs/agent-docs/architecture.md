@@ -20,6 +20,9 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
 - `src/driveResourceResolver.ml` holds the path-to-resource resolver for
   `get_resource`, `get_folder_id`, cache validity checks, negative-cache
   insertion, recursive parent lookup, and stale remote-id refresh
+- `src/driveResourceById.ml` holds remote-id resource lookup for shortcut
+  target reconstruction, including cache-first lookup, root-id handling,
+  parent-chain path reconstruction, and shared-with-me path prefixing
 - `src/driveMetadataRefresh.ml` holds the metadata freshness gate and Drive
   change-feed replay policy for `get_metadata`
 - `src/driveMutations.ml` holds the mutation core for create/delete/rename
@@ -51,7 +54,8 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   disambiguation, cache resource construction, and Drive `File` to
   cache-resource mapping
 - `src/drive.ml` provides the production `DriveMutationPorts`,
-  `DriveResourceResolverPorts`, `DriveMetadataRefreshPorts`,
+  `DriveResourceByIdPorts`, `DriveResourceResolverPorts`,
+  `DriveMetadataRefreshPorts`,
   `DriveOpenPorts`, `DriveViewPorts`, `DriveDirectoryReadPorts`,
   `DriveReadPorts`, `DriveDownloadPorts`, `DriveRemoteUpdatePorts`,
   `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,
@@ -251,7 +255,8 @@ Regular file and folder creation requests enter through `Drive.mknod` /
 See `docs/agent-docs/drive-mknod-mkdir.md`.
 
 Symlink-target reads live in the thin `Drive.read_link` wrapper over
-`DriveViews`; see
+`DriveViews`. Shortcut target lookup by remote id goes through
+`DriveResourceById`; see
 `docs/agent-docs/drive-read-link.md`.
 
 Symlink creation requests enter through `Drive.symlink`; see

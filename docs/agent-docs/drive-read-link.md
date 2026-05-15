@@ -126,6 +126,10 @@ That means the target may come from:
 - the local cache, if already known by remote id
 - the server, if it is not currently cached
 
+The cache-first lookup and server-side path reconstruction live in
+`DriveResourceById`, reached through the `Drive.get_resource_with_id` wrapper
+that `DriveViews` receives in its ports.
+
 So `readlink` on a shortcut can trigger extra metadata lookups for the target
 resource even though it does not touch file content.
 
@@ -262,6 +266,9 @@ contexts.
 
 - `src/drive.ml`: `read_link`
 - `src/drive.ml`: `DriveViewPorts`
+- `src/drive.ml`: `DriveResourceByIdPorts`
 - `src/driveViews.ml`: `read_link`
 - `src/driveViews.ml`: `fetch_link_target`
+- `src/driveResourceById.ml`: remote-id lookup and path reconstruction
+- `test/testDriveResourceById.ml`
 - `test/testDriveViews.ml`

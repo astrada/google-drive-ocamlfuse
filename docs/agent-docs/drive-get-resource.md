@@ -344,11 +344,15 @@ invariants:
 
 - `docs/agent-docs/drive-read-dir.md`
 - `docs/agent-docs/drive-init-filesystem.md`
+- `docs/agent-docs/drive-read-link.md`
 
 ## Source Pointers
 
 - `src/driveResourceResolver.ml`: path-resolution policy
+- `src/driveResourceById.ml`: remote-id lookup used by shortcut target
+  reconstruction
 - `src/drive.ml`: `DriveResourceResolverPorts`
+- `src/drive.ml`: `DriveResourceByIdPorts`
 - `src/drive.ml`: thin `get_resource`, `get_folder_id`, and
   `check_resource_in_cache` wrappers
 - `src/drive.ml`: `get_file_from_server`

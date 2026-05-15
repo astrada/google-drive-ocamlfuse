@@ -41,6 +41,9 @@
 - `drive-resource-mapping-extraction/plan.md`: archived completed plan for
   extracting `DriveResourceMapping` and making Drive-file-to-resource mapping
   and filename/path rules unit testable.
+- `drive-resource-by-id-extraction/plan.md`: archived completed plan for
+  extracting `DriveResourceById` and making remote-id lookup and shortcut
+  target path reconstruction unit testable.
 - `gdfuse-cli-error-handling/plan.md`: archived completed plan for restoring
   clean CLI handling for `-version`, `-help`, `--help`, and invalid options,
   and for expanding CLI behavior test coverage.

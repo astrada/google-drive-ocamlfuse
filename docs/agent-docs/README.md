@@ -47,7 +47,7 @@ Read these files in order:
 40. `gdfuse-noop-dir-callbacks.md` for the adapter-level `releasedir` / `fsyncdir` no-op hooks
 41. `drive-statfs.md` for filesystem-wide quota reporting and synthetic `statvfs` fields
 42. `drive-get-attr.md` for stat synthesis, virtual roots, and visible metadata policy in the read-side view core
-43. `drive-read-link.md` for symlink/shortcut target resolution and cache fill in the read-side view core
+43. `drive-read-link.md` for symlink/shortcut target resolution, remote-id lookup through `DriveResourceById`, and cache fill in the read-side view core
 44. `drive-mknod-mkdir.md` for the thin file/folder creation entrypoints over `create_remote_resource`
 45. `drive-symlink.md` for the FUSE symlink entrypoint and create-link delegation
 46. `drive-xattr.md` for `DriveXattrs` extended-attribute storage, reads, and mutations

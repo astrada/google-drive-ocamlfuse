@@ -767,10 +767,22 @@ let statfs () =
 (* END Metadata *)
 
 (* Resources *)
-let get_resource_with_id_from_server remote_id =
-  let root_folder_id = get_root_folder_id_from_context () in
+module DriveResourceByIdPorts = struct
+  let root_directory = root_directory
+  let shared_with_me_directory = shared_with_me_directory
+  let get_root_folder_id = get_root_folder_id_from_context
+  let get_well_known_resource = get_well_known_resource
 
-  let get_file rid =
+  let select_first_resource_with_remote_id cache remote_id =
+    Cache.Resource.select_first_resource_with_remote_id cache remote_id
+
+  let clean_filename = clean_filename
+  let create_resource = create_resource
+
+  let update_resource_from_file resource file =
+    update_resource_from_file resource file
+
+  let get_file_by_remote_id rid =
     Utils.log_with_header "BEGIN: Getting file from server (remote id=%s)\n%!"
       rid;
     with_retry_default
@@ -779,44 +791,15 @@ let get_resource_with_id_from_server remote_id =
     >>= fun file ->
     Utils.log_with_header "END: Getting file from server (remote id=%s)\n%!" rid;
     SessionM.return file
-  in
+end
 
-  let rec get_full_path file path_parts shared =
-    if file.File.parents = [] && shared then
-      SessionM.return (shared_with_me_directory :: path_parts)
-    else if file.File.parents = [ root_folder_id ] then
-      SessionM.return ("" :: path_parts)
-    else
-      let parent_id = List.hd file.File.parents in
-      get_file parent_id >>= fun parent ->
-      get_full_path parent
-        (clean_filename parent.File.name :: path_parts)
-        shared
-  in
+module ResourceByIdOps = DriveResourceById.Make (DriveResourceByIdPorts)
 
-  if remote_id = root_folder_id then
-    SessionM.return (get_well_known_resource root_directory false)
-  else (
-    Utils.log_with_header
-      "BEGIN: Getting resource from server (remote id=%s)\n%!" remote_id;
-    get_file remote_id >>= fun file ->
-    get_full_path file [ clean_filename file.File.name ] file.File.shared
-    >>= fun path_parts ->
-    let path = String.concat Filename.dir_sep path_parts in
-    let new_resource = create_resource path in
-    let resource = update_resource_from_file new_resource file in
-    Utils.log_with_header
-      "BEGIN: Getting resource from server (remote id=%s path=%s)\n%!" remote_id
-      path;
-    SessionM.return resource)
+let get_resource_with_id_from_server remote_id =
+  ResourceByIdOps.get_resource_with_id_from_server remote_id
 
 let get_resource_with_id remote_id cache =
-  let cached_resource =
-    Cache.Resource.select_first_resource_with_remote_id cache remote_id
-  in
-  match cached_resource with
-  | Some r -> SessionM.return r
-  | None -> get_resource_with_id_from_server remote_id
+  ResourceByIdOps.get_resource_with_id { DriveResourceById.cache } remote_id
 
 module DriveResourceResolverPorts = struct
   let root_directory = root_directory
