@@ -2,7 +2,6 @@ module File = GapiDriveV3Model.File
 
 let folder_mime_type = "application/vnd.google-apps.folder"
 let shortcut_mime_type = "application/vnd.google-apps.shortcut"
-
 let chars_blacklist_regexp = Str.regexp "[/\000]"
 let clean_filename name = Str.global_replace chars_blacklist_regexp "_" name
 
@@ -107,8 +106,7 @@ let build_resource_tables config resources =
     (fun resource ->
       let name = Option.get resource.CacheData.Resource.name in
       let clean_name =
-        get_filename config name
-          (CacheData.Resource.is_document resource)
+        get_filename config name (CacheData.Resource.is_document resource)
           (fun config -> get_file_extension_from_format resource config)
       in
       let filename = Filename.basename resource.CacheData.Resource.path in
@@ -203,8 +201,8 @@ let recompute_path config resource name filename_table =
   in
   Filename.concat resource.CacheData.Resource.parent_path filename
 
-let update_resource_from_file ~now ~recompute_path ?state ?link_target
-    resource file =
+let update_resource_from_file ~now ~recompute_path ?state ?link_target resource
+    file =
   let path =
     match resource.CacheData.Resource.name with
     | Some cached_name ->

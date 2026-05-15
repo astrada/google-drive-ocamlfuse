@@ -4,13 +4,8 @@ val folder_mime_type : string
 val shortcut_mime_type : string
 val clean_filename : string -> string
 val get_file_extension : string -> string
-
-val get_filename :
-  Config.t -> string -> bool -> (Config.t -> string) -> string
-
-val get_file_extension_from_format :
-  CacheData.Resource.t -> Config.t -> string
-
+val get_filename : Config.t -> string -> bool -> (Config.t -> string) -> string
+val get_file_extension_from_format : CacheData.Resource.t -> Config.t -> string
 val get_file_extension_from_mime_type : string -> Config.t -> string
 
 val build_resource_tables :
@@ -21,8 +16,7 @@ val build_resource_tables :
 val clean_document_extension :
   Config.t -> string -> CacheData.Resource.t -> string
 
-val create_resource :
-  now:(unit -> float) -> string -> CacheData.Resource.t
+val create_resource : now:(unit -> float) -> string -> CacheData.Resource.t
 
 val get_unique_filename :
   Config.t ->

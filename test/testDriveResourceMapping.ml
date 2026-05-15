@@ -5,9 +5,8 @@ module Mapping = DriveResourceMapping
 let fixed_time = 1234.5
 let fixed_now () = fixed_time
 
-let make_resource ?(id = 1L) ?remote_id ?name ?mime_type
-    ?full_file_extension ?size ?trashed
-    ?(state = CacheData.Resource.State.Synchronized) path =
+let make_resource ?(id = 1L) ?remote_id ?name ?mime_type ?full_file_extension
+    ?size ?trashed ?(state = CacheData.Resource.State.Synchronized) path =
   let resource = Mapping.create_resource ~now:fixed_now path in
   {
     resource with
@@ -61,9 +60,8 @@ let assert_ends_with suffix value =
     (ExtString.String.ends_with value ~suffix)
 
 let update_resource_from_file ?state ?link_target
-    ?(recompute_path = fun _ _ ->
-      assert_failure "unexpected path recomputation")
-    resource file =
+    ?(recompute_path =
+      fun _ _ -> assert_failure "unexpected path recomputation") resource file =
   Mapping.update_resource_from_file ~now:fixed_now ~recompute_path ?state
     ?link_target resource file
 
@@ -91,7 +89,8 @@ let test_document_extension_rules_use_explicit_config () =
   let document_format config =
     Mapping.get_file_extension_from_mime_type document_mime_type config
   in
-  assert_equal "Doc.odt" (Mapping.get_filename config "Doc" true document_format);
+  assert_equal "Doc.odt"
+    (Mapping.get_filename config "Doc" true document_format);
   assert_equal "Doc.odt"
     (Mapping.get_filename config "Doc.odt" true document_format);
   assert_equal "Doc"
@@ -156,8 +155,8 @@ let test_unique_filename_collision_preserves_full_file_extension () =
   let filename_table = Hashtbl.create 4 in
   Hashtbl.add filename_table "archive.tar.gz" 0;
   let file =
-    make_file ~id:"rid-a" ~name:"archive.tar.gz"
-      ~full_file_extension:"tar.gz" ()
+    make_file ~id:"rid-a" ~name:"archive.tar.gz" ~full_file_extension:"tar.gz"
+      ()
   in
   let filename =
     Mapping.get_unique_filename_from_file Config.default file filename_table
@@ -177,8 +176,8 @@ let test_unique_filename_collision_handles_extensionless_names () =
 
 let test_build_resource_tables_records_filenames_and_remote_ids () =
   let resource =
-    make_resource ~remote_id:"rid-a" ~name:"Drive/Name"
-      ~mime_type:"text/plain" "/dir/cached.txt"
+    make_resource ~remote_id:"rid-a" ~name:"Drive/Name" ~mime_type:"text/plain"
+      "/dir/cached.txt"
   in
   let filename_table, remote_id_table =
     Mapping.build_resource_tables Config.default [ resource ]
@@ -217,8 +216,7 @@ let test_update_resource_from_file_maps_standard_metadata () =
     make_file ~id:"rid-a" ~name:"file.txt" ~size:99L ~version:7L
       ~resource_key:"resource-key" ~file_extension:"txt"
       ~full_file_extension:"txt" ~md5_checksum:"md5"
-      ~web_view_link:"https://drive/view" ~trashed:true
-      ~app_properties ()
+      ~web_view_link:"https://drive/view" ~trashed:true ~app_properties ()
   in
   let updated = update_resource_from_file resource file in
   assert_equal (Some "rid-a") updated.CacheData.Resource.remote_id;
@@ -246,8 +244,8 @@ let test_update_resource_from_file_preserves_size_for_upload_states () =
   in
   let file = make_file ~size:99L () in
   let updated =
-    update_resource_from_file ~state:CacheData.Resource.State.Uploading
-      resource file
+    update_resource_from_file ~state:CacheData.Resource.State.Uploading resource
+      file
   in
   assert_equal (Some 7L) updated.CacheData.Resource.size;
   assert_equal CacheData.Resource.State.Uploading
@@ -259,7 +257,8 @@ let test_update_resource_from_file_maps_shortcut_targets () =
     make_file ~mime_type:Mapping.shortcut_mime_type
       ~shortcut_target_id:"target-id"
       ~shortcut_target_resource_key:"target-resource-key"
-      ~app_properties:[ ("l", "/ignored") ] ()
+      ~app_properties:[ ("l", "/ignored") ]
+      ()
   in
   let updated =
     update_resource_from_file ~link_target:"/target/path" resource file
