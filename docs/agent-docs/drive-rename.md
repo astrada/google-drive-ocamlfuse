@@ -133,6 +133,9 @@ The name cleaning step is important for Google Docs export semantics:
 let clean_new_name = clean_document_extension new_name resource config
 ```
 
+`clean_document_extension` is provided by the production `Drive` port and uses
+`DriveResourceMapping` for document extension rules.
+
 So local visible names and stored Drive names are not always identical for
 document-like resources.
 
@@ -398,6 +401,8 @@ When changing this area, watch these invariants:
 - moved/renamed folders need cache cleanup at the old location
 - pure parent moves may need local path recomputation for duplicate
   disambiguation
+- the production `recompute_path` port uses `DriveResourceMapping` for the
+  final unique filename calculation
 
 ## Source Pointers
 
@@ -406,4 +411,6 @@ When changing this area, watch these invariants:
 - `src/driveMutations.ml`: `update_remote_resource`
 - `src/driveUploadDispatch.ml`: `queue_upload`
 - `src/drive.ml`: `recompute_path`
+- `src/driveResourceMapping.ml`: `clean_document_extension` and unique path
+  calculation
 - `test/testDriveMutations.ml`

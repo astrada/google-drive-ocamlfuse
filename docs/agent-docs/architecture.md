@@ -47,6 +47,9 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   reconciliation
 - `src/driveXattrs.ml` holds the extended-attribute core for xattr reads,
   validation, and Drive app-property patches
+- `src/driveResourceMapping.ml` holds filename cleanup, duplicate-name
+  disambiguation, cache resource construction, and Drive `File` to
+  cache-resource mapping
 - `src/drive.ml` provides the production `DriveMutationPorts`,
   `DriveResourceResolverPorts`, `DriveMetadataRefreshPorts`,
   `DriveOpenPorts`, `DriveViewPorts`, `DriveDirectoryReadPorts`,

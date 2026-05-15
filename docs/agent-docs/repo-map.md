@@ -79,8 +79,11 @@ The `Makefile` is only a small wrapper around these dune commands.
 - `src/drive.ml`
   - The main implementation module.
   - Contains most filesystem behavior: lookup, listing, reads, writes, upload,
-    symlinks, metadata mapping, Google Drive API requests, and the
-    production wiring for filesystem cores.
+    symlinks, Google Drive API requests, and the production wiring for
+    filesystem cores.
+  - Filename cleanup, duplicate-name disambiguation, cache resource
+    construction, and Drive `File` to cache-resource mapping live in
+    `DriveResourceMapping`.
   - `get_resource`, `get_folder_id`, and `check_resource_in_cache` delegate
     into `DriveResourceResolver` through `DriveResourceResolverPorts`.
   - `get_metadata` delegates into `DriveMetadataRefresh` through

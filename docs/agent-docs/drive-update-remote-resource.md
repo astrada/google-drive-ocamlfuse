@@ -193,6 +193,9 @@ let default_save_resource_to_db cache resource file =
   P.update_cached_resource cache updated_resource
 ```
 
+The production `update_resource_from_file` implementation uses
+`DriveResourceMapping` to rebuild the cache row from the returned Drive `File`.
+
 Callers can replace this with `save_to_db` when the returned Drive metadata is
 not enough to preserve local invariants.
 
@@ -330,6 +333,7 @@ separate operation-specific path.
 - `src/driveRemoteUpdates.ml`: metadata-side wrapper
 - `src/drive.ml`: `DriveRemoteUpdatePorts`, `RemoteUpdateOps`, and
   `Drive.update_remote_resource`
+- `src/driveResourceMapping.ml`: default returned-file mapping
 - `src/driveMetadataMutations.ml`: metadata callers using the
   `update_remote_resource` port
 - `src/driveMutations.ml`: mutation-core wrapper for delete/trash and rename

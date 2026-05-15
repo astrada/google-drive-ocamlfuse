@@ -168,6 +168,9 @@ If the parent is not known-good, `get_resource` does a server lookup:
 3. query Drive by parent folder id plus basename
 4. insert the result into cache, or insert a `NotFound` tombstone
 
+The production `create_resource` and `update_resource_from_file` ports delegate
+resource construction and Drive-file field mapping to `DriveResourceMapping`.
+
 ## Server Lookup Under Parent
 
 The miss path performs a name-based lookup under one parent through the
@@ -349,6 +352,7 @@ invariants:
 - `src/drive.ml`: thin `get_resource`, `get_folder_id`, and
   `check_resource_in_cache` wrappers
 - `src/drive.ml`: `get_file_from_server`
+- `src/driveResourceMapping.ml`: resource construction and Drive-file mapping
 - `src/driveMetadataRefresh.ml`: `get_metadata` policy
 - `src/drive.ml`: thin `get_metadata` wrapper
 - `src/drive.ml`: `get_well_known_resource`

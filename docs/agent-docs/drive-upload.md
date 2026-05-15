@@ -62,6 +62,9 @@ Important ports include:
 - `update_cached_resource`
 - `shrink_cache`
 
+The production `update_resource_from_file` port delegates Drive `File` to cache
+resource mapping to `DriveResourceMapping`.
+
 The production `remote_update` port is the only place in this boundary that
 mentions `FilesResource.update`, `file_std_params`, `with_retry_default`,
 `enforceSingleParent`, or `supportsAllDrives`.
@@ -321,4 +324,5 @@ Failure normalization and retry live in `Drive.upload_resource_with_retry`.
 - `src/driveUploads.ml`: concrete upload attempt
 - `src/drive.ml`: `DriveUploadPorts`, `UploadOps`, and `upload`
 - `src/drive.ml`: `upload_resource_with_retry`
+- `src/driveResourceMapping.ml`: post-upload resource mapping
 - `test/testDriveUploads.ml`

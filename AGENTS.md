@@ -17,3 +17,6 @@ Recent history uses short, imperative, capitalized subjects such as `Update docs
 
 ## Security & Configuration Tips
 Do not commit OAuth client secrets, tokens, or local config from `~/.gdfuse/`. When changing config handling, update both the OCaml implementation and the related documentation in `docs/wiki/Configuration.md`.
+
+## Documentation Guidelines
+When updating the documentations, keep the docs descriptive of the current code rather than describing the last modification or refactoring.

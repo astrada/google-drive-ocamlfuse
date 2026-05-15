@@ -244,7 +244,8 @@ That last condition is important. The code only synthesizes a path for a new
 remote item when it can anchor that item under a known parent path.
 
 The inserted path uses the same filename-cleaning and duplicate-disambiguation
-logic as `read_dir`.
+logic as `read_dir`, through the `DriveResourceMapping` helpers exposed by the
+production ports.
 
 ### Updating Existing Resources
 
@@ -370,6 +371,7 @@ invariants:
   policy
 - `src/drive.ml`: `DriveMetadataRefreshPorts`
 - `src/drive.ml`: thin `get_metadata` wrapper
+- `src/driveResourceMapping.ml`: resource construction and filename mapping
 - `src/cacheData.ml`: `CacheData.Metadata`
 - `src/cacheData.ml`: `CacheData.Metadata.is_valid`
 - `src/cache.ml`: metadata/resource cache dispatch

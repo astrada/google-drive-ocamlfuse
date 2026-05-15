@@ -83,6 +83,8 @@ xattrs = CacheData.Resource.get_xattrs file.File.appProperties
 `get_xattrs` filters `appProperties` down to keys starting with `x-` and then
 serializes them into one string.
 
+That returned-file mapping lives in `DriveResourceMapping`.
+
 ### 3. Parsed In-Memory Representation
 
 `DriveXattrs` uses:

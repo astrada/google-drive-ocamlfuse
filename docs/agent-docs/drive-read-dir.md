@@ -178,6 +178,9 @@ The reconciliation flow is:
 - a `filename_table` used for conflict detection
 - a `remote_id_table` used to find existing cached rows by Drive file id
 
+The production wrapper in `Drive` selects the cached child resources, while
+`DriveResourceMapping` builds the tables from that resource list.
+
 If a fetched file already exists in `remote_id_table`, `read_dir` updates that
 cached row with `update_resource_from_file`.
 
@@ -302,6 +305,8 @@ When changing `read_dir`, watch these invariants:
 
 - `src/drive.ml`: `read_dir`
 - `src/drive.ml`: `DriveDirectoryReadPorts`
+- `src/driveResourceMapping.ml`: filename tables, unique names, and
+  Drive-file-to-resource mapping
 - `src/driveDirectoryReads.ml`: `read_dir`
 - `src/driveDirectoryReads.ml`: query-selection and snapshot-rebuild flow
 - `src/cacheData.ml`: `CacheData.Resource.is_valid`

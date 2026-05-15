@@ -308,6 +308,9 @@ So creation does not go through the upload queue.
 - for shortcut mime types, it uses the optional `link_target` argument
 - for non-shortcut resources, it reads link target data from app properties
 
+That field mapping is implemented by `DriveResourceMapping` and exposed through
+the production `Drive` port.
+
 So passing `?link_target` here preserves a usable target string in the cached row
 immediately after creating a shortcut.
 
@@ -387,4 +390,5 @@ When changing this area, watch these invariants:
 - `src/drive.ml`: `symlink`
 - `src/drive.ml`: `fetch_link_target`
 - `src/drive.ml`: `read_link`
+- `src/driveResourceMapping.ml`: shortcut and app-property field mapping
 - `test/testDriveMutations.ml`

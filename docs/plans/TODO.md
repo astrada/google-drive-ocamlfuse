@@ -1,31 +1,10 @@
 # Testability Refactoring Backlog
 
-This backlog tracks remaining candidates after the active
-`DriveMetadataRefresh` plan. Keep active implementation plans as separate files
-under `docs/plans/`; move completed plans into `docs/plans/archive/`.
+This backlog tracks candidates that are not currently active. Keep active
+implementation plans as separate files under `docs/plans/`; move completed
+plans into `docs/plans/archive/`.
 
 ## Candidates
-
-### Resource Mapping Helpers
-
-Extract resource construction and Drive-file-to-cache-resource mapping helpers
-from `src/drive.ml`.
-
-Likely scope:
-
-- `create_resource`
-- `update_resource_from_file`
-- filename and duplicate-name disambiguation helpers
-- document extension cleanup
-- shortcut, symlink, app-property, and resource-key field mapping
-
-Why it helps:
-
-- mostly deterministic logic
-- easy to unit test without Context, cache, or Drive requests
-- reduces risk around path/name/resource metadata transformations
-
-Suggested module: `DriveResourceMapping`.
 
 ### Resource Lookup By Remote Id
 
@@ -93,8 +72,6 @@ Suggested module: `DriveCacheMaintenance`.
 
 ## Priority Notes
 
-- Do `DriveMetadataRefresh` first; it is the current active plan.
-- Prefer `DriveResourceMapping` next for a contained, deterministic win.
 - Prefer `DriveResourceById` next if shortcut/read-link behavior is the area of
   concern.
 - Save `DriveCacheMaintenance` for a larger pass because it touches cache files,
