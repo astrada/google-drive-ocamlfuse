@@ -2,7 +2,7 @@
 
 Active plans:
 
-- [Extract `get_metadata` Into `DriveMetadataRefresh`](extract-drive-metadata-refresh.md)
+- None
 
 Backlog:
 
