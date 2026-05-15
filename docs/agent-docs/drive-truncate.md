@@ -160,6 +160,8 @@ That means truncate is increasing the expected local cache usage, so
 - evict other cached files and mark them `ToDownload` if the cache would exceed
   `max_cache_size_mb`
 
+In production, `DriveCacheMaintenance` owns that accounting and eviction policy.
+
 ### Shrinking The File
 
 If `size < old_size`, the delta is negative.

@@ -205,6 +205,8 @@ If `top_offset > file_size`, the write extended the file. In that case it:
 
 The `shrink_cache` call accounts for the extra local cache usage caused by the
 growth.
+In production, that cache-size accounting and any eviction work are owned by
+`DriveCacheMaintenance`.
 
 ### Write Stayed Within The Existing Size
 

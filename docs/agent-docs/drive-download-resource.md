@@ -194,6 +194,8 @@ shrink_cache ~file_size ()
 ```
 
 where `file_size` is taken from `resource.size` with a default of `0L`.
+The production port delegates this accounting and possible eviction work to
+`DriveCacheMaintenance`.
 
 After that, the behavior splits into four main branches.
 
@@ -267,6 +269,7 @@ for a useless network round trip.
 
 `DriveDownloads` calls the production `update_cache_size_for_documents` port
 both before and after materialization.
+That port is implemented by `DriveCacheMaintenance`.
 
 That helper only matters when:
 

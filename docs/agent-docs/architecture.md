@@ -36,6 +36,8 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   memory-buffered streaming, local cache-file reads, and read-ahead scheduling
 - `src/driveDownloads.ml` holds the local-content materialization core for
   `download_resource`
+- `src/driveCacheMaintenance.ml` holds cache-size accounting, cache shrink,
+  cached-file deletion, memory-buffer cleanup, and file-lock cleanup
 - `src/driveRemoteUpdates.ml` holds the metadata-side remote-update wrapper
   for path resolution, read-only enforcement, optional local-cache file hooks,
   and default cache reconciliation
@@ -55,7 +57,7 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   cache-resource mapping
 - `src/drive.ml` provides the production `DriveMutationPorts`,
   `DriveResourceByIdPorts`, `DriveResourceResolverPorts`,
-  `DriveMetadataRefreshPorts`,
+  `DriveMetadataRefreshPorts`, `DriveCacheMaintenancePorts`,
   `DriveOpenPorts`, `DriveViewPorts`, `DriveDirectoryReadPorts`,
   `DriveReadPorts`, `DriveDownloadPorts`, `DriveRemoteUpdatePorts`,
   `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,

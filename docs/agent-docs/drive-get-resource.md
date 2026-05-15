@@ -255,6 +255,9 @@ There is a fallback branch:
 ```
 
 That path only applies when a stale cached row has no `remote_id`.
+In production, `delete_cached_resource` is handled by `DriveCacheMaintenance`,
+which also removes local cached files, memory buffers, and file locks for the
+row.
 
 In that situation, the row cannot be refreshed by id, so the code deletes the
 cached row and falls back to the miss path, which uses parent-plus-name lookup.

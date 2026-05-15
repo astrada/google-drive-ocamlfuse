@@ -101,6 +101,9 @@ The `Makefile` is only a small wrapper around these dune commands.
   - `read` delegates into `DriveReads` through `DriveReadPorts`.
   - `download_resource` delegates into `DriveDownloads` through
     `DriveDownloadPorts`.
+  - Cache-size accounting, cache shrink, cached-file deletion, memory-buffer
+    cleanup, and file-lock cleanup delegate into `DriveCacheMaintenance`
+    through `DriveCacheMaintenancePorts`.
   - The metadata-side `update_remote_resource` helper delegates into
     `DriveRemoteUpdates` through `DriveRemoteUpdatePorts`.
   - `write` and `truncate` delegate into `DriveFileMutations` through
@@ -187,6 +190,14 @@ The `Makefile` is only a small wrapper around these dune commands.
   - Functorized over a narrow boundary so materialization policy can be unit
     tested without real `Context`, Drive API requests, cache files, locks, or
     sleeps.
+
+- `src/driveCacheMaintenance.ml`
+  - Cache maintenance core for cache-size accounting, cache shrink,
+    cached-resource deletion, cached-file deletion, memory-buffer cleanup, and
+    file-lock cleanup.
+  - Functorized over a narrow boundary so cache accounting and cleanup behavior
+    can be unit tested without real `Context`, cache files, locks, or
+    filesystem state.
 
 - `src/driveRemoteUpdates.ml`
   - Metadata-side remote-update wrapper.
@@ -325,6 +336,7 @@ Current tests are in:
 - `test/testConfigStore.ml`
 - `test/testDriveDirectoryReads.ml`
 - `test/testDriveDownloads.ml`
+- `test/testDriveCacheMaintenance.ml`
 - `test/testDriveResourceById.ml`
 - `test/testDriveRemoteUpdates.ml`
 - `test/testDriveUploads.ml`
@@ -357,12 +369,13 @@ There are no end-to-end tests for:
 - rename/delete semantics against live Drive state
 
 The mutation, open-validation, read-side, download/materialization,
-remote-id lookup, remote-update-wrapper, file-mutation, metadata-mutation,
-upload-dispatch, upload-attempt, and xattr cores are covered by focused unit
-tests in
+cache-maintenance, remote-id lookup, remote-update-wrapper, file-mutation,
+metadata-mutation, upload-dispatch, upload-attempt, and xattr cores are covered
+by focused unit tests in
 `test/testDriveMutations.ml`,
 `test/testDriveOpens.ml`, `test/testDriveViews.ml`,
 `test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
+`test/testDriveCacheMaintenance.ml`,
 `test/testDriveResourceById.ml`,
 `test/testDriveRemoteUpdates.ml`, `test/testDriveUploads.ml`,
 `test/testDriveReads.ml`,

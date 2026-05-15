@@ -278,6 +278,7 @@ trash namespace.
 
 For changes marked `removed`, the function deletes matching cached resources and
 their local cached files via `delete_cached_resources`.
+In production, that cleanup is handled by `DriveCacheMaintenance`.
 
 This is stronger than invalidation: the rows disappear entirely.
 

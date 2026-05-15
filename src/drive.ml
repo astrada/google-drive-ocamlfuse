@@ -347,111 +347,75 @@ let lookup_resource path trashed =
        path trashed id state);
   resource
 
-let update_cache_size delta metadata cache =
-  Utils.log_with_header "BEGIN: Updating cache size (delta=%Ld) in db\n%!" delta;
-  if delta = 0L then
-    Utils.log_with_header "END: No need to update cache size\n%!"
-  else (
-    Cache.Metadata.update_cache_size cache delta;
-    let update_metadata context =
-      let metadata =
-        context.Context.metadata |. GapiLens.option_get
-        |> CacheData.Metadata.cache_size
-           ^= Int64.add metadata.CacheData.Metadata.cache_size delta
-      in
-      Utils.log_with_header "END: Updating cache size (new size=%Ld) in db\n%!"
-        metadata.CacheData.Metadata.cache_size;
-      context |> Context.metadata ^= Some metadata
-    in
-    Context.update_ctx update_metadata)
+module DriveCacheMaintenancePorts = struct
+  let with_metadata_lock f =
+    let context = Context.get_ctx () in
+    Utils.with_lock context.Context.metadata_lock f
 
-let shrink_cache ?(file_size = 0L) () =
+  let update_cache_size_in_db = Cache.Metadata.update_cache_size
+
+  let update_context_metadata f =
+    Context.update_ctx (fun context ->
+        let metadata = f (context.Context.metadata |. GapiLens.option_get) in
+        context |> Context.metadata ^= Some metadata)
+
+  let select_resources_order_by_last_update =
+    Cache.Resource.select_resources_order_by_last_update
+
+  let update_cached_resource_state = update_cached_resource_state
+  let delete_files_from_cache = Cache.delete_files_from_cache
+  let delete_resource = Cache.Resource.delete_resource
+  let delete_resources = Cache.Resource.delete_resources
+
+  let remove_memory_buffers remote_id =
+    let context = Context.get_ctx () in
+    Buffering.MemoryBuffers.remove_buffers remote_id
+      context.Context.memory_buffers
+
+  let remove_file_lock remote_id =
+    Context.with_ctx_lock (fun () ->
+        let context = Context.get_ctx () in
+        Hashtbl.remove context.Context.file_locks remote_id)
+
+  let file_exists = Sys.file_exists
+  let stat_file = Unix.LargeFile.stat
+  let log_exception = Utils.log_exception
+end
+
+module CacheMaintenanceOps =
+  DriveCacheMaintenance.Make (DriveCacheMaintenancePorts)
+
+let drive_cache_maintenance_runtime ?cache () =
   let context = Context.get_ctx () in
-  let metadata = context |. Context.metadata_lens in
-  let config = context |. Context.config_lens in
-  let max_cache_size_mb = config.Config.max_cache_size_mb in
-  let cache = context.Context.cache in
-  Utils.with_lock context.Context.metadata_lock (fun () ->
-      let max_cache_size =
-        Int64.mul (Int64.of_int max_cache_size_mb) Utils.mb
-      in
-      let target_size =
-        Int64.add metadata.CacheData.Metadata.cache_size file_size
-      in
-      if target_size > max_cache_size then (
-        let resources =
-          Cache.Resource.select_resources_order_by_last_update cache
-        in
-        let new_cache_size, total_delta, resources_to_free =
-          List.fold_left
-            (fun (new_cache_size, delta, rs) resource ->
-              if new_cache_size <= max_cache_size then
-                (new_cache_size, delta, rs)
-              else
-                let size_to_free =
-                  Option.default 0L resource.CacheData.Resource.size
-                in
-                let new_size = Int64.sub new_cache_size size_to_free in
-                let new_delta = Int64.add delta (Int64.neg size_to_free) in
-                (new_size, new_delta, resource :: rs))
-            (target_size, file_size, [])
-            resources
-        in
-        update_cache_size total_delta metadata cache;
-        List.iter
-          (fun resource ->
-            update_cached_resource_state cache
-              CacheData.Resource.State.ToDownload resource.CacheData.Resource.id)
-          resources_to_free;
-        Cache.delete_files_from_cache cache resources_to_free |> ignore)
-      else update_cache_size file_size metadata cache)
+  let cache = Option.default context.Context.cache cache in
+  {
+    DriveCacheMaintenance.cache;
+    config = context |. Context.config_lens;
+    metadata = context.Context.metadata;
+  }
 
-let delete_memory_buffers memory_buffers resource =
-  Option.may
-    (fun remote_id ->
-      Buffering.MemoryBuffers.remove_buffers remote_id memory_buffers)
-    resource.CacheData.Resource.remote_id
+let update_cache_size delta metadata cache =
+  CacheMaintenanceOps.update_cache_size delta metadata cache
 
-let delete_from_context context resource =
-  let memory_buffers = context.Context.memory_buffers in
-  delete_memory_buffers memory_buffers resource;
-  Option.may
-    (fun remote_id ->
-      Context.with_ctx_lock (fun () ->
-          Hashtbl.remove context.Context.file_locks remote_id))
-    resource.CacheData.Resource.remote_id
+let shrink_cache ?file_size () =
+  CacheMaintenanceOps.shrink_cache
+    (drive_cache_maintenance_runtime ())
+    ?file_size ()
 
 let delete_cached_resource resource =
-  let context = Context.get_ctx () in
-  let cache = context.Context.cache in
-  Cache.Resource.delete_resource cache resource;
-  let total_size = Cache.delete_files_from_cache cache [ resource ] in
-  Option.may
-    (fun metadata -> update_cache_size (Int64.neg total_size) metadata cache)
-    context.Context.metadata;
-  delete_from_context context resource
+  CacheMaintenanceOps.delete_cached_resource
+    (drive_cache_maintenance_runtime ())
+    resource
 
 let delete_cached_resources metadata cache resources =
-  Cache.Resource.delete_resources cache resources;
-  let total_size = Cache.delete_files_from_cache cache resources in
-  update_cache_size (Int64.neg total_size) metadata cache;
-  let context = Context.get_ctx () in
-  List.iter (delete_from_context context) resources
+  CacheMaintenanceOps.delete_cached_resources
+    (drive_cache_maintenance_runtime ~cache ())
+    metadata resources
 
 let update_cache_size_for_documents cache resource content_path op =
-  let context = Context.get_ctx () in
-  Utils.with_lock context.Context.metadata_lock (fun () ->
-      if
-        resource.CacheData.Resource.size = Some 0L
-        && Sys.file_exists content_path
-      then
-        try
-          let stats = Unix.LargeFile.stat content_path in
-          let size = stats.Unix.LargeFile.st_size in
-          let metadata = context |. Context.metadata_lens in
-          let delta = op size in
-          update_cache_size delta metadata cache
-        with e -> Utils.log_exception e)
+  CacheMaintenanceOps.update_cache_size_for_documents
+    (drive_cache_maintenance_runtime ~cache ())
+    resource content_path op
 
 let build_resource_keys_header_from_resource resource =
   let ids_and_resource_keys =

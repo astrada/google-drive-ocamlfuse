@@ -284,6 +284,8 @@ P.shrink_cache ()
 ```
 
 `shrink_cache` runs only after the final cache update succeeds.
+The production port delegates the cache-size accounting to
+`DriveCacheMaintenance`.
 
 ## Error Surface
 

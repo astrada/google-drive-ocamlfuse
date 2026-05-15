@@ -44,6 +44,9 @@
 - `drive-resource-by-id-extraction/plan.md`: archived completed plan for
   extracting `DriveResourceById` and making remote-id lookup and shortcut
   target path reconstruction unit testable.
+- `drive-cache-maintenance-extraction/plan.md`: archived completed plan for
+  extracting `DriveCacheMaintenance` and making cache-size accounting, cache
+  shrink, cached-file deletion, and resource cleanup unit testable.
 - `gdfuse-cli-error-handling/plan.md`: archived completed plan for restoring
   clean CLI handling for `-version`, `-help`, `--help`, and invalid options,
   and for expanding CLI behavior test coverage.

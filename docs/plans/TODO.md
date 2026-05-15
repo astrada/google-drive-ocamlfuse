@@ -27,30 +27,3 @@ Why it helps:
   module
 
 Suggested module: `DriveRootResolution`.
-
-### Cache Maintenance Helpers
-
-Extract cache-size and cached-resource cleanup helpers.
-
-Likely scope:
-
-- `update_cache_size`
-- `shrink_cache`
-- `delete_cached_resource`
-- `delete_cached_resources`
-- memory-buffer and lock cleanup during deletion
-- document cache-size accounting
-
-Why it helps:
-
-- concentrates cache cleanup invariants in one module
-- makes deletion, download, metadata-refresh, and shrink behavior easier to
-  test with fake cache/filesystem ports
-- reduces side-effect-heavy helper code in `src/drive.ml`
-
-Suggested module: `DriveCacheMaintenance`.
-
-## Priority Notes
-
-- Save `DriveCacheMaintenance` for a larger pass because it touches cache files,
-  memory buffers, locks, and metadata accounting.
