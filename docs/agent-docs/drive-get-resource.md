@@ -50,7 +50,8 @@ That distinction matters. Most FUSE-facing callers first do:
 let path_in_cache, trashed = get_path_in_cache path config
 ```
 
-and then call `get_resource path_in_cache trashed`.
+and then call `get_resource path_in_cache trashed`. The production
+`get_path_in_cache` wrapper delegates to `DrivePathNamespace`.
 
 So `get_resource` should be understood as a low-level resolver over the
 internal `(path, trashed)` namespace.
@@ -108,6 +109,8 @@ Before ordinary cache lookup, `get_resource` special-cases:
 Those are handled through the `get_well_known_resource` port. In production,
 that port delegates through `DriveRootResolution`, which inserts a synthetic
 cache row on first access and reuses it afterwards.
+The path constants and root predicates used for those checks are shared with
+`DrivePathNamespace`.
 
 Important details:
 

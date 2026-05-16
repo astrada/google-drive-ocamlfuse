@@ -72,6 +72,8 @@ This means:
 
 - the synthetic `/lost+found` root itself cannot be renamed
 - targets inside `/lost+found` are not allowed
+- the namespace predicates are provided by `DrivePathNamespace` through the
+  production `Drive` ports
 
 The source may come from under `/lost+found`; the function has a special
 remote-parent handling path for that case later.
@@ -395,6 +397,7 @@ When changing this area, watch these invariants:
 
 - source and target trash namespaces must match
 - `lost+found` remains a synthetic namespace with special move semantics
+- path namespace predicates must stay aligned with `DrivePathNamespace`
 - `keep_duplicates` and `mv_keep_target` are separate policy levers
 - `mv_keep_target` can switch the surviving remote id from source to target
 - destination `NotFound` tombstones must be cleared after success

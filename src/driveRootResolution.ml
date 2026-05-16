@@ -2,22 +2,17 @@ open GapiMonad
 open GapiMonad.SessionM.Infix
 module File = GapiDriveV3Model.File
 
-let root_directory = "/"
+let root_directory = DrivePathNamespace.root_directory
 let default_root_folder_id = "root"
-let trash_directory = "/.Trash"
-let trash_directory_name_length = String.length trash_directory
-let trash_directory_base_path = "/.Trash/"
-let lost_and_found_directory = "/lost+found"
-let shared_with_me_directory = "/.shared"
+let trash_directory = DrivePathNamespace.trash_directory
+let trash_directory_name_length = DrivePathNamespace.trash_directory_name_length
+let trash_directory_base_path = DrivePathNamespace.trash_directory_base_path
+let lost_and_found_directory = DrivePathNamespace.lost_and_found_directory
+let shared_with_me_directory = DrivePathNamespace.shared_with_me_directory
 let device_scope = "https://www.googleapis.com/auth/drive.file"
 let device_root_folder = "gdfuse"
-
-let is_lost_and_found_root path trashed config =
-  if trashed || not config.Config.lost_and_found then false
-  else path = lost_and_found_directory
-
-let is_shared_with_me_root path trashed _config =
-  if trashed then false else path = shared_with_me_directory
+let is_lost_and_found_root = DrivePathNamespace.is_lost_and_found_root
+let is_shared_with_me_root = DrivePathNamespace.is_shared_with_me_root
 
 type runtime = {
   cache : CacheData.t;

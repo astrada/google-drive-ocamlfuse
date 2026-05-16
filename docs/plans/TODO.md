@@ -6,22 +6,6 @@ plans into `docs/plans/archive/`.
 
 ## Candidates
 
-### Path Namespace Helpers
-
-Suggested module: `DrivePathNamespace`.
-
-Extract the pure path and namespace helpers from `Drive`, including:
-
-- `is_in_trash_directory`
-- `is_lost_and_found`
-- `is_shared_with_me`
-- `get_path_in_cache`
-
-This would isolate the mapping between user-visible FUSE paths and internal
-cache paths for the trash, lost+found, shared-with-me, and root namespaces. The
-logic is configuration-sensitive and currently exercised through broader Drive
-entrypoints, so it is a good candidate for focused table-driven tests.
-
 ### Resource Key Header Helpers
 
 Suggested module: `DriveResourceKeys`.

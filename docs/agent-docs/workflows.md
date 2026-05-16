@@ -147,8 +147,8 @@ The filesystem exposes synthetic locations that are not normal Drive folders:
 - `/.shared`
 - `/lost+found`
 
-Many path operations first map through `get_path_in_cache`. Changes that ignore
-that mapping usually break trash/shared behavior.
+Many path operations first map through `DrivePathNamespace.get_path_in_cache`.
+Changes that ignore that mapping usually break trash/shared behavior.
 
 ### Rule 4: Preserve error translation
 

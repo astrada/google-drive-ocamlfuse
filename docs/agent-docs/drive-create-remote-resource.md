@@ -77,6 +77,8 @@ Before talking to Drive, the function rejects a few cases:
 
 These checks are important because the rest of the function assumes it is
 creating a real writable Drive object under a normal parent.
+Trash and lost+found recognition comes from `DrivePathNamespace` through the
+production `Drive` ports.
 
 ## Parent Resolution
 
@@ -201,7 +203,8 @@ The target-resolution flow is:
 2. if the result begins with the mountpoint path, strip the mountpoint prefix
 3. trim a trailing slash
 4. normalize the target path with `Utils.normalize_absolute_path`
-5. translate it with `get_path_in_cache`
+5. translate it with `DrivePathNamespace.get_path_in_cache` through the
+   production `Drive` wrapper
 6. resolve the target resource with `get_resource`
 7. read the target resource's `remote_id`
 

@@ -23,6 +23,9 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
 - `src/driveResourceById.ml` holds remote-id resource lookup for shortcut
   target reconstruction, including cache-first lookup, root-id handling,
   parent-chain path reconstruction, and shared-with-me path prefixing
+- `src/drivePathNamespace.ml` holds the pure namespace constants and
+  predicates for mapping FUSE-visible paths into cache paths and recognizing
+  trash, lost+found, and shared-with-me paths
 - `src/driveRootResolution.ml` holds configured root-folder id resolution and
   synthetic well-known resource rows for root, trash root, lost+found, and
   shared-with-me
@@ -285,14 +288,16 @@ lives in `DriveDirectoryReads`.
 
 It:
 
-1. Maps special filesystem paths like `/.Trash` into cache semantics.
+1. Maps special filesystem paths like `/.Trash` into cache semantics through
+   `DrivePathNamespace`.
 2. Checks whether the folder listing is already valid in cache.
 3. If not cached, queries Drive with `FilesResource.list`.
 4. Merges returned files with existing cached resources.
 5. Resolves duplicate names using remote-id fingerprints.
 6. Writes listing results back into the cache.
 
-Special virtual directories are implemented in `Drive`:
+The special virtual-directory namespace is recognized by `DrivePathNamespace`
+and materialized by the read-side modules:
 
 - `/.Trash`
 - `/.shared`

@@ -56,16 +56,13 @@ let async_do_request f =
   Utils.log_with_header "Spawning new thread id=%d\n%!" thread_id;
   thread
 
-let root_directory = DriveRootResolution.root_directory
+let root_directory = DrivePathNamespace.root_directory
 let default_root_folder_id = DriveRootResolution.default_root_folder_id
-let trash_directory = DriveRootResolution.trash_directory
-
-let trash_directory_name_length =
-  DriveRootResolution.trash_directory_name_length
-
-let trash_directory_base_path = DriveRootResolution.trash_directory_base_path
-let lost_and_found_directory = DriveRootResolution.lost_and_found_directory
-let shared_with_me_directory = DriveRootResolution.shared_with_me_directory
+let trash_directory = DrivePathNamespace.trash_directory
+let trash_directory_name_length = DrivePathNamespace.trash_directory_name_length
+let trash_directory_base_path = DrivePathNamespace.trash_directory_base_path
+let lost_and_found_directory = DrivePathNamespace.lost_and_found_directory
+let shared_with_me_directory = DrivePathNamespace.shared_with_me_directory
 let f_bsize = 4096L
 let change_limit = 50
 let max_link_target_length = 127
@@ -82,30 +79,12 @@ let json_length s =
   in
   length_with_quotes - 2
 
-let is_in_trash_directory path config =
-  if path = trash_directory || config.Config.disable_trash then false
-  else ExtString.String.starts_with path trash_directory_base_path
-
-let is_lost_and_found_root = DriveRootResolution.is_lost_and_found_root
-
-let is_lost_and_found path trashed config =
-  if trashed || not config.Config.lost_and_found then false
-  else ExtString.String.starts_with path lost_and_found_directory
-
-let is_shared_with_me_root = DriveRootResolution.is_shared_with_me_root
-
-let is_shared_with_me path trashed config =
-  if trashed then false
-  else ExtString.String.starts_with path shared_with_me_directory
-
-let get_path_in_cache path config =
-  if path = root_directory then (root_directory, false)
-  else if path = trash_directory && not config.Config.disable_trash then
-    (root_directory, true)
-  else if is_in_trash_directory path config then
-    let path_in_cache = Str.string_after path trash_directory_name_length in
-    (path_in_cache, true)
-  else (path, false)
+let is_in_trash_directory = DrivePathNamespace.is_in_trash_directory
+let is_lost_and_found_root = DrivePathNamespace.is_lost_and_found_root
+let is_lost_and_found = DrivePathNamespace.is_lost_and_found
+let is_shared_with_me_root = DrivePathNamespace.is_shared_with_me_root
+let is_shared_with_me = DrivePathNamespace.is_shared_with_me
+let get_path_in_cache = DrivePathNamespace.get_path_in_cache
 
 let match_service_error reason = function
   | GapiService.ServiceError (_, e) -> (

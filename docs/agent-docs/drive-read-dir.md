@@ -36,7 +36,8 @@ provides the public wrapper and production ports.
 ## Path Normalization
 
 The function starts by converting the FUSE path into `(path_in_cache, trashed)`
-using `get_path_in_cache`.
+using `DrivePathNamespace.get_path_in_cache` through the production `Drive`
+wrapper.
 
 Important mappings:
 
@@ -103,7 +104,8 @@ enough to use. For well-known roots, `get_resource` synthesizes cache entries:
 - `.shared`
 
 Configured root-folder ids and those synthetic rows are handled by
-`DriveRootResolution`.
+`DriveRootResolution`; the namespace checks and path mapping come from
+`DrivePathNamespace`.
 
 See `docs/agent-docs/drive-get-resource.md` for the full path-resolution
 contract.
@@ -294,7 +296,8 @@ runtime selection rule and callback handoff used by that thread.
 
 When changing `read_dir`, watch these invariants:
 
-- `get_path_in_cache` and special-root branching must stay aligned
+- `DrivePathNamespace.get_path_in_cache` and special-root branching must stay
+  aligned
 - `Cache.Resource.insert_resources` is snapshot replacement, not incremental
   merge
 - filename disambiguation must stay deterministic enough to avoid path churn

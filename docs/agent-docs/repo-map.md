@@ -88,6 +88,8 @@ The `Makefile` is only a small wrapper around these dune commands.
     into `DriveResourceResolver` through `DriveResourceResolverPorts`.
   - Remote-id resource lookup for shortcut targets delegates into
     `DriveResourceById` through `DriveResourceByIdPorts`.
+  - FUSE-visible path normalization and trash/lost+found/shared-with-me
+    namespace predicates delegate into `DrivePathNamespace`.
   - Configured root-folder id resolution and synthetic well-known resource
     creation delegate into `DriveRootResolution` through
     `DriveRootResolutionPorts`.
@@ -139,6 +141,14 @@ The `Makefile` is only a small wrapper around these dune commands.
     Drive-file mapping to a cache resource.
   - Functorized over a narrow boundary so remote-id lookup behavior can be unit
     tested without real `Context`, cache files, OAuth, or Drive API requests.
+
+- `src/drivePathNamespace.ml`
+  - Pure namespace helper module for FUSE-visible path normalization.
+  - Owns the root, trash, lost+found, and shared-with-me namespace constants;
+    trash-to-cache path mapping; and the predicates used by read, mutation,
+    upload, and xattr paths.
+  - Does not use production ports because it depends only on the path string
+    and `Config.t`.
 
 - `src/driveRootResolution.ml`
   - Configured root-folder and well-known resource core.
@@ -348,6 +358,7 @@ Current tests are in:
 - `test/testDriveDirectoryReads.ml`
 - `test/testDriveDownloads.ml`
 - `test/testDriveCacheMaintenance.ml`
+- `test/testDrivePathNamespace.ml`
 - `test/testDriveResourceById.ml`
 - `test/testDriveRootResolution.ml`
 - `test/testDriveRemoteUpdates.ml`
@@ -381,13 +392,14 @@ There are no end-to-end tests for:
 - rename/delete semantics against live Drive state
 
 The mutation, open-validation, read-side, download/materialization,
-cache-maintenance, remote-id lookup, root-resolution, remote-update-wrapper,
-file-mutation, metadata-mutation, upload-dispatch, upload-attempt, and xattr
-cores are covered by focused unit tests in
+cache-maintenance, path-namespace, remote-id lookup, root-resolution,
+remote-update-wrapper, file-mutation, metadata-mutation, upload-dispatch,
+upload-attempt, and xattr cores are covered by focused unit tests in
 `test/testDriveMutations.ml`,
 `test/testDriveOpens.ml`, `test/testDriveViews.ml`,
 `test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
 `test/testDriveCacheMaintenance.ml`,
+`test/testDrivePathNamespace.ml`,
 `test/testDriveResourceById.ml`, `test/testDriveRootResolution.ml`,
 `test/testDriveRemoteUpdates.ml`, `test/testDriveUploads.ml`,
 `test/testDriveReads.ml`,
