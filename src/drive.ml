@@ -1219,17 +1219,28 @@ let upload_resource_by_id resource_id =
         "Cannot find queued resource to upload with resource_id=%Ld.\n%!"
         resource_id
 
-let init_filesystem () =
+module DriveRuntimeServicePorts = struct
+  let start_flush_db_thread = MemoryCache.start_flush_db_thread
+  let start_async_upload_thread = UploadQueue.start_async_upload_thread
+
+  let start_folder_fetching_thread =
+    BackgroundFolderFetching.start_folder_fetching_thread
+
+  let upload_resource_by_id = upload_resource_by_id
+  let read_dir = read_dir
+end
+
+module RuntimeServiceOps = DriveRuntimeServices.Make (DriveRuntimeServicePorts)
+
+let drive_runtime_services_runtime () =
   let context = Context.get_ctx () in
-  let cache = context.Context.cache in
-  MemoryCache.start_flush_db_thread cache;
-  let config = context |. Context.config_lens in
-  if config.Config.async_upload_queue then
-    UploadQueue.start_async_upload_thread cache
-      config.Config.async_upload_threads upload_resource_by_id;
-  if config.Config.background_folder_fetching then
-    BackgroundFolderFetching.start_folder_fetching_thread cache (fun path ->
-        read_dir path |> ignore)
+  {
+    DriveRuntimeServices.cache = context.Context.cache;
+    config = context |. Context.config_lens;
+  }
+
+let init_filesystem () =
+  RuntimeServiceOps.init_filesystem (drive_runtime_services_runtime ())
 
 module DriveUploadDispatchPorts = struct
   let get_path_in_cache = get_path_in_cache

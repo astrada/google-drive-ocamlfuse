@@ -6,18 +6,6 @@ plans into `docs/plans/archive/`.
 
 ## Candidates
 
-### Runtime Service Startup
-
-Suggested module: `DriveRuntimeServices`.
-
-Extract the startup orchestration currently in `init_filesystem`, including
-memory-cache flushing, async upload queue startup, and background folder
-fetching.
-
-The current behavior coordinates several long-running services. A dedicated
-module with injectable ports would make startup branches easier to test without
-starting real background work.
-
 ### Streaming And Buffering Adapters
 
 Suggested module: `DriveStreaming`.

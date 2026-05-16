@@ -64,7 +64,7 @@ request/session upload path.
 
 ## Where It Is Used
 
-`Drive.init_filesystem` passes this helper to:
+`DriveRuntimeServices` passes this helper to:
 
 ```ocaml
 UploadQueue.start_async_upload_thread cache
@@ -216,6 +216,7 @@ it.
 
 - `src/drive.ml`: `upload_resource_by_id`
 - `src/driveUploads.ml`: concrete upload attempt reached downstream
+- `src/driveRuntimeServices.ml`: async upload startup callback wiring
 - `src/drive.ml`: `init_filesystem`
 - `src/uploadQueue.ml`: `upload_resource`
 - `src/uploadQueue.ml`: `start_async_upload_thread`

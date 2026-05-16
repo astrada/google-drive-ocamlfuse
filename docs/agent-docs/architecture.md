@@ -115,7 +115,8 @@ The production boot sequence is:
 The no-mountpoint branch runs startup/auth/bootstrap without
 entering the FUSE loop.
 
-At FUSE init time, `Drive.init_filesystem` starts background services:
+At FUSE init time, `Drive.init_filesystem` delegates Drive-specific runtime
+service startup to `DriveRuntimeServices`:
 
 - memory-cache flush thread
 - async upload thread pool, if enabled

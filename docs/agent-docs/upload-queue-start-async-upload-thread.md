@@ -29,8 +29,8 @@ The parameters are:
 - `upload_threads`: maximum worker concurrency
 - `upload_resource`: callback for one queued `resource_id`
 
-In production, `Drive.init_filesystem` passes `Drive.upload_resource_by_id` as
-that callback.
+In production, `DriveRuntimeServices` passes `Drive.upload_resource_by_id`
+through the `Drive` runtime-service port as that callback.
 
 ## Entire Implementation
 
@@ -147,5 +147,6 @@ It only installs runtime state and starts the poll thread.
 
 - `src/uploadQueue.ml`: `start_async_upload_thread`
 - `src/uploadQueue.ml`: `poll_upload_queue`
+- `src/driveRuntimeServices.ml`: startup branch and callback wiring
 - `src/drive.ml`: `init_filesystem`
 - `src/gdfuseFlow.ml`: shutdown path that later joins the thread

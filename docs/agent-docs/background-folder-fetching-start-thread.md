@@ -28,7 +28,7 @@ The parameters are:
 - `cache`: cache handle used by the prefetch loop
 - `read_dir`: callback used to prefetch one folder path
 
-In production, `Drive.init_filesystem` passes:
+In production, `DriveRuntimeServices` passes:
 
 ```ocaml
 fun path -> read_dir path |> ignore
@@ -88,8 +88,8 @@ That keeps the ownership boundary clean:
 - `BackgroundFolderFetching` owns scheduling and stop-flag polling
 - `Drive` owns what it means to refresh one folder path
 
-In production, `Drive.init_filesystem` connects the two by passing its own
-`read_dir` wrapper.
+In production, `DriveRuntimeServices` connects the two through a port backed by
+the `Drive.read_dir` wrapper.
 
 ## Why `set` Happens Before `Thread.create`
 
@@ -206,5 +206,6 @@ It only installs the runtime state and starts the polling thread.
 - `src/backgroundFolderFetching.ml`: `folder_fetch`
 - `src/backgroundFolderFetching.ml`: `fetch_next_folder`
 - `src/backgroundFolderFetching.ml`: `stop_folder_fetching_thread`
+- `src/driveRuntimeServices.ml`: startup branch and callback wiring
 - `src/drive.ml`: `init_filesystem`
 - `src/gdfuseFlow.ml`: `stop_folder_fetching_thread`

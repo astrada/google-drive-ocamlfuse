@@ -96,6 +96,7 @@ The `Makefile` is only a small wrapper around these dune commands.
     `DriveFilesystemStats`.
   - Default Drive request exception translation and retry wrapping delegate
     into `DriveRequestHandling`.
+  - FUSE-init runtime service startup delegates into `DriveRuntimeServices`.
   - Configured root-folder id resolution and synthetic well-known resource
     creation delegate into `DriveRootResolution` through
     `DriveRootResolutionPorts`.
@@ -178,6 +179,13 @@ The `Makefile` is only a small wrapper around these dune commands.
     the default backoff policy.
   - Exposes a small functor for unit tests so retry behavior can be tested
     without sleeping or changing global retry settings.
+
+- `src/driveRuntimeServices.ml`
+  - FUSE-init runtime service startup core.
+  - Owns the branch policy that starts memory-cache flushing, async upload
+    workers, and background folder fetching from the cache/config runtime.
+  - Functorized over startup ports so service startup and callback wiring can
+    be unit tested without starting real threads.
 
 - `src/driveRootResolution.ml`
   - Configured root-folder and well-known resource core.
@@ -391,6 +399,7 @@ Current tests are in:
 - `test/testDrivePathNamespace.ml`
 - `test/testDriveResourceKeys.ml`
 - `test/testDriveRequestHandling.ml`
+- `test/testDriveRuntimeServices.ml`
 - `test/testDriveResourceById.ml`
 - `test/testDriveRootResolution.ml`
 - `test/testDriveRemoteUpdates.ml`
@@ -426,8 +435,9 @@ There are no end-to-end tests for:
 The mutation, open-validation, read-side, download/materialization,
 cache-maintenance, path-namespace, resource-key header construction,
 filesystem-stats, remote-id lookup, root-resolution, remote-update-wrapper,
-request-handling, file-mutation, metadata-mutation, upload-dispatch,
-upload-attempt, and xattr cores are covered by focused unit tests in
+request-handling, runtime-service startup, file-mutation, metadata-mutation,
+upload-dispatch, upload-attempt, and xattr cores are covered by focused unit
+tests in
 `test/testDriveMutations.ml`,
 `test/testDriveOpens.ml`, `test/testDriveViews.ml`,
 `test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
@@ -436,6 +446,7 @@ upload-attempt, and xattr cores are covered by focused unit tests in
 `test/testDrivePathNamespace.ml`,
 `test/testDriveResourceKeys.ml`,
 `test/testDriveRequestHandling.ml`,
+`test/testDriveRuntimeServices.ml`,
 `test/testDriveResourceById.ml`, `test/testDriveRootResolution.ml`,
 `test/testDriveRemoteUpdates.ml`, `test/testDriveUploads.ml`,
 `test/testDriveReads.ml`,

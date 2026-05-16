@@ -17,6 +17,7 @@ let _ =
            TestDriveRequestHandling.suite;
            TestDriveResourceById.suite;
            TestDriveRootResolution.suite;
+           TestDriveRuntimeServices.suite;
            TestDriveResourceResolver.suite;
            TestDriveUploads.suite;
            TestDriveRemoteUpdates.suite;

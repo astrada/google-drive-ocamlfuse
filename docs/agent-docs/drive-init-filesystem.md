@@ -3,16 +3,17 @@
 ## Purpose
 
 `Drive.init_filesystem` is the FUSE-side runtime bring-up hook for the
-filesystem implementation.
+filesystem implementation. The public wrapper builds a small runtime from
+`Context` and delegates the startup branch policy to `DriveRuntimeServices`.
 
 It does not build the application context. That already happened earlier in
 `GdfuseFlow.setup_application`. Its job is narrower: once FUSE is about to
 start serving requests, it starts the background services that the `Drive`
 module expects to have running during normal operation.
 
-The function is defined in `src/drive.ml` and exposed in `src/drive.mli`.
-Production FUSE wiring calls it from `bin/gdfuseFuse.ml` through
-`Fuse.init = init_filesystem`.
+The public function is defined in `src/drive.ml` and exposed in
+`src/drive.mli`. Production FUSE wiring calls it from `bin/gdfuseFuse.ml`
+through `Fuse.init = init_filesystem`.
 
 ## Call Path
 
@@ -45,23 +46,37 @@ threads and overwrite the thread handles stored in `Context`.
 
 ## Implementation Walkthrough
 
-The body is intentionally small:
+The public wrapper is intentionally small:
 
 ```ocaml
 let init_filesystem () =
-  let context = Context.get_ctx () in
-  let cache = context.Context.cache in
-  MemoryCache.start_flush_db_thread cache;
-  let config = context |. Context.config_lens in
-  if config.Config.async_upload_queue then
-    UploadQueue.start_async_upload_thread cache
-      config.Config.async_upload_threads upload_resource_by_id;
-  if config.Config.background_folder_fetching then
-    BackgroundFolderFetching.start_folder_fetching_thread cache (fun path ->
-        read_dir path |> ignore)
+  RuntimeServiceOps.init_filesystem (drive_runtime_services_runtime ())
 ```
 
-Each line starts a distinct subsystem.
+`drive_runtime_services_runtime` reads the cache and config from `Context`:
+
+```ocaml
+type runtime = {
+  cache : CacheData.t;
+  config : Config.t;
+}
+```
+
+The startup policy lives in `DriveRuntimeServices`:
+
+```ocaml
+let init_filesystem runtime =
+  P.start_flush_db_thread runtime.cache;
+  if runtime.config.Config.async_upload_queue then
+    P.start_async_upload_thread runtime.cache
+      runtime.config.Config.async_upload_threads P.upload_resource_by_id;
+  if runtime.config.Config.background_folder_fetching then
+    P.start_folder_fetching_thread runtime.cache (fun path ->
+        P.read_dir path |> ignore)
+```
+
+Each branch starts a distinct subsystem through production ports supplied by
+`Drive`.
 
 ### 1. Metadata flush thread
 
@@ -84,7 +99,7 @@ This keeps the fast in-memory metadata cache crash-recoverable enough for the
 next startup.
 
 Operationally, this thread is infrastructure for the cache layer, not for
-network I/O. `Drive.init_filesystem` starts it here because the mounted
+network I/O. `DriveRuntimeServices` starts it here because the mounted
 filesystem is the runtime phase where metadata mutations will begin happening.
 
 ### 2. Async upload queue
@@ -112,7 +127,7 @@ The poll loop wakes once per second, selects the next queued entry, marks it as
 On failure, the queue entry is moved back to `ToUpload` so it can be retried
 later.
 
-This is why `Drive.init_filesystem` passes `upload_resource_by_id` instead of
+This is why `DriveRuntimeServices` passes `upload_resource_by_id` instead of
 letting `UploadQueue` talk directly to Drive internals: queue scheduling lives
 in `UploadQueue`, but resource upload behavior lives in `Drive`.
 
@@ -139,7 +154,7 @@ folder-fetch thread:
 - polling logic lives in `BackgroundFolderFetching`
 - actual folder loading is delegated back into `Drive.read_dir`
 
-The callback passed from `Drive.init_filesystem` is:
+The callback passed from `DriveRuntimeServices` is:
 
 ```ocaml
 fun path -> read_dir path |> ignore
@@ -177,7 +192,8 @@ runtime-state installation and polling-thread startup done by
 
 ## Config Knobs
 
-`Drive.init_filesystem` is controlled by these runtime config fields:
+`DriveRuntimeServices.init_filesystem` is controlled by these runtime config
+fields:
 
 - `metadata_memory_cache`
 - `metadata_memory_cache_saving_interval`
@@ -227,7 +243,7 @@ follows.
 See `docs/agent-docs/background-folder-fetching-stop-thread.md` for the folder
 prefetch stop-request helper that shutdown calls before joining that thread.
 
-Because shutdown is coordinated elsewhere, `Drive.init_filesystem` only starts
+Because shutdown is coordinated elsewhere, `DriveRuntimeServices` only starts
 threads; it does not own their lifecycle end-to-end.
 
 ## Why This Function Exists In `Drive`
@@ -240,7 +256,8 @@ That keeps the ownership boundary simple:
 
 - `GdfuseFlow` prepares global runtime state
 - `gdfuseFuse` maps FUSE operations to `Drive`
-- `Drive.init_filesystem` performs Drive-specific runtime bring-up
+- `Drive.init_filesystem` delegates Drive-specific runtime bring-up to
+  `DriveRuntimeServices`
 
 The background services started here are tightly coupled to Drive semantics:
 
@@ -259,10 +276,11 @@ When changing this area, check these invariants:
 - if `read_dir` semantics change, reevaluate background folder fetching because
   it reuses the same path
 - if this function ever becomes callable more than once, add explicit
-  idempotency protection
+  idempotency protection around the `DriveRuntimeServices` startup path
 
 ## Source Pointers
 
+- `src/driveRuntimeServices.ml`: startup branch policy
 - `src/drive.ml`: `init_filesystem`, `read_dir`, `upload_resource_by_id`
 - `src/driveDirectoryReads.ml`: `read_dir`
 - `src/memoryCache.ml`: flush-db thread startup and polling loop
