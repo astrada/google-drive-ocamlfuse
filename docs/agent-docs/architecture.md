@@ -28,6 +28,8 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   trash, lost+found, and shared-with-me paths
 - `src/driveResourceKeys.ml` holds the pure construction of Google Drive
   resource-key headers from remote id/resource-key pairs or cached resources
+- `src/driveFilesystemStats.ml` holds the pure quota and block-count policy
+  for converting Drive metadata into a synthetic `statvfs` record
 - `src/driveRootResolution.ml` holds configured root-folder id resolution and
   synthetic well-known resource rows for root, trash root, lost+found, and
   shared-with-me
@@ -246,8 +248,8 @@ The directory-side `releasedir` / `fsyncdir` callbacks remain adapter-level
 no-ops in `bin/gdfuseFuse.ml`; see
 `docs/agent-docs/gdfuse-noop-dir-callbacks.md`.
 
-Filesystem-wide capacity reporting lives in `Drive.statfs`; see
-`docs/agent-docs/drive-statfs.md`.
+Filesystem-wide capacity reporting enters through `Drive.statfs` and delegates
+the quota math to `DriveFilesystemStats`; see `docs/agent-docs/drive-statfs.md`.
 
 Metadata-only `utime` / `chmod` / `chown` requests enter through thin wrappers
 over `DriveMetadataMutations`; see

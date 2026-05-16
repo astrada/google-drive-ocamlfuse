@@ -6,16 +6,6 @@ plans into `docs/plans/archive/`.
 
 ## Candidates
 
-### Filesystem Stats
-
-Suggested module: `DriveFilesystemStats`.
-
-Extract `statfs` and its quota/block calculation helpers from `Drive`.
-
-This would put the quota, team-drive, and block-size behavior behind a small
-testable boundary. The behavior is user-visible through FUSE filesystem stats
-and depends on configuration such as team-drive mode.
-
 ### Request Handling And Retry
 
 Suggested module: `DriveRequestHandling`.

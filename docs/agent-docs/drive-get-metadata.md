@@ -15,7 +15,8 @@ Many other operations depend on it indirectly:
 
 - `Drive.get_resource` uses it before path lookup
 - `Drive.read_dir` depends on the resulting resource freshness state
-- `Drive.statfs` reads quota information from it directly
+- `Drive.statfs` reads quota information from it before delegating reporting
+  math to `DriveFilesystemStats`
 
 So this function is one of the main places where cache coherence is enforced.
 
@@ -339,13 +340,14 @@ So `get_resource` can treat `metadata.last_update` as a meaningful global fence.
 
 ## Interaction With `statfs`
 
-`Drive.statfs` reads quota information from `get_metadata`.
+`Drive.statfs` reads quota information from `get_metadata` and passes it to
+`DriveFilesystemStats`.
 
 That means a `statfs` call can also trigger a metadata refresh and change-feed
 reconciliation, even though it looks like a quota-only query from the outside.
 
 See `docs/agent-docs/drive-statfs.md` for the reporting-side logic that turns
-those metadata fields into a synthetic `statvfs` record.
+those metadata fields and the current config into a synthetic `statvfs` record.
 
 ## Maintenance Notes
 

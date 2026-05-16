@@ -63,7 +63,6 @@ let trash_directory_name_length = DrivePathNamespace.trash_directory_name_length
 let trash_directory_base_path = DrivePathNamespace.trash_directory_base_path
 let lost_and_found_directory = DrivePathNamespace.lost_and_found_directory
 let shared_with_me_directory = DrivePathNamespace.shared_with_me_directory
-let f_bsize = 4096L
 let change_limit = 50
 let max_link_target_length = 127
 let max_attribute_length = 126
@@ -570,35 +569,13 @@ let drive_metadata_refresh_runtime () =
 let get_metadata () =
   MetadataRefreshOps.get_metadata (drive_metadata_refresh_runtime ())
 
+let drive_filesystem_stats_runtime metadata =
+  let context = Context.get_ctx () in
+  { DriveFilesystemStats.metadata; config = context |. Context.config_lens }
+
 let statfs () =
   let metadata = get_metadata () in
-  let config = Context.get_ctx () |. Context.config_lens in
-  let limit =
-    if
-      metadata.CacheData.Metadata.storage_quota_limit = 0L
-      || config.Config.team_drive_id <> ""
-    then Int64.max_int
-    else metadata.CacheData.Metadata.storage_quota_limit
-  in
-  let f_blocks = Int64.div limit f_bsize in
-  let free_bytes =
-    Int64.sub limit metadata.CacheData.Metadata.storage_quota_usage
-  in
-  let f_bfree = Int64.div free_bytes f_bsize in
-  {
-    Fuse.Unix_util.f_bsize;
-    f_blocks;
-    f_bfree;
-    f_bavail = f_bfree;
-    f_files = f_blocks;
-    f_ffree = f_bfree;
-    f_namemax = 256L;
-    (* ignored *)
-    f_frsize = 0L;
-    f_favail = 0L;
-    f_fsid = 0L;
-    f_flag = 0L;
-  }
+  DriveFilesystemStats.statfs (drive_filesystem_stats_runtime metadata)
 
 (* END Metadata *)
 

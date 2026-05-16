@@ -2,7 +2,9 @@
 
 ## Purpose
 
-`Drive.statfs` is the FUSE-facing filesystem-capacity reporting path.
+`Drive.statfs` is the FUSE-facing filesystem-capacity reporting path. It
+collects the current metadata/config runtime and delegates quota math and
+`statvfs` construction to `DriveFilesystemStats`.
 
 It does not inspect an individual file or directory path. Instead, it reports a
 synthetic `statvfs` view for the whole mounted filesystem based on the global
@@ -33,24 +35,41 @@ Two details matter here:
 So the visible path is only part of logging and error labeling at the boundary,
 not an input to the reported filesystem numbers.
 
-## Entire Implementation
+## Implementation Boundary
 
-The implementation is:
+The public wrapper is:
 
 ```ocaml
 let statfs () =
   let metadata = get_metadata () in
-  let config = Context.get_ctx () |. Context.config_lens in
+  DriveFilesystemStats.statfs (drive_filesystem_stats_runtime metadata)
+```
+
+`drive_filesystem_stats_runtime` reads the current config from `Context` and
+passes it together with the metadata snapshot:
+
+```ocaml
+type runtime = {
+  metadata : CacheData.Metadata.t;
+  config : Config.t;
+}
+```
+
+The pure implementation in `DriveFilesystemStats` then performs the existing
+quota and block conversion:
+
+```ocaml
+let statfs runtime =
   let limit =
     if
-      metadata.CacheData.Metadata.storage_quota_limit = 0L
-      || config.Config.team_drive_id <> ""
+      runtime.metadata.CacheData.Metadata.storage_quota_limit = 0L
+      || runtime.config.Config.team_drive_id <> ""
     then Int64.max_int
-    else metadata.CacheData.Metadata.storage_quota_limit
+    else runtime.metadata.CacheData.Metadata.storage_quota_limit
   in
   let f_blocks = Int64.div limit f_bsize in
   let free_bytes =
-    Int64.sub limit metadata.CacheData.Metadata.storage_quota_usage
+    Int64.sub limit runtime.metadata.CacheData.Metadata.storage_quota_usage
   in
   let f_bfree = Int64.div free_bytes f_bsize in
   {
@@ -68,17 +87,18 @@ let statfs () =
   }
 ```
 
-That is the whole control flow.
+That is the whole reporting control flow.
 
 ## Metadata Dependency
 
-The first line is:
+The first line in the public wrapper is:
 
 ```ocaml
 let metadata = get_metadata ()
 ```
 
-So `statfs` inherits all of `Drive.get_metadata`'s freshness behavior.
+So `Drive.statfs` inherits all of `Drive.get_metadata`'s freshness behavior
+before it calls `DriveFilesystemStats`.
 
 That means a `statfs` call can:
 
@@ -111,7 +131,8 @@ not something derived from the local cache directory.
 
 ## The Team-Drive / Zero-Limit Special Case
 
-The most important policy branch is the computed `limit`:
+The most important policy branch is
+`DriveFilesystemStats.quota_limit`:
 
 ```ocaml
 if metadata.storage_quota_limit = 0L || config.team_drive_id <> ""
@@ -129,7 +150,7 @@ reporting a small or meaningless quota in those modes.
 
 ## Block Math
 
-The function uses the module-level constant:
+`DriveFilesystemStats` uses the module-level constant:
 
 ```ocaml
 let f_bsize = 4096L
@@ -172,12 +193,12 @@ Several returned fields are hard-coded:
 
 The source comment marks the trailing group as ignored.
 
-So `statfs` is intentionally minimal: it fills the fields that the repository
-cares about and leaves the rest as placeholders.
+So `DriveFilesystemStats.statfs` is intentionally minimal: it fills the fields
+that the repository cares about and leaves the rest as placeholders.
 
 ## What `Drive.statfs` Does Not Use
 
-`Drive.statfs` does not use:
+`Drive.statfs` and `DriveFilesystemStats.statfs` do not use:
 
 - the visible `path`
 - per-resource lookup
@@ -209,7 +230,7 @@ resource-driven.
 - count actual Drive files
 - account for the local cache size limit in its free-space result
 
-It only converts the current Drive quota snapshot into a synthetic `statvfs`
+They only convert the current Drive quota snapshot into a synthetic `statvfs`
 record.
 
 ## Related Docs
@@ -219,8 +240,8 @@ record.
 
 ## Source Pointers
 
-- `src/drive.ml`: `f_bsize`
-- `src/drive.ml`: `statfs`
+- `src/driveFilesystemStats.ml`: quota/block policy and `statvfs` construction
+- `src/drive.ml`: thin `statfs` wrapper
 - `src/driveMetadataRefresh.ml`: `get_metadata` policy
 - `src/drive.ml`: thin `get_metadata` wrapper
 - `src/cacheData.ml`: `CacheData.Metadata`

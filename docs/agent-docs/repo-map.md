@@ -92,6 +92,8 @@ The `Makefile` is only a small wrapper around these dune commands.
     namespace predicates delegate into `DrivePathNamespace`.
   - Google Drive resource-key header construction delegates into
     `DriveResourceKeys`.
+  - Filesystem-wide capacity reporting delegates quota and block math into
+    `DriveFilesystemStats`.
   - Configured root-folder id resolution and synthetic well-known resource
     creation delegate into `DriveRootResolution` through
     `DriveRootResolutionPorts`.
@@ -159,6 +161,13 @@ The `Makefile` is only a small wrapper around these dune commands.
     empty keys.
   - Used by downloads, metadata mutations, uploads, rename/delete/trash
     mutations, and xattr updates through the production `Drive` wrappers.
+
+- `src/driveFilesystemStats.ml`
+  - Pure helper module for filesystem-wide capacity reporting.
+  - Converts `CacheData.Metadata` quota fields and `Config.team_drive_id` into
+    the synthetic `Fuse.Unix_util.statvfs` record returned by `Drive.statfs`.
+  - Owns the fixed 4 KiB block size, zero-limit/team-drive fallback policy, and
+    placeholder `statvfs` fields.
 
 - `src/driveRootResolution.ml`
   - Configured root-folder and well-known resource core.
@@ -368,6 +377,7 @@ Current tests are in:
 - `test/testDriveDirectoryReads.ml`
 - `test/testDriveDownloads.ml`
 - `test/testDriveCacheMaintenance.ml`
+- `test/testDriveFilesystemStats.ml`
 - `test/testDrivePathNamespace.ml`
 - `test/testDriveResourceKeys.ml`
 - `test/testDriveResourceById.ml`
@@ -404,13 +414,14 @@ There are no end-to-end tests for:
 
 The mutation, open-validation, read-side, download/materialization,
 cache-maintenance, path-namespace, resource-key header construction,
-remote-id lookup, root-resolution, remote-update-wrapper, file-mutation,
-metadata-mutation, upload-dispatch, upload-attempt, and xattr cores are
-covered by focused unit tests in
+filesystem-stats, remote-id lookup, root-resolution, remote-update-wrapper,
+file-mutation, metadata-mutation, upload-dispatch, upload-attempt, and xattr
+cores are covered by focused unit tests in
 `test/testDriveMutations.ml`,
 `test/testDriveOpens.ml`, `test/testDriveViews.ml`,
 `test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
 `test/testDriveCacheMaintenance.ml`,
+`test/testDriveFilesystemStats.ml`,
 `test/testDrivePathNamespace.ml`,
 `test/testDriveResourceKeys.ml`,
 `test/testDriveResourceById.ml`, `test/testDriveRootResolution.ml`,
