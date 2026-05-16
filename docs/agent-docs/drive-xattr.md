@@ -41,7 +41,7 @@ The production ports in `DriveXattrPorts` own the surrounding effects:
 
 - path normalization through `get_path_in_cache`
 - resource lookup through `get_resource`
-- resource-key header construction
+- resource-key header construction through `DriveResourceKeys`
 - retried `FilesResource.update` calls
 - update-wrapper control flow through `MutationOps.update_remote_resource`
 
@@ -238,7 +238,8 @@ and sends that through the `remote_update` port. In production, that port calls
 - `~enforceSingleParent:true`
 - `~supportsAllDrives:true`
 - `~std_params:file_std_params`
-- resource-key headers from the current cached resource
+- resource-key headers from the current cached resource, built by
+  `DriveResourceKeys`
 
 On success it returns `Some patched_file`, so `update_remote_resource` refreshes
 the cached resource row from the server response.

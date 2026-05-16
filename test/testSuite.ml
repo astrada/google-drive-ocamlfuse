@@ -12,6 +12,7 @@ let _ =
            TestDriveCacheMaintenance.suite;
            TestDriveDownloads.suite;
            TestDrivePathNamespace.suite;
+           TestDriveResourceKeys.suite;
            TestDriveResourceById.suite;
            TestDriveRootResolution.suite;
            TestDriveResourceResolver.suite;

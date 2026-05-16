@@ -90,6 +90,8 @@ The `Makefile` is only a small wrapper around these dune commands.
     `DriveResourceById` through `DriveResourceByIdPorts`.
   - FUSE-visible path normalization and trash/lost+found/shared-with-me
     namespace predicates delegate into `DrivePathNamespace`.
+  - Google Drive resource-key header construction delegates into
+    `DriveResourceKeys`.
   - Configured root-folder id resolution and synthetic well-known resource
     creation delegate into `DriveRootResolution` through
     `DriveRootResolutionPorts`.
@@ -149,6 +151,14 @@ The `Makefile` is only a small wrapper around these dune commands.
     upload, and xattr paths.
   - Does not use production ports because it depends only on the path string
     and `Config.t`.
+
+- `src/driveResourceKeys.ml`
+  - Pure helper module for Google Drive resource-key headers.
+  - Builds `X-Goog-Drive-Resource-Keys` from remote id/resource-key pairs or
+    cached resources, preserving input order while skipping missing ids and
+    empty keys.
+  - Used by downloads, metadata mutations, uploads, rename/delete/trash
+    mutations, and xattr updates through the production `Drive` wrappers.
 
 - `src/driveRootResolution.ml`
   - Configured root-folder and well-known resource core.
@@ -359,6 +369,7 @@ Current tests are in:
 - `test/testDriveDownloads.ml`
 - `test/testDriveCacheMaintenance.ml`
 - `test/testDrivePathNamespace.ml`
+- `test/testDriveResourceKeys.ml`
 - `test/testDriveResourceById.ml`
 - `test/testDriveRootResolution.ml`
 - `test/testDriveRemoteUpdates.ml`
@@ -392,14 +403,16 @@ There are no end-to-end tests for:
 - rename/delete semantics against live Drive state
 
 The mutation, open-validation, read-side, download/materialization,
-cache-maintenance, path-namespace, remote-id lookup, root-resolution,
-remote-update-wrapper, file-mutation, metadata-mutation, upload-dispatch,
-upload-attempt, and xattr cores are covered by focused unit tests in
+cache-maintenance, path-namespace, resource-key header construction,
+remote-id lookup, root-resolution, remote-update-wrapper, file-mutation,
+metadata-mutation, upload-dispatch, upload-attempt, and xattr cores are
+covered by focused unit tests in
 `test/testDriveMutations.ml`,
 `test/testDriveOpens.ml`, `test/testDriveViews.ml`,
 `test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
 `test/testDriveCacheMaintenance.ml`,
 `test/testDrivePathNamespace.ml`,
+`test/testDriveResourceKeys.ml`,
 `test/testDriveResourceById.ml`, `test/testDriveRootResolution.ml`,
 `test/testDriveRemoteUpdates.ml`, `test/testDriveUploads.ml`,
 `test/testDriveReads.ml`,

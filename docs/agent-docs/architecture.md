@@ -26,6 +26,8 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
 - `src/drivePathNamespace.ml` holds the pure namespace constants and
   predicates for mapping FUSE-visible paths into cache paths and recognizing
   trash, lost+found, and shared-with-me paths
+- `src/driveResourceKeys.ml` holds the pure construction of Google Drive
+  resource-key headers from remote id/resource-key pairs or cached resources
 - `src/driveRootResolution.ml` holds configured root-folder id resolution and
   synthetic well-known resource rows for root, trash root, lost+found, and
   shared-with-me

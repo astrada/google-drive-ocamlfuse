@@ -55,7 +55,7 @@ Important ports include:
 - `get_content_path`
 - `create_file_resource`
 - `update_cached_resource_state_and_size`
-- `build_resource_keys_header_from_resource`
+- `build_resource_keys_header_from_resource`, backed by `DriveResourceKeys`
 - `remote_update`
 - `update_resource_from_file`
 - `select_first_resource_with_remote_id`
@@ -213,6 +213,10 @@ Headers come from:
 ```ocaml
 P.build_resource_keys_header_from_resource resource
 ```
+
+The production port delegates header construction to `DriveResourceKeys`, which
+builds `X-Goog-Drive-Resource-Keys` from the cached resource's remote id and
+resource key when both are present.
 
 The production request is:
 

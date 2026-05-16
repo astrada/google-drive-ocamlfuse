@@ -6,21 +6,6 @@ plans into `docs/plans/archive/`.
 
 ## Candidates
 
-### Resource Key Header Helpers
-
-Suggested module: `DriveResourceKeys`.
-
-Extract resource-key header construction from `Drive`, including:
-
-- `build_resource_keys_header`
-- `build_resource_keys_header_from_resource`
-- `build_resource_keys_header_from_resources`
-
-These helpers build the Drive `X-Goog-Drive-Resource-Keys` header used by
-update, delete, move, and upload flows. Extracting them would make it easier to
-test key filtering, ID/key pairing, and multi-resource header ordering without
-mocking Drive operations.
-
 ### Filesystem Stats
 
 Suggested module: `DriveFilesystemStats`.

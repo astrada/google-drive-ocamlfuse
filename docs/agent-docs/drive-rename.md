@@ -173,6 +173,10 @@ That matches the model for unorganized files: they have no real parent folder to
 remove, even though they were visible through the synthetic `/lost+found`
 directory.
 
+Move and rename requests include resource-key headers built by
+`DriveResourceKeys` from the cached source, target, and parent resources that
+participate in the Drive API call.
+
 ## `mv_keep_target`: Preserve Target History / Metadata
 
 The most unusual branch is `replace_target`.
@@ -398,6 +402,8 @@ When changing this area, watch these invariants:
 - source and target trash namespaces must match
 - `lost+found` remains a synthetic namespace with special move semantics
 - path namespace predicates must stay aligned with `DrivePathNamespace`
+- resource-key headers for update and move requests come from
+  `DriveResourceKeys`
 - `keep_duplicates` and `mv_keep_target` are separate policy levers
 - `mv_keep_target` can switch the surviving remote id from source to target
 - destination `NotFound` tombstones must be cleared after success
