@@ -114,9 +114,10 @@ Instead it runs:
 try_with_default (upload r)
 ```
 
-That means service/request failures first pass through the repository's default
-exception mapping. In practice, this is what turns transient backend/rate-limit
-style failures into `Utils.Temporary_error`, which the retry loop can recognize.
+That means service/request failures first pass through `DriveRequestHandling`,
+via the production `Drive.try_with_default` alias. In practice, this is what
+turns transient backend/rate-limit style failures into `Utils.Temporary_error`,
+which the retry loop can recognize.
 
 Without that normalization step, `with_retry` would not know which failures are
 supposed to be retried.
@@ -208,5 +209,5 @@ It only wraps one upload attempt with the shared flush and retry policy.
 - `src/drive.ml`: `upload`
 - `src/driveUploads.ml`: concrete upload attempt
 - `src/drive.ml`: `with_retry`
-- `src/drive.ml`: `try_with_default`
+- `src/driveRequestHandling.ml`: `try_with_default`
 - `src/drive.ml`: `upload_resource_by_id`

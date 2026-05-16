@@ -14,6 +14,7 @@ let _ =
            TestDriveFilesystemStats.suite;
            TestDrivePathNamespace.suite;
            TestDriveResourceKeys.suite;
+           TestDriveRequestHandling.suite;
            TestDriveResourceById.suite;
            TestDriveRootResolution.suite;
            TestDriveResourceResolver.suite;

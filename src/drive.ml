@@ -84,77 +84,11 @@ let is_lost_and_found = DrivePathNamespace.is_lost_and_found
 let is_shared_with_me_root = DrivePathNamespace.is_shared_with_me_root
 let is_shared_with_me = DrivePathNamespace.is_shared_with_me
 let get_path_in_cache = DrivePathNamespace.get_path_in_cache
-
-let match_service_error reason = function
-  | GapiService.ServiceError (_, e) -> (
-      match e.GapiError.RequestError.errors with
-      | [] -> false
-      | e :: _ -> e.GapiError.SingleError.reason = reason)
-  | _ -> false
-
-let handle_default_exceptions = function
-  | GapiService.ServiceError (_, e) -> (
-      let message =
-        e |> GapiError.RequestError.to_data_model |> GapiJson.data_model_to_json
-        |> Yojson.Safe.to_string
-      in
-      Utils.log_with_header "Service error: %s.\n%!" message;
-      match e.GapiError.RequestError.errors with
-      | [] -> Utils.raise_m IO_error
-      | e :: _ -> (
-          match e.GapiError.SingleError.reason with
-          | "userRateLimitExceeded" | "rateLimitExceeded" | "backendError"
-          | "downloadQuotaExceeded" ->
-              Utils.raise_m Utils.Temporary_error
-          | "insufficientFilePermissions" | "insufficientPermissions" ->
-              Utils.raise_m Permission_denied
-          | _ -> Utils.raise_m IO_error))
-  | GapiRequest.PermissionDenied _ ->
-      Utils.log_with_header "Server error: Permission denied.\n%!";
-      Utils.raise_m Permission_denied
-  | GapiRequest.RequestTimeout _ ->
-      Utils.log_with_header "Server error: Request Timeout.\n%!";
-      Utils.raise_m Utils.Temporary_error
-  | GapiRequest.PreconditionFailed _ | GapiRequest.Conflict _ ->
-      Utils.log_with_header "Server error: Conflict.\n%!";
-      Utils.raise_m Utils.Temporary_error
-  | GapiRequest.Forbidden _ ->
-      Utils.log_with_header "Server error: Forbidden.\n%!";
-      Utils.raise_m IO_error
-  | GapiRequest.Gone _ ->
-      Utils.log_with_header "Server error: Gone.\n%!";
-      Utils.raise_m IO_error
-  | GapiRequest.BadRequest _ ->
-      Utils.log_with_header "Server error: bad request.\n%!";
-      Utils.raise_m Utils.Temporary_error
-  | Buffering.Invalid_block -> Utils.raise_m Invalid_operation
-  | GapiRequest.NotFound _ ->
-      Utils.log_with_header "Server error: not found.\n%!";
-      Utils.raise_m File_not_found
-  | e -> Utils.raise_m e
-
+let match_service_error = DriveRequestHandling.match_service_error
+let handle_default_exceptions = DriveRequestHandling.handle_default_exceptions
 let build_resource_keys_header = DriveResourceKeys.build_resource_keys_header
-
-(* with_try with a default exception handler *)
-let try_with_default f s = Utils.try_with_m f handle_default_exceptions s
-
-(* retry with a default exception handler *)
-let with_retry_default f =
-  let rec loop n =
-    Utils.try_with_m f (fun e ->
-        try handle_default_exceptions e with
-        | Utils.Temporary_error ->
-            if n >= !Utils.max_retries then Utils.raise_m IO_error
-            else (
-              GapiUtils.wait_exponential_backoff n;
-              let n' = n + 1 in
-              Utils.log_with_header "Retrying (%d/%d).\n%!" n'
-                !Utils.max_retries;
-              loop n')
-        | _ -> Utils.raise_m e)
-  in
-  loop 0
-
+let try_with_default = DriveRequestHandling.try_with_default
+let with_retry_default = DriveRequestHandling.with_retry_default
 let get_file_extension = DriveResourceMapping.get_file_extension
 
 (* Resource cache *)

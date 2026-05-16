@@ -6,23 +6,6 @@ plans into `docs/plans/archive/`.
 
 ## Candidates
 
-### Request Handling And Retry
-
-Suggested module: `DriveRequestHandling`.
-
-Extract default request exception handling and retry wrappers from `Drive`,
-including:
-
-- `match_service_error`
-- `handle_default_exceptions`
-- `try_with_default`
-- `with_retry_default`
-
-This boundary would centralize how service errors are translated into Drive
-exceptions and how retryable operations are wrapped. It is higher impact than
-the smaller pure extractions because it affects many entrypoints, but it would
-give the exception policy direct unit coverage.
-
 ### Runtime Service Startup
 
 Suggested module: `DriveRuntimeServices`.

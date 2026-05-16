@@ -16,7 +16,7 @@ let download_resource resource =
 `DriveDownloads` owns the local-content materialization state machine.
 `DriveDownloadPorts` connects that policy to production cache access,
 filesystem checks and writes, Drive API export/download calls, per-resource
-locking, backoff, and exception mapping.
+locking, backoff, and exception mapping through `DriveRequestHandling`.
 
 Its job is not just "download bytes from Drive". Depending on the resource and
 its current cache state, it may instead:

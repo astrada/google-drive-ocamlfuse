@@ -94,6 +94,8 @@ The `Makefile` is only a small wrapper around these dune commands.
     `DriveResourceKeys`.
   - Filesystem-wide capacity reporting delegates quota and block math into
     `DriveFilesystemStats`.
+  - Default Drive request exception translation and retry wrapping delegate
+    into `DriveRequestHandling`.
   - Configured root-folder id resolution and synthetic well-known resource
     creation delegate into `DriveRootResolution` through
     `DriveRootResolutionPorts`.
@@ -168,6 +170,14 @@ The `Makefile` is only a small wrapper around these dune commands.
     the synthetic `Fuse.Unix_util.statvfs` record returned by `Drive.statfs`.
   - Owns the fixed 4 KiB block size, zero-limit/team-drive fallback policy, and
     placeholder `statvfs` fields.
+
+- `src/driveRequestHandling.ml`
+  - Request exception translation and default retry helper module.
+  - Owns Google service-error reason matching, mapping request failures into
+    the Drive exception contract, and retrying `Utils.Temporary_error` through
+    the default backoff policy.
+  - Exposes a small functor for unit tests so retry behavior can be tested
+    without sleeping or changing global retry settings.
 
 - `src/driveRootResolution.ml`
   - Configured root-folder and well-known resource core.
@@ -380,6 +390,7 @@ Current tests are in:
 - `test/testDriveFilesystemStats.ml`
 - `test/testDrivePathNamespace.ml`
 - `test/testDriveResourceKeys.ml`
+- `test/testDriveRequestHandling.ml`
 - `test/testDriveResourceById.ml`
 - `test/testDriveRootResolution.ml`
 - `test/testDriveRemoteUpdates.ml`
@@ -415,8 +426,8 @@ There are no end-to-end tests for:
 The mutation, open-validation, read-side, download/materialization,
 cache-maintenance, path-namespace, resource-key header construction,
 filesystem-stats, remote-id lookup, root-resolution, remote-update-wrapper,
-file-mutation, metadata-mutation, upload-dispatch, upload-attempt, and xattr
-cores are covered by focused unit tests in
+request-handling, file-mutation, metadata-mutation, upload-dispatch,
+upload-attempt, and xattr cores are covered by focused unit tests in
 `test/testDriveMutations.ml`,
 `test/testDriveOpens.ml`, `test/testDriveViews.ml`,
 `test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
@@ -424,6 +435,7 @@ cores are covered by focused unit tests in
 `test/testDriveFilesystemStats.ml`,
 `test/testDrivePathNamespace.ml`,
 `test/testDriveResourceKeys.ml`,
+`test/testDriveRequestHandling.ml`,
 `test/testDriveResourceById.ml`, `test/testDriveRootResolution.ml`,
 `test/testDriveRemoteUpdates.ml`, `test/testDriveUploads.ml`,
 `test/testDriveReads.ml`,

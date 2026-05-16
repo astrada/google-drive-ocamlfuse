@@ -30,6 +30,8 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   resource-key headers from remote id/resource-key pairs or cached resources
 - `src/driveFilesystemStats.ml` holds the pure quota and block-count policy
   for converting Drive metadata into a synthetic `statvfs` record
+- `src/driveRequestHandling.ml` holds Drive request service-error matching,
+  default exception translation, and default retry wrapping
 - `src/driveRootResolution.ml` holds configured root-folder id resolution and
   synthetic well-known resource rows for root, trash root, lost+found, and
   shared-with-me
@@ -219,7 +221,8 @@ the cache directory, keyed by Drive `remote_id`.
 Most remote operations run through:
 
 - `Oauth2.do_request`: authenticated request wrapper
-- `Drive.with_retry_default`: Drive-specific exception mapping and retries
+- `DriveRequestHandling`: Drive-specific exception mapping and default retries,
+  exposed to production wiring through the `Drive` helper aliases
 
 The FUSE adapter boundary in `bin/gdfuseFuse.ml` then wraps `Drive` callbacks
 through `handle_exception`, `with_drive_op`, and `drive_path_op`; see

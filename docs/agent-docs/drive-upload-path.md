@@ -190,7 +190,8 @@ the async worker path share the same downstream behavior:
 
 1. flush memory buffers to disk
 2. run `Drive.upload`, which delegates to `DriveUploads`
-3. normalize request failures through `try_with_default`
+3. normalize request failures through `DriveRequestHandling` via
+   `try_with_default`
 4. retry only `Utils.Temporary_error` through `with_retry`
 
 See `docs/agent-docs/drive-upload-resource-with-retry.md` for that wrapper.
