@@ -30,8 +30,7 @@ dirty, choose sync-vs-async dispatch, flush memory buffers, or retry failures.
 Those surrounding responsibilities live in:
 
 - `DriveUploadDispatch`
-- `Drive.upload_resource_with_retry`
-- `Drive.upload_resource_by_id`
+- `DriveUploadWorkerBridge`
 - `UploadQueue`
 
 `DriveUploads` owns one concrete upload attempt and the cache reconciliation
@@ -301,7 +300,8 @@ Possible failures come from:
 - the `remote_update` port
 - cache update helpers
 
-Failure normalization and retry live in `Drive.upload_resource_with_retry`.
+Failure normalization and retry live in `DriveUploadWorkerBridge`, reached
+through the `Drive.upload_resource_with_retry` wrapper.
 
 ## Test Coverage
 
@@ -329,6 +329,8 @@ Failure normalization and retry live in `Drive.upload_resource_with_retry`.
 
 - `src/driveUploads.ml`: concrete upload attempt
 - `src/drive.ml`: `DriveUploadPorts`, `UploadOps`, and `upload`
-- `src/drive.ml`: `upload_resource_with_retry`
+- `src/driveUploadWorkerBridge.ml`: shared upload execution wrapper
+- `src/drive.ml`: production upload worker bridge ports
 - `src/driveResourceMapping.ml`: post-upload resource mapping
 - `test/testDriveUploads.ml`
+- `test/testDriveUploadWorkerBridge.ml`

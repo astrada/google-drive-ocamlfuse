@@ -30,7 +30,9 @@ The parameters are:
 - `upload_resource`: callback for one queued `resource_id`
 
 In production, `DriveRuntimeServices` passes `Drive.upload_resource_by_id`
-through the `Drive` runtime-service port as that callback.
+through the `Drive` runtime-service port as that callback. That `Drive` helper
+delegates queued-resource reload and request execution to
+`DriveUploadWorkerBridge`.
 
 ## Entire Implementation
 

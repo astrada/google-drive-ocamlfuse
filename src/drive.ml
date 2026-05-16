@@ -1185,20 +1185,34 @@ let drive_upload_runtime () =
 
 let upload resource = UploadOps.upload (drive_upload_runtime ()) resource
 
+module DriveUploadWorkerBridgePorts = struct
+  let flush_memory_buffers = flush_memory_buffers
+  let upload = upload
+  let try_with_default = try_with_default
+  let with_resource_retry = with_retry
+  let select_resource_with_id = Cache.Resource.select_resource_with_id
+  let run_request request = do_request request |> ignore
+
+  let log_missing_resource resource_id =
+    Utils.log_with_header
+      "Cannot find queued resource to upload with resource_id=%Ld.\n%!"
+      resource_id
+end
+
+module UploadWorkerBridgeOps =
+  DriveUploadWorkerBridge.Make (DriveUploadWorkerBridgePorts)
+
+let drive_upload_worker_bridge_runtime () =
+  let context = Context.get_ctx () in
+  { DriveUploadWorkerBridge.cache = context.Context.cache }
+
 let upload_resource_with_retry resource =
-  flush_memory_buffers resource;
-  with_retry (fun r -> try_with_default (upload r)) resource
+  UploadWorkerBridgeOps.upload_resource_with_retry resource
 
 let upload_resource_by_id resource_id =
-  let context = Context.get_ctx () in
-  let cache = context.Context.cache in
-  let resource = Cache.Resource.select_resource_with_id cache resource_id in
-  match resource with
-  | Some r -> do_request (upload_resource_with_retry r) |> ignore
-  | None ->
-      Utils.log_with_header
-        "Cannot find queued resource to upload with resource_id=%Ld.\n%!"
-        resource_id
+  UploadWorkerBridgeOps.upload_resource_by_id
+    (drive_upload_worker_bridge_runtime ())
+    resource_id
 
 module DriveRuntimeServicePorts = struct
   let start_flush_db_thread = MemoryCache.start_flush_db_thread

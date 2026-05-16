@@ -222,7 +222,8 @@ In synchronous mode, nothing is queued.
 The helper immediately enters the direct-upload port, which production wiring
 maps to `upload_resource_with_retry resource`.
 That wrapper then reaches `Drive.upload`, which delegates the concrete upload
-attempt to `DriveUploads`.
+attempt to `DriveUploads`. The wrapper behavior itself lives in
+`DriveUploadWorkerBridge`.
 
 So the name reflects the general role in the upload pipeline, not the behavior
 of every branch.
@@ -266,7 +267,7 @@ resource.
 
 - `src/driveUploadDispatch.ml`: `queue_upload`
 - `src/drive.ml`: `flush_memory_buffers`
-- `src/drive.ml`: `upload_resource_with_retry`
+- `src/driveUploadWorkerBridge.ml`: `upload_resource_with_retry`
 - `src/driveUploads.ml`: concrete upload attempt reached downstream
 - `src/driveUploadDispatch.ml`: `upload_with_retry`
 - `src/drive.ml`: `replace_target_contents`

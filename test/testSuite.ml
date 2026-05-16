@@ -23,6 +23,7 @@ let _ =
            TestDriveUploads.suite;
            TestDriveRemoteUpdates.suite;
            TestDriveUploadDispatch.suite;
+           TestDriveUploadWorkerBridge.suite;
            TestDriveFileMutations.suite;
            TestDriveMetadataRefresh.suite;
            TestDriveResourceMapping.suite;

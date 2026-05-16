@@ -3,7 +3,8 @@
 ## Purpose
 
 `Drive.upload_resource_by_id` is the async-worker bridge from the upload queue
-back into the normal `Drive` upload machinery.
+back into the normal `Drive` upload machinery. In production, the `Drive`
+helper is a thin wrapper over `DriveUploadWorkerBridge`.
 
 It is intentionally small. Its job is only to:
 
@@ -30,37 +31,35 @@ It is not the remote Google Drive file id. That distinction matters because the
 helper reloads a local cache row first and only reaches the remote id later
 through the normal upload helpers.
 
-## Entire Implementation
+## Bridge Implementation
 
-The implementation is:
+The bridge behavior is:
 
 ```ocaml
-let upload_resource_by_id resource_id =
-  let context = Context.get_ctx () in
-  let cache = context.Context.cache in
-  let resource = Cache.Resource.select_resource_with_id cache resource_id in
-  match resource with
-  | Some r -> do_request (upload_resource_with_retry r) |> ignore
-  | None ->
-      Utils.log_with_header
-        "Cannot find queued resource to upload with resource_id=%Ld.\n%!"
-        resource_id
+let upload_resource_by_id runtime resource_id =
+  match P.select_resource_with_id runtime.cache resource_id with
+  | Some resource -> P.run_request (upload_resource_with_retry resource)
+  | None -> P.log_missing_resource resource_id
 ```
 
-That is the whole control flow.
+The production ports connect this behavior to `Cache.Resource`, `do_request`,
+the shared `upload_resource_with_retry` bridge, and the existing
+missing-resource log message.
 
 ## High-Level Flow
 
 At a high level, the helper does this:
 
-1. read the current global `Context`
-2. get the cache handle from that context
-3. reload the resource row by cache id
-4. if the row exists, run `do_request (upload_resource_with_retry r)`
-5. otherwise, log and return
+1. `Drive` reads the cache handle from the current global `Context`
+2. `Drive` builds the `DriveUploadWorkerBridge` runtime
+3. the bridge reloads the resource row by cache id
+4. if the row exists, the bridge runs the upload request through the production
+   request runner
+5. otherwise, the bridge logs and returns
 
 So this helper is the worker-side handoff from queue state back into the normal
-request/session upload path.
+request/session upload path. `Drive` supplies the current cache from `Context`
+when it builds the `DriveUploadWorkerBridge` runtime.
 
 ## Where It Is Used
 
@@ -101,13 +100,14 @@ does not need to duplicate the full resource record or remote file metadata.
 
 ## Request Boundary: `do_request`
 
-If the row exists, the helper executes:
+If the row exists, the bridge executes:
 
 ```ocaml
-do_request (upload_resource_with_retry r) |> ignore
+P.run_request (upload_resource_with_retry r)
 ```
 
-This is the point where the background worker re-enters the same authenticated
+The production `run_request` port calls `do_request request |> ignore`. This is
+the point where the background worker re-enters the same authenticated
 request/session layer used by foreground Drive operations.
 
 That matters because `upload_resource_with_retry r` is still a session
@@ -214,9 +214,11 @@ it.
 
 ## Source Pointers
 
-- `src/drive.ml`: `upload_resource_by_id`
+- `src/drive.ml`: `upload_resource_by_id` wrapper and production ports
+- `src/driveUploadWorkerBridge.ml`: queued-resource worker callback
 - `src/driveUploads.ml`: concrete upload attempt reached downstream
 - `src/driveRuntimeServices.ml`: async upload startup callback wiring
 - `src/drive.ml`: `init_filesystem`
 - `src/uploadQueue.ml`: `upload_resource`
 - `src/uploadQueue.ml`: `start_async_upload_thread`
+- `test/testDriveUploadWorkerBridge.ml`: bridge behavior tests

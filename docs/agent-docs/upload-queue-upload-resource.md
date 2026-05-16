@@ -241,7 +241,7 @@ This helper owns:
 - success deletion vs failure requeue
 - worker-thread handoff
 
-`Drive.upload_resource_by_id` owns:
+`DriveUploadWorkerBridge`, reached through `Drive.upload_resource_by_id`, owns:
 
 - resource-row reload by cache resource id
 - entry into `do_request`
@@ -287,5 +287,6 @@ It only advances one queued upload entry into worker execution.
 - `src/uploadQueue.ml`: `upload_resource`
 - `src/uploadQueue.ml`: `poll_upload_queue`
 - `src/uploadQueue.ml`: `start_async_upload_thread`
+- `src/driveUploadWorkerBridge.ml`: queued-resource callback behavior
 - `src/cache.ml`: `UploadQueue.select_next_resource`
 - `src/threadPool.ml`: `add_work`

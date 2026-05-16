@@ -126,6 +126,8 @@ The `Makefile` is only a small wrapper around these dune commands.
     through `DriveMetadataMutationPorts`.
   - `flush`, `fsync`, `release`, and rename-replace upload handoff delegate
     into `DriveUploadDispatch` through `DriveUploadDispatchPorts`.
+  - Shared upload execution and queued-resource worker callbacks delegate into
+    `DriveUploadWorkerBridge` through `DriveUploadWorkerBridgePorts`.
   - The concrete upload attempt delegates into `DriveUploads` through
     `DriveUploadPorts`.
   - `get_xattr`, `set_xattr`, `list_xattr`, and `remove_xattr` delegate into
@@ -293,6 +295,15 @@ The `Makefile` is only a small wrapper around these dune commands.
   - Owns the `ToUpload -> Uploading` gate, path re-resolution before dispatch,
     and the branch between direct upload and async enqueueing.
 
+- `src/driveUploadWorkerBridge.ml`
+  - Shared upload execution and async-worker callback core.
+  - Owns final memory-buffer flushing before upload, default exception
+    normalization, per-resource retry wrapping, queued-resource reload by cache
+    id, request execution from worker callbacks, and missing-row logging.
+  - Functorized over a narrow boundary so upload worker bridge behavior can be
+    unit tested without real `Context`, Drive API requests, upload queue state,
+    or OAuth request execution.
+
 - `src/driveUploads.ml`
   - Concrete upload-attempt core for existing remote resources.
   - Owns outgoing MIME/media selection, upload size detection, early
@@ -421,6 +432,7 @@ Current tests are in:
 - `test/testDriveMetadataMutations.ml`
 - `test/testDriveXattrs.ml`
 - `test/testDriveUploadDispatch.ml`
+- `test/testDriveUploadWorkerBridge.ml`
 - `test/testDriveMutations.ml`
 - `test/testDriveViews.ml`
 - `test/testGdfuseCli.ml`
@@ -447,8 +459,8 @@ The mutation, open-validation, read-side, download/materialization,
 cache-maintenance, path-namespace, resource-key header construction,
 filesystem-stats, remote-id lookup, root-resolution, remote-update-wrapper,
 request-handling, runtime-service startup, file-mutation, metadata-mutation,
-upload-dispatch, upload-attempt, and xattr cores are covered by focused unit
-tests in
+upload-dispatch, upload-worker-bridge, upload-attempt, and xattr cores are
+covered by focused unit tests in
 `test/testDriveMutations.ml`,
 `test/testDriveOpens.ml`, `test/testDriveViews.ml`,
 `test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
@@ -463,9 +475,9 @@ tests in
 `test/testDriveRemoteUpdates.ml`, `test/testDriveUploads.ml`,
 `test/testDriveReads.ml`,
 `test/testDriveFileMutations.ml`, `test/testDriveMetadataMutations.ml`,
-`test/testDriveUploadDispatch.ml`, and `test/testDriveXattrs.ml`, but live
-Drive and FUSE integration need manual validation for behavior changes in those
-paths.
+`test/testDriveUploadDispatch.ml`, `test/testDriveUploadWorkerBridge.ml`, and
+`test/testDriveXattrs.ml`, but live Drive and FUSE integration need manual
+validation for behavior changes in those paths.
 
 Any change in those areas should be reasoned carefully and ideally verified
 manually.

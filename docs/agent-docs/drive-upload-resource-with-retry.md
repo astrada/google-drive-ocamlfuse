@@ -3,7 +3,8 @@
 ## Purpose
 
 `Drive.upload_resource_with_retry` is the narrow wrapper immediately in front of
-the real network upload operation.
+the real network upload operation. In production, the `Drive` helper is a thin
+wrapper over `DriveUploadWorkerBridge`.
 
 It does not resolve paths, choose sync-vs-async policy, or own queue behavior.
 Its responsibility is narrower:
@@ -43,17 +44,22 @@ The details of those upstream layers live in:
 - `docs/agent-docs/drive-queue-upload.md`
 - `docs/agent-docs/drive-upload-resource-by-id.md`
 
-## Entire Implementation
+## Bridge Implementation
 
-The implementation is:
+The bridge behavior is:
 
 ```ocaml
 let upload_resource_with_retry resource =
-  flush_memory_buffers resource;
-  with_retry (fun r -> try_with_default (upload r)) resource
+  P.flush_memory_buffers resource;
+  P.with_resource_retry
+    (fun refreshed_resource ->
+      P.try_with_default (P.upload refreshed_resource))
+    resource
 ```
 
-That is the whole control flow.
+The production ports connect this behavior to `flush_memory_buffers`,
+`with_retry`, `try_with_default`, and the `Drive.upload` wrapper over
+`DriveUploads`.
 
 ## High-Level Flow
 
@@ -181,8 +187,9 @@ Downstream:
 - `Drive.upload` delegates to `DriveUploads`, which performs the actual
   `FilesResource.update`
 
-Once execution enters `upload_resource_with_retry`, the direct path and the
-async worker path share the same flush, normalization, and retry behavior.
+Once execution enters `DriveUploadWorkerBridge.upload_resource_with_retry`, the
+direct path and the async worker path share the same flush, normalization, and
+retry behavior.
 
 ## What `Drive.upload_resource_with_retry` Does Not Do
 
@@ -205,9 +212,11 @@ It only wraps one upload attempt with the shared flush and retry policy.
 
 ## Source Pointers
 
-- `src/drive.ml`: `upload_resource_with_retry`
+- `src/drive.ml`: `upload_resource_with_retry` wrapper and production ports
+- `src/driveUploadWorkerBridge.ml`: shared upload execution wrapper
 - `src/drive.ml`: `upload`
 - `src/driveUploads.ml`: concrete upload attempt
 - `src/drive.ml`: `with_retry`
 - `src/driveRequestHandling.ml`: `try_with_default`
-- `src/drive.ml`: `upload_resource_by_id`
+- `src/drive.ml`: `upload_resource_by_id` wrapper
+- `test/testDriveUploadWorkerBridge.ml`: bridge behavior tests

@@ -109,7 +109,8 @@ subsystem:
 
 - one poll thread created by `UploadQueue.start_async_upload_thread`
 - a `ThreadPool.t` sized by `config.async_upload_threads`
-- upload work delegated back into `Drive.upload_resource_by_id`
+- upload work delegated back into `Drive.upload_resource_by_id`, a thin
+  wrapper over `DriveUploadWorkerBridge`
 
 The separation is important:
 
@@ -282,6 +283,7 @@ When changing this area, check these invariants:
 
 - `src/driveRuntimeServices.ml`: startup branch policy
 - `src/drive.ml`: `init_filesystem`, `read_dir`, `upload_resource_by_id`
+- `src/driveUploadWorkerBridge.ml`: async upload worker callback behavior
 - `src/driveDirectoryReads.ml`: `read_dir`
 - `src/memoryCache.ml`: flush-db thread startup and polling loop
 - `src/uploadQueue.ml`: async upload poll thread and worker pool

@@ -162,7 +162,8 @@ If `config.async_upload_queue = false`, it calls the direct-upload port:
 upload_now_with_retry resource
 ```
 
-In production wiring, that port is `upload_resource_with_retry`.
+In production wiring, that port is `upload_resource_with_retry`, a thin
+`Drive` wrapper over `DriveUploadWorkerBridge`.
 
 ### Async Queue Mode
 
@@ -172,8 +173,8 @@ If `config.async_upload_queue = true`, it:
 2. inserts or reuses an upload-queue entry keyed by `resource_id`
 3. returns without waiting for the network upload to complete
 
-Later, the queue worker reloads the current resource row by cache id and calls
-back into `Drive.upload_resource_by_id`.
+Later, the queue worker reloads the current resource row by cache id through
+`Drive.upload_resource_by_id`, a thin wrapper over `DriveUploadWorkerBridge`.
 
 See `docs/agent-docs/drive-queue-upload.md` for the dispatch branch,
 `docs/agent-docs/upload-queue-queue-resource.md` for the queue-row insertion
@@ -185,8 +186,8 @@ helper and worker handoff,
 
 ### 6. Common Upload Execution
 
-Once execution reaches `upload_resource_with_retry`, the synchronous path and
-the async worker path share the same downstream behavior:
+Once execution reaches `DriveUploadWorkerBridge.upload_resource_with_retry`, the
+synchronous path and the async worker path share the same downstream behavior:
 
 1. flush memory buffers to disk
 2. run `Drive.upload`, which delegates to `DriveUploads`
@@ -299,8 +300,8 @@ When changing this area, watch these invariants:
 - `src/driveUploadDispatch.ml`: `upload_if_dirty`
 - `src/driveUploadDispatch.ml`: `upload_with_retry`
 - `src/driveUploadDispatch.ml`: `queue_upload`
-- `src/drive.ml`: `upload_resource_by_id`
-- `src/drive.ml`: `upload_resource_with_retry`
+- `src/driveUploadWorkerBridge.ml`: `upload_resource_by_id`,
+  `upload_resource_with_retry`
 - `src/drive.ml`: `upload`
 - `src/driveUploads.ml`: concrete upload attempt
 - `src/uploadQueue.ml`: async queue polling and worker dispatch

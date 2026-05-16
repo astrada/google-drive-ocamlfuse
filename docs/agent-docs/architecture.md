@@ -62,6 +62,8 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   `utime`, `chmod`, and `chown`
 - `src/driveUploadDispatch.ml` holds the upload-dispatch core for
   `start_uploading_if_dirty`, `upload_with_retry`, and `queue_upload`
+- `src/driveUploadWorkerBridge.ml` holds the shared upload execution wrapper
+  and async-worker callback bridge for queued uploads
 - `src/driveUploads.ml` holds the concrete upload-attempt core for MIME/media
   selection, `FilesResource.update` request shape, and post-upload cache
   reconciliation
@@ -76,9 +78,10 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   `DriveCacheMaintenancePorts`,
   `DriveOpenPorts`, `DriveViewPorts`, `DriveDirectoryReadPorts`,
   `DriveReadPorts`, `DriveStreamingPorts`, `DriveDownloadPorts`,
-  `DriveRemoteUpdatePorts`, `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,
-  `DriveUploadDispatchPorts`, `DriveUploadPorts`, and `DriveXattrPorts`, builds
-  the small runtimes from `Context`, and executes those sessions through
+  `DriveRemoteUpdatePorts`, `DriveFileMutationPorts`,
+  `DriveMetadataMutationPorts`, `DriveUploadDispatchPorts`,
+  `DriveUploadWorkerBridgePorts`, `DriveUploadPorts`, and `DriveXattrPorts`,
+  builds the small runtimes from `Context`, and executes those sessions through
   `Oauth2.do_request`
 
 The design is stateful. A global `Context.t` stores the current config, state,
@@ -378,10 +381,10 @@ that ensures the local cache file exists before write-side mutation begins.
 
 ## Upload Path
 
-Upload-dispatch logic lives in `DriveUploadDispatch`. The concrete upload
-attempt lives in `DriveUploads`, with `Drive.upload_resource_with_retry`,
-`Drive.upload_resource_by_id`, and `UploadQueue` providing surrounding flush,
-retry, and async-worker behavior.
+Upload-dispatch logic lives in `DriveUploadDispatch`. Shared upload execution
+and the queued-worker callback live in `DriveUploadWorkerBridge`. The concrete
+upload attempt lives in `DriveUploads`, with `UploadQueue` providing queue
+polling and worker scheduling.
 
 The file-level entrypoints that trigger this path are `Drive.flush`,
 `Drive.fsync`, and `Drive.release`; see
