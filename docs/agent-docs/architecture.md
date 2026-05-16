@@ -46,6 +46,9 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
 - `src/driveDirectoryReads.ml` holds the directory-listing core for `read_dir`
 - `src/driveReads.ml` holds the regular-file read core for direct streaming,
   memory-buffered streaming, local cache-file reads, and read-ahead scheduling
+- `src/driveStreaming.ml` holds the Drive media download, byte-range streaming,
+  memory-buffer callback, buffer-eviction startup, and deferred read-ahead
+  request adapter core
 - `src/driveDownloads.ml` holds the local-content materialization core for
   `download_resource`
 - `src/driveCacheMaintenance.ml` holds cache-size accounting, cache shrink,
@@ -72,8 +75,8 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   `DriveRootResolutionPorts`, `DriveMetadataRefreshPorts`,
   `DriveCacheMaintenancePorts`,
   `DriveOpenPorts`, `DriveViewPorts`, `DriveDirectoryReadPorts`,
-  `DriveReadPorts`, `DriveDownloadPorts`, `DriveRemoteUpdatePorts`,
-  `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,
+  `DriveReadPorts`, `DriveStreamingPorts`, `DriveDownloadPorts`,
+  `DriveRemoteUpdatePorts`, `DriveFileMutationPorts`, `DriveMetadataMutationPorts`,
   `DriveUploadDispatchPorts`, `DriveUploadPorts`, and `DriveXattrPorts`, builds
   the small runtimes from `Context`, and executes those sessions through
   `Oauth2.do_request`
@@ -327,7 +330,11 @@ The path is:
    - ensure a local cached file exists
    - read bytes from the local cache file
 
-Buffered streaming is handled by `Buffering.MemoryBuffers`.
+`DriveStreaming` owns the lower-level streaming adapters used by
+`DriveReads`: Drive media downloads, byte-range request construction,
+memory-buffer read-through callbacks, eviction-thread startup, and read-ahead
+request wrapping. Buffered streaming storage is handled by
+`Buffering.MemoryBuffers`.
 
 See `docs/agent-docs/drive-read.md` for the top-level branch selection, and
 `docs/agent-docs/drive-download-resource.md` for the non-streaming

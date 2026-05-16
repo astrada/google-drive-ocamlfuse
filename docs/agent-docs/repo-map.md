@@ -111,6 +111,8 @@ The `Makefile` is only a small wrapper around these dune commands.
   - `read_dir` delegates into `DriveDirectoryReads` through
     `DriveDirectoryReadPorts`.
   - `read` delegates into `DriveReads` through `DriveReadPorts`.
+  - Media download and byte-range streaming helpers delegate into
+    `DriveStreaming` through `DriveStreamingPorts`.
   - `download_resource` delegates into `DriveDownloads` through
     `DriveDownloadPorts`.
   - Cache-size accounting, cache shrink, cached-file deletion, memory-buffer
@@ -238,6 +240,14 @@ The `Makefile` is only a small wrapper around these dune commands.
     cache-file reads, and read-ahead scheduling.
   - Functorized over a narrow boundary so read policy can be unit tested
     without real `Context`, cache files, network calls, or background threads.
+
+- `src/driveStreaming.ml`
+  - Drive media streaming adapter core.
+  - Owns media-download retry behavior for abuse acknowledgement, byte-range
+    request construction, memory-buffer read-through callbacks,
+    buffer-eviction startup, and deferred read-ahead request retry wrapping.
+  - Functorized over a narrow boundary so streaming behavior can be unit tested
+    without real `Context`, Drive API requests, or background threads.
 
 - `src/driveDownloads.ml`
   - Local-content materialization core for `download_resource`.
@@ -394,6 +404,7 @@ Current tests are in:
 - `test/testConfigStore.ml`
 - `test/testDriveDirectoryReads.ml`
 - `test/testDriveDownloads.ml`
+- `test/testDriveStreaming.ml`
 - `test/testDriveCacheMaintenance.ml`
 - `test/testDriveFilesystemStats.ml`
 - `test/testDrivePathNamespace.ml`
@@ -441,6 +452,7 @@ tests in
 `test/testDriveMutations.ml`,
 `test/testDriveOpens.ml`, `test/testDriveViews.ml`,
 `test/testDriveDirectoryReads.ml`, `test/testDriveDownloads.ml`,
+`test/testDriveStreaming.ml`,
 `test/testDriveCacheMaintenance.ml`,
 `test/testDriveFilesystemStats.ml`,
 `test/testDrivePathNamespace.ml`,

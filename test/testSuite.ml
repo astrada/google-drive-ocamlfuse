@@ -11,6 +11,7 @@ let _ =
            TestGdfuseFlow.suite;
            TestDriveCacheMaintenance.suite;
            TestDriveDownloads.suite;
+           TestDriveStreaming.suite;
            TestDriveFilesystemStats.suite;
            TestDrivePathNamespace.suite;
            TestDriveResourceKeys.suite;

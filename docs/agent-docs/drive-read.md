@@ -21,6 +21,11 @@ policy to the production helpers for path normalization, resource lookup,
 streaming, local cache-file materialization, local file reads, and asynchronous
 read-ahead scheduling.
 
+The lower-level streaming helpers used by those ports live in `DriveStreaming`.
+That module owns Drive media download requests, byte-range construction,
+memory-buffer callbacks, buffer-eviction startup, and deferred read-ahead
+request wrapping.
+
 ## Strategy
 
 The core chooses one of three foreground read strategies:
@@ -75,7 +80,7 @@ with_retry (stream_resource offset buf) resource
 
 `stream_resource` computes the requested byte range, wraps the destination as a
 `GapiMediaResource.ArrayBuffer`, and downloads that range directly into the FUSE
-buffer.
+buffer. In production, this helper delegates to `DriveStreaming`.
 
 No local cache file is touched in this branch. On success, `DriveReads.read`
 returns:
@@ -97,7 +102,7 @@ with_retry (stream_resource_to_memory_buffer offset buf) resource
 This branch still streams from Drive, but it goes through
 `Buffering.MemoryBuffers`.
 
-The memory-buffer helper:
+The `DriveStreaming` memory-buffer helper:
 
 1. starts the buffer-eviction thread when needed
 2. fetches remote ranges into memory-buffer blocks
@@ -150,6 +155,9 @@ When read-ahead qualifies,
 `stream_resource_to_read_ahead_buffers offset resource` returns one session
 request per future block. `DriveReadPorts.enqueue_async_request` launches each
 request through `async_do_request`.
+`DriveStreaming` builds the memory-buffer read-ahead requests and wraps each
+deferred request with the per-resource retry helper before `DriveReads` enqueues
+it.
 
 Consequences:
 
@@ -164,3 +172,7 @@ Consequences:
 cover direct streaming, memory-buffer streaming, read-ahead scheduling, disabled
 read-ahead, local cache-file reads, trash-path normalization, and the second
 lookup that can suppress read-ahead when the resource no longer qualifies.
+
+`test/testDriveStreaming.ml` covers the lower-level streaming adapter behavior:
+media-download retry policy, range construction, buffer-eviction startup,
+memory-buffer callbacks, and read-ahead retry wrapping.

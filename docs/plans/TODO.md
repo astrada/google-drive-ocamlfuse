@@ -6,22 +6,6 @@ plans into `docs/plans/archive/`.
 
 ## Candidates
 
-### Streaming And Buffering Adapters
-
-Suggested module: `DriveStreaming`.
-
-Extract Drive media download and streaming helpers from `Drive`, including:
-
-- `download_media`
-- `stream_resource`
-- `start_buffer_eviction_thread`
-- `stream_resource_to_memory_buffer`
-- `stream_resource_to_read_ahead_buffers`
-
-This is a larger candidate because it touches memory-buffer lifecycle,
-read-ahead buffering, cache paths, and Drive download calls. It should likely be
-planned after the smaller boundaries above are complete.
-
 ### Upload Worker Bridge
 
 Suggested module: `DriveUploadWorkerBridge`.

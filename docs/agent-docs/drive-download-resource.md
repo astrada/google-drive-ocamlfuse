@@ -17,6 +17,8 @@ let download_resource resource =
 `DriveDownloadPorts` connects that policy to production cache access,
 filesystem checks and writes, Drive API export/download calls, per-resource
 locking, backoff, and exception mapping through `DriveRequestHandling`.
+For ordinary media downloads, the production port delegates the lower-level
+Drive media request behavior to `DriveStreaming`.
 
 Its job is not just "download bytes from Drive". Depending on the resource and
 its current cache state, it may instead:
@@ -37,6 +39,9 @@ It is distinct from the streaming read path:
 
 - `stream_resource` reads byte ranges directly into the FUSE buffer
 - `download_resource` materializes or validates a full local cache file
+
+Both paths share the lower-level `DriveStreaming` media-download helper for
+ordinary Drive file content.
 
 See `docs/agent-docs/drive-read.md` for the top-level `Drive.read` policy that
 decides when this helper is used instead of streaming.
@@ -244,12 +249,14 @@ download into `content_path`.
 Before the API call it sets the resource state to `Downloading`.
 
 The actual transfer uses the production `download_media_to_file` port, backed
-by `download_media`, which normally issues
-`FilesResource.get ... ~media_download`.
+by `DriveStreaming.download_media`, which normally issues
+`FilesResource.get ... ~media_download` with resource-key headers.
 
 There is one important exception path: if Drive rejects the request with
 `cannotDownloadAbusiveFile` and `config.acknowledge_abuse = true`, the helper
-retries the request with `acknowledgeAbuse = true`.
+retries the request with `acknowledgeAbuse = true`. That retry policy lives in
+`DriveStreaming`; `DriveDownloads` owns the surrounding local state transition
+and rollback behavior.
 
 If the API download fails after the state flip, the error handler restores the
 resource state to `ToDownload` before re-raising through the normal exception
@@ -352,3 +359,8 @@ reuse, `Downloading` polling and stuck recovery, `NotFound`, desktop and HTML
 document representations, export-link and export-call document downloads,
 ordinary media downloads, zero-byte file creation, failure rollback to
 `ToDownload`, and resources without a remote id.
+
+`test/testDriveStreaming.ml` covers the lower-level media request behavior used
+by the ordinary media branch, including resource-key headers, abuse
+acknowledgement retry, byte-range construction, memory-buffer callbacks, and
+read-ahead retry wrapping.

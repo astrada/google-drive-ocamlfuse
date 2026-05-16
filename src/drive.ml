@@ -737,28 +737,49 @@ let create_html_with_redirect resource content_path config =
          </html>"
         name url url name)
 
+module DriveStreamingPorts = struct
+  let build_resource_keys_header_from_resource =
+    build_resource_keys_header_from_resource
+
+  let get_media ~acknowledge_abuse ~media_download ~custom_headers ~file_id =
+    if acknowledge_abuse then fun session ->
+      FilesResource.get ~supportsAllDrives:true ~acknowledgeAbuse:true
+        ~std_params:file_download_std_params ~media_download ~custom_headers
+        ~fileId:file_id session
+    else fun session ->
+      FilesResource.get ~supportsAllDrives:true
+        ~std_params:file_download_std_params ~media_download ~custom_headers
+        ~fileId:file_id session
+
+  let match_service_error = match_service_error
+  let handle_default_exceptions e = handle_default_exceptions e
+  let with_retry_default = with_retry_default
+  let create_eviction_thread = Buffering.MemoryBuffers.create_eviction_thread
+
+  let set_buffer_eviction_thread thread =
+    Context.update_ctx (Context.buffer_eviction_thread ^= Some thread)
+
+  let read_block = Buffering.MemoryBuffers.read_block
+  let read_ahead = Buffering.MemoryBuffers.read_ahead
+
+  let with_resource_retry resource request =
+    with_retry (fun _ -> request) resource
+end
+
+module StreamingOps = DriveStreaming.Make (DriveStreamingPorts)
+
+let drive_streaming_runtime () =
+  let context = Context.get_ctx () in
+  {
+    DriveStreaming.config = context |. Context.config_lens;
+    memory_buffers = context.Context.memory_buffers;
+    buffer_eviction_thread = context.Context.buffer_eviction_thread;
+  }
+
 let download_media media_download resource =
-  let fileId = resource.CacheData.Resource.remote_id |> Option.get in
-  let custom_headers = build_resource_keys_header_from_resource resource in
-  Utils.try_with_m
-    (FilesResource.get ~supportsAllDrives:true
-       ~std_params:file_download_std_params ~media_download ~custom_headers
-       ~fileId) (fun e ->
-      let config = Context.get_ctx () |. Context.config_lens in
-      if
-        match_service_error "cannotDownloadAbusiveFile" e
-        && config.Config.acknowledge_abuse
-      then (
-        Utils.log_with_header
-          "Warning: abusive file detected, but downloading anyway (fileId=%s)\n\
-           %!"
-          fileId;
-        with_retry_default
-          (FilesResource.get ~supportsAllDrives:true ~acknowledgeAbuse:true
-             ~std_params:file_download_std_params ~media_download
-             ~custom_headers ~fileId)
-        >>= fun file -> SessionM.return file)
-      else handle_default_exceptions e)
+  StreamingOps.download_media
+    (drive_streaming_runtime ())
+    media_download resource
 
 let flush_memory_buffers resource =
   let context = Context.get_ctx () in
@@ -833,59 +854,19 @@ let download_resource resource =
   DownloadOps.download_resource (drive_download_runtime ()) resource
 
 let stream_resource offset buffer resource =
-  let length = Bigarray.Array1.dim buffer in
-  let finish = Int64.add offset (Int64.of_int (length - 1)) in
-  Utils.log_with_header
-    "BEGIN: Stream resource (id=%Ld, offset=%Ld, finish=%Ld, length=%d)\n%!"
-    resource.CacheData.Resource.id offset finish length;
-  let destination = GapiMediaResource.ArrayBuffer buffer in
-  let range_spec =
-    GapiMediaResource.generate_range_spec [ (Some offset, Some finish) ]
-  in
-  let media_download = { GapiMediaResource.destination; range_spec } in
-  download_media media_download resource >>= fun _ ->
-  Utils.log_with_header
-    "END: Stream resource (id=%Ld, offset=%Ld, finish=%Ld, length=%d)\n%!"
-    resource.CacheData.Resource.id offset finish length;
-  SessionM.return ()
-
-let start_buffer_eviction_thread context memory_buffers =
-  let config = context |. Context.config_lens in
-  if config.Config.stream_large_files then
-    if Option.is_none context.Context.buffer_eviction_thread then (
-      let thread =
-        Buffering.MemoryBuffers.create_eviction_thread memory_buffers
-      in
-      Utils.log_with_header "Starting buffer eviction thread (TID=%d)\n%!"
-        (Thread.id thread);
-      Context.update_ctx (Context.buffer_eviction_thread ^= Some thread))
+  StreamingOps.stream_resource
+    (drive_streaming_runtime ())
+    offset buffer resource
 
 let stream_resource_to_memory_buffer offset buffer resource =
-  let context = Context.get_ctx () in
-  let memory_buffers = context.Context.memory_buffers in
-  start_buffer_eviction_thread context memory_buffers;
-  let remote_id = resource.CacheData.Resource.remote_id |> Option.get in
-  Buffering.MemoryBuffers.read_block remote_id offset
-    (resource.CacheData.Resource.size |> Option.get)
-    (fun start_pos block_buffer ->
-      stream_resource start_pos block_buffer resource)
-    ~dest_arr:buffer memory_buffers
-  >>= fun () -> SessionM.return ()
+  StreamingOps.stream_resource_to_memory_buffer
+    (drive_streaming_runtime ())
+    offset buffer resource
 
 let stream_resource_to_read_ahead_buffers offset resource =
-  let context = Context.get_ctx () in
-  let memory_buffers = context.Context.memory_buffers in
-  start_buffer_eviction_thread context memory_buffers;
-  let remote_id = resource.CacheData.Resource.remote_id |> Option.get in
-  let config = context |. Context.config_lens in
-  Buffering.MemoryBuffers.read_ahead config.Config.read_ahead_buffers remote_id
-    offset
-    (resource.CacheData.Resource.size |> Option.get)
-    (fun start_pos block_buffer ->
-      stream_resource start_pos block_buffer resource)
-    memory_buffers
-  >>= fun ms ->
-  List.map (fun m -> with_retry (fun _ -> m) resource) ms |> SessionM.return
+  StreamingOps.stream_resource_to_read_ahead_buffers
+    (drive_streaming_runtime ())
+    offset resource
 
 let is_filesystem_read_only () =
   Context.get_ctx () |. Context.config_lens |. Config.read_only
