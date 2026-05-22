@@ -30,11 +30,11 @@ behavior that is already covered by unit tests.
 
 ## Execution Model
 
-- The suite should be built as a separate executable, for example an
-  `e2eSuite.exe` target under a dedicated `e2e/` directory.
+- The suite should be built as a separate OUnit2 executable under `test/e2e/`,
+  for example `e2eSuite.exe`.
 - The executable must not be registered under the existing `runtest` alias.
 - A developer should run it explicitly, for example with `dune exec` or a
-  dedicated alias such as `@e2e`.
+  dedicated `@e2e` alias.
 - The executable should fail fast when required environment variables,
   credentials, FUSE support, or mount helpers are unavailable.
 - The test runner should support selecting one test, a small group of tests, or
@@ -52,36 +52,98 @@ behavior that is already covered by unit tests.
   application/config/cache directory.
 - The test label, config path, log path, and cache location must be generated for
   the run and must not overlap with normal user profiles.
-- The suite must document which authentication mode it expects before it is run.
-- Secrets must be supplied through local files or environment variables that are
-  ignored by git.
-- The suite must not print token values, OAuth client secrets, service-account
-  private keys, or full credential JSON to stdout, stderr, or logs.
+- The suite expects standard user-account OAuth credentials with the OAuth flow
+  already completed before the run starts.
+- The runner should seed the temporary e2e profile from a configured client id,
+  client secret, and refresh token.
+- Secrets and safe-area configuration should be supplied through
+  `test/e2e/config.json`, a local JSON file ignored by git.
+- A checked-in `test/e2e/config.template.json` file should document the required
+  JSON shape.
+- The suite must not print token values, OAuth client secrets, or full
+  credential files to stdout, stderr, or logs.
+
+## Configuration File
+
+The default local configuration file should be `test/e2e/config.json`. It must
+be ignored by git because it contains OAuth secrets.
+
+The checked-in template should live at `test/e2e/config.template.json` and use
+the same keys as the real config file:
+
+```json
+{
+  "client_id": "replace-with-oauth-client-id",
+  "client_secret": "replace-with-oauth-client-secret",
+  "refresh_token": "replace-with-refresh-token",
+  "test_folder_path": "/google-drive-ocamlfuse-e2e"
+}
+```
+
+- `client_id`: OAuth client id for the standard user account.
+- `client_secret`: OAuth client secret for that client id.
+- `refresh_token`: refresh token produced by an already completed OAuth flow.
+- `test_folder_path`: Drive folder path for the safe parent area that contains
+  only disposable e2e run folders.
+
+The runner may later support an environment variable override for the config
+path, but the default path should be enough for local developer use.
 
 ## Authentication Strategy
 
-The preferred authentication mode for unattended runs is a dedicated test Google
-account or service account with access only to a disposable Drive area.
+The initial authentication path is a standard Google user account. The OAuth
+authorization flow is out of scope for the e2e executable: before the suite runs,
+the account must already have a refresh token available through the e2e
+configuration or environment.
 
-The initial suite should support one explicit authentication path before adding
-more:
+The preferred account is a dedicated test user with access only to a disposable
+Drive area. A developer account can be used only when the configured safe Drive
+area is isolated from personal or project-maintainer files.
 
-- Service-account credentials are suitable for repeatable automation when the
-  target Drive area can be shared with the service account.
-- Device or browser OAuth can be supported later for manual developer runs, but
-  should not be required for unattended execution.
+- Service accounts are not part of the initial authentication path.
+- Device or browser OAuth can be supported later for manual setup, but should not
+  be required during the test run.
 
-The runner should validate credentials with a small preflight operation before
-attempting to mount. If preflight fails, the suite should report an environment
-failure rather than a filesystem regression.
+The runner should use `gapi-ocaml` to refresh the access token and validate
+credentials with a small Drive API preflight operation before attempting to
+mount. If preflight fails, the suite should report an environment failure rather
+than a filesystem regression.
+
+## Direct Drive API Use
+
+The runner should call the Drive API directly through `gapi-ocaml` for harness
+responsibilities, not for ordinary filesystem behavior assertions.
+
+Allowed direct API responsibilities:
+
+- Refresh the access token and verify account access during preflight.
+- Locate or create the configured safe parent folder.
+- Create a unique remote root folder for each test run.
+- Configure the temporary e2e profile to mount that run root through
+  `root_folder`.
+- Clean up the run root after successful and failed runs.
+- Report remote ids and metadata needed for manual cleanup when automatic cleanup
+  fails.
+- Make targeted remote-side assertions only when the behavior cannot be observed
+  reliably through the mounted filesystem.
+
+Filesystem behavior tests should otherwise assert through the mounted
+filesystem. This keeps the end-to-end suite focused on the executable, FUSE
+boundary, cache, upload, and remount behavior users actually exercise.
 
 ## Remote Test Data Isolation
 
-- Every run should create or use a unique remote root folder for that run.
+- The suite should require a safe Drive area: a dedicated parent folder that the
+  e2e suite is allowed to create files in and recursively delete from.
+- The safe area must not be the account's Drive root, a folder containing
+  personal files, or a folder shared with unrelated workflows.
+- Every run should create a unique remote root folder inside the safe Drive area.
 - Test files and folders should include a generated run identifier in their
   names or app properties.
 - Tests should operate only inside the run's remote root.
-- Cleanup should remove the run's remote root after successful and failed runs.
+- Cleanup should trash the run's remote root after successful and failed runs.
+  Trashing keeps failed-run state available for manual debugging while still
+  removing it from the mounted test area.
 - If cleanup cannot complete, the runner should report the remote folder id and
   enough metadata for manual cleanup.
 - The suite should include a dry-run or preflight mode that checks access without
@@ -128,8 +190,8 @@ Additional coverage can be added after the harness is stable:
 ## Assertions
 
 - Prefer assertions through the mounted filesystem for user-visible behavior.
-- Use the Drive API only for setup, teardown, preflight checks, and assertions
-  that cannot be observed reliably through FUSE.
+- Use the Drive API only for setup, teardown, preflight checks, cleanup
+  diagnostics, and assertions that cannot be observed reliably through FUSE.
 - When checking eventual consistency, use bounded polling with clear timeout
   messages instead of fixed sleeps.
 - Verify both immediate mounted behavior and behavior after remount for changes
@@ -138,9 +200,12 @@ Additional coverage can be added after the harness is stable:
 
 ## Dune And Dependency Requirements
 
-- The end-to-end suite should have its own dune stanza and entrypoint.
+- The end-to-end suite should have its own dune stanza and entrypoint under
+  `test/e2e/`.
 - The existing `test/testSuite.exe` and `dune runtest` behavior must remain
   unchanged.
+- Add a dedicated `@e2e` dune alias for explicit end-to-end runs.
+- The runner should use OUnit2 for consistency with the existing unit tests.
 - Any new test-only dependencies should be scoped to the end-to-end executable
   when possible.
 - If a new opam dependency is required for the end-to-end suite, it should not
@@ -160,14 +225,18 @@ Additional coverage can be added after the harness is stable:
   cleanup failures.
 - Keep normal successful output concise enough for CI logs.
 
-## Open Decisions
+## Resolved Decisions
 
-- Whether the first implementation should use OUnit2, Alcotest, or a small
-  custom runner.
-- Whether the runner should call the Drive API directly for setup and teardown or
-  shell out to external tooling.
-- Whether the first authentication path should be service-account-only.
-- Whether the suite should live in `e2e/` or under `test/e2e/`.
-- Whether `@e2e` should be added as a dune alias, or whether `dune exec` is
-  explicit enough.
-- Which remote Drive area should be considered safe for project-maintainer runs.
+- Use OUnit2 as the test runner.
+- Use direct `gapi-ocaml` Drive API access for preflight, remote run-root
+  lifecycle, cleanup, cleanup diagnostics, and rare remote-only assertions.
+- Require a standard user account with OAuth already completed and a refresh
+  token available to the e2e runner.
+- Put the suite under `test/e2e/`.
+- Add a dedicated `@e2e` dune alias.
+- Treat the safe Drive area as a dedicated parent folder that contains only
+  disposable e2e run folders.
+- Use a git-ignored JSON file at `test/e2e/config.json` for client id, client
+  secret, refresh token, and test folder path.
+- Track `test/e2e/config.template.json` as the user-facing configuration guide.
+- Trash run roots during cleanup instead of deleting them permanently.

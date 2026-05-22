@@ -1,0 +1,6 @@
+{
+  "client_id": "replace-with-oauth-client-id",
+  "client_secret": "replace-with-oauth-client-secret",
+  "refresh_token": "replace-with-refresh-token",
+  "test_folder_path": "/google-drive-ocamlfuse-e2e"
+}
