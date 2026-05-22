@@ -1,0 +1,276 @@
+open GapiLens.Infix
+module File = GapiDriveV3Model.File
+
+exception Error of string
+
+type local_paths = {
+  root : string;
+  data_dir : string;
+  cache_dir : string;
+  log_dir : string;
+  mountpoint : string;
+  config_path : string;
+  state_path : string;
+  app_log_path : string;
+  stdout_path : string;
+  stderr_path : string;
+}
+
+type t = {
+  run_id : string;
+  config_path : string;
+  config : E2eConfig.t;
+  drive : E2eDrive.t;
+  safe_parent_id : string;
+  run_root_id : string;
+  gdfuse_exe : string;
+  label : string;
+  paths : local_paths;
+  mutable mount : E2eMount.t option;
+}
+
+module StateStore = KeyValueStore.MakeFileStore (State)
+
+let env name = try Some (Sys.getenv name) with Not_found -> None
+
+let find_build_marker path =
+  let marker = Filename.dir_sep ^ "_build" ^ Filename.dir_sep in
+  let marker_len = String.length marker in
+  let rec loop index =
+    if index + marker_len > String.length path then None
+    else if String.sub path index marker_len = marker then Some index
+    else loop (index + 1)
+  in
+  loop 0
+
+let rec find_workspace_root_from path =
+  let dune_project = Filename.concat path "dune-project" in
+  if Sys.file_exists dune_project then path
+  else
+    let parent = Filename.dirname path in
+    if parent = path then raise (Error "cannot locate repository root")
+    else find_workspace_root_from parent
+
+let workspace_root () =
+  let cwd = Sys.getcwd () in
+  match find_build_marker cwd with
+  | Some index -> String.sub cwd 0 index
+  | None -> find_workspace_root_from cwd
+
+let default_config_path root = Filename.concat root "test/e2e/config.json"
+
+let default_gdfuse_exe root =
+  Filename.concat root "_build/default/bin/gdfuse.exe"
+
+let config_path root =
+  match env "GDFUSE_E2E_CONFIG" with
+  | Some path -> path
+  | None -> default_config_path root
+
+let gdfuse_exe root =
+  match env "GDFUSE_E2E_GDFUSE_EXE" with
+  | Some path -> path
+  | None -> default_gdfuse_exe root
+
+let ensure_executable path =
+  if not (Sys.file_exists path) then
+    raise
+      (Error
+         (Printf.sprintf
+            "google-drive-ocamlfuse executable not found at %s; run dune build \
+             @install first"
+            path))
+
+let make_run_id () =
+  let millis = Int64.of_float (Unix.gettimeofday () *. 1000.0) in
+  Printf.sprintf "%d-%Ld" (Unix.getpid ()) millis
+
+let mkdir path = if not (Sys.file_exists path) then Unix.mkdir path 0o700
+
+let rec remove_path path =
+  if Sys.file_exists path then
+    match (Unix.lstat path).Unix.st_kind with
+    | Unix.S_DIR ->
+        Sys.readdir path
+        |> Array.iter (fun name -> remove_path (Filename.concat path name));
+        Unix.rmdir path
+    | _ -> Sys.remove path
+
+let make_local_paths run_id =
+  let root =
+    Filename.concat
+      (Filename.get_temp_dir_name ())
+      ("google-drive-ocamlfuse-e2e-" ^ run_id)
+  in
+  mkdir root;
+  let data_dir = Filename.concat root "data" in
+  let cache_dir = Filename.concat root "cache" in
+  let log_dir = Filename.concat root "log" in
+  let mountpoint = Filename.concat root "mnt" in
+  List.iter mkdir [ data_dir; cache_dir; log_dir; mountpoint ];
+  {
+    root;
+    data_dir;
+    cache_dir;
+    log_dir;
+    mountpoint;
+    config_path = Filename.concat root "config";
+    state_path = Filename.concat data_dir "state";
+    app_log_path = Filename.concat log_dir "gdfuse.log";
+    stdout_path = Filename.concat log_dir "gdfuse.stdout";
+    stderr_path = Filename.concat log_dir "gdfuse.stderr";
+  }
+
+let write_profile config run_root_id paths =
+  let gdfuse_config =
+    {
+      Config.default with
+      client_id = config.E2eConfig.client_id;
+      client_secret = config.client_secret;
+      root_folder = run_root_id;
+      data_directory = paths.data_dir;
+      cache_directory = paths.cache_dir;
+      log_directory = paths.log_dir;
+      log_to = paths.app_log_path;
+    }
+  in
+  ConfigStore.save
+    { ConfigStore.path = paths.config_path; data = gdfuse_config };
+  let state =
+    State.empty
+    |> State.refresh_token ^= config.refresh_token
+    |> State.saved_version ^= Config.version
+  in
+  StateStore.save { StateStore.path = paths.state_path; data = state }
+
+let print_run_summary run =
+  Printf.printf
+    "e2e run id: %s\n\
+     e2e config: %s\n\
+     e2e test folder path: %s\n\
+     e2e safe parent id: %s\n\
+     e2e run root id: %s\n\
+     e2e local root: %s\n\
+     e2e mountpoint: %s\n\
+     e2e app log: %s\n\
+     %!"
+    run.run_id run.config_path run.config.E2eConfig.test_folder_path
+    run.safe_parent_id run.run_root_id run.paths.root run.paths.mountpoint
+    run.paths.app_log_path
+
+let setup () =
+  let root = workspace_root () in
+  let config_path = config_path root in
+  let gdfuse_exe = gdfuse_exe root in
+  ensure_executable gdfuse_exe;
+  let config = E2eConfig.load config_path in
+  Printf.printf "Loaded e2e config: %s\n%!" (E2eConfig.describe config);
+  let drive = E2eDrive.create config in
+  E2eDrive.preflight drive;
+  let run_id = make_run_id () in
+  let paths = make_local_paths run_id in
+  let run_root_id = ref None in
+  try
+    let safe_parent_id =
+      E2eDrive.resolve_or_create_path drive config.E2eConfig.test_folder_path
+    in
+    let run_root = E2eDrive.create_run_root drive ~safe_parent_id ~run_id in
+    run_root_id := Some run_root.GapiDriveV3Model.File.id;
+    write_profile config run_root.File.id paths;
+    let run =
+      {
+        run_id;
+        config_path;
+        config;
+        drive;
+        safe_parent_id;
+        run_root_id = run_root.File.id;
+        gdfuse_exe;
+        label = "e2e-" ^ run_id;
+        paths;
+        mount = None;
+      }
+    in
+    print_run_summary run;
+    run
+  with e ->
+    (match !run_root_id with
+    | None -> ()
+    | Some file_id -> ( try E2eDrive.trash_file drive ~file_id with _ -> ()));
+    raise e
+
+let start_mount run =
+  match run.mount with
+  | Some _ -> ()
+  | None ->
+      let mount =
+        E2eMount.start ~gdfuse_exe:run.gdfuse_exe ~label:run.label
+          ~config_path:run.paths.config_path ~mountpoint:run.paths.mountpoint
+          ~stdout_path:run.paths.stdout_path ~stderr_path:run.paths.stderr_path
+      in
+      run.mount <- Some mount
+
+let stop_mount run =
+  match run.mount with
+  | None -> ()
+  | Some mount ->
+      run.mount <- None;
+      E2eMount.stop mount
+
+let remount run =
+  stop_mount run;
+  start_mount run
+
+let cleanup_remote run =
+  try
+    E2eDrive.trash_file run.drive ~file_id:run.run_root_id;
+    Printf.printf "Trashed e2e run root: %s\n%!" run.run_root_id
+  with e ->
+    raise
+      (Error
+         (Printf.sprintf
+            "failed to trash e2e run root %s; inspect and clean it manually: %s"
+            run.run_root_id (Printexc.to_string e)))
+
+let teardown ~keep_local run =
+  let cleanup_errors = ref [] in
+  let capture label f =
+    try f ()
+    with e ->
+      cleanup_errors := (label, Printexc.to_string e) :: !cleanup_errors
+  in
+  capture "unmount" (fun () -> stop_mount run);
+  capture "remote cleanup" (fun () -> cleanup_remote run);
+  if keep_local then
+    Printf.printf "Keeping e2e local root for debugging: %s\n%!" run.paths.root
+  else capture "local cleanup" (fun () -> remove_path run.paths.root);
+  match List.rev !cleanup_errors with
+  | [] -> ()
+  | errors ->
+      let details =
+        errors
+        |> List.map (fun (label, message) ->
+            Printf.sprintf "%s: %s" label message)
+        |> String.concat "\n"
+      in
+      raise (Error ("e2e cleanup failed:\n" ^ details))
+
+let with_run f =
+  let run = setup () in
+  let result =
+    try Ok (f run) with e -> Error (e, Printexc.get_raw_backtrace ())
+  in
+  let keep_local = match result with Ok _ -> false | Error _ -> true in
+  let cleanup_result =
+    try Ok (teardown ~keep_local run)
+    with e -> Error (e, Printexc.get_raw_backtrace ())
+  in
+  match (result, cleanup_result) with
+  | Ok value, Ok () -> value
+  | Error (e, backtrace), Ok () -> Printexc.raise_with_backtrace e backtrace
+  | Ok _, Error (cleanup, backtrace) ->
+      Printexc.raise_with_backtrace cleanup backtrace
+  | Error (e, backtrace), Error (cleanup, _) ->
+      Printf.eprintf "Additional cleanup failure: %s\n%!"
+        (Printexc.to_string cleanup);
+      Printexc.raise_with_backtrace e backtrace

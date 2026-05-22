@@ -55,8 +55,8 @@ Out of scope:
 - Ensure the e2e executable is not attached to the existing `runtest` alias.
 - Add an `@e2e` alias that depends on the e2e executable and the
   working-tree `gdfuse.exe`.
-- Make the harness receive the `gdfuse.exe` path from the alias, an environment
-  variable, or a deterministic build-relative path.
+- Resolve the `gdfuse.exe` path from `GDFUSE_E2E_GDFUSE_EXE` or a deterministic
+  build-relative path.
 - Add a placeholder test that verifies the runner starts and reports the
   selected config path.
 
@@ -71,6 +71,7 @@ Acceptance criteria:
 - Add a small e2e config module for `client_id`, `client_secret`,
   `refresh_token`, and `test_folder_path`.
 - Parse JSON from `test/e2e/config.json`.
+- Support `GDFUSE_E2E_CONFIG` as an override for the config path.
 - Reject missing, empty, malformed, or template-placeholder values.
 - Redact `client_secret` and `refresh_token` from all normal and failure output.
 - Keep `test/e2e/config.template.json` aligned with the parser.

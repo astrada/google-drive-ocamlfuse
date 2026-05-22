@@ -1,0 +1,9 @@
+(executable
+ (flags :standard -w -3)
+ (libraries threads google_drive_ocamlfuse ounit2 yojson)
+ (name e2eSuite))
+
+(alias
+ (name e2e)
+ (deps e2eSuite.exe ../../bin/gdfuse.exe)
+ (action (run ./e2eSuite.exe)))

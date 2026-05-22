@@ -86,8 +86,9 @@ the same keys as the real config file:
 - `test_folder_path`: Drive folder path for the safe parent area that contains
   only disposable e2e run folders.
 
-The runner may later support an environment variable override for the config
-path, but the default path should be enough for local developer use.
+The runner supports `GDFUSE_E2E_CONFIG` as an environment variable override for
+the local configuration path. The default path should be enough for normal local
+developer use.
 
 ## Authentication Strategy
 
@@ -240,3 +241,5 @@ Additional coverage can be added after the harness is stable:
   secret, refresh token, and test folder path.
 - Track `test/e2e/config.template.json` as the user-facing configuration guide.
 - Trash run roots during cleanup instead of deleting them permanently.
+- Support `GDFUSE_E2E_CONFIG` for overriding the local e2e config path.
+- Support `GDFUSE_E2E_GDFUSE_EXE` for overriding the executable under test.
