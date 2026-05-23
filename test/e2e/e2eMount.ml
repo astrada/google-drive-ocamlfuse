@@ -41,6 +41,55 @@ let process_output process =
     (read_file process.stdout_path)
     (read_file process.stderr_path)
 
+let lines_of_file path =
+  if not (Sys.file_exists path) then []
+  else
+    Utils.with_in_channel path (fun ch ->
+        let rec loop acc =
+          match input_line ch with
+          | line -> loop (line :: acc)
+          | exception End_of_file -> List.rev acc
+        in
+        loop [])
+
+let last_lines count lines =
+  let length = List.length lines in
+  let drop = max 0 (length - count) in
+  lines
+  |> List.mapi (fun index line -> (index, line))
+  |> List.filter_map (fun (index, line) ->
+      if index < drop then None else Some line)
+
+let tail_file ~lines path =
+  lines_of_file path |> last_lines lines |> String.concat "\n"
+
+let command_exists command =
+  let check path =
+    try
+      Unix.access path [ Unix.X_OK ];
+      true
+    with Unix.Unix_error _ -> false
+  in
+  if Filename.is_relative command then
+    let path =
+      try Sys.getenv "PATH" with Not_found -> "/bin:/usr/bin:/usr/local/bin"
+    in
+    path |> String.split_on_char ':'
+    |> List.exists (fun dir -> check (Filename.concat dir command))
+  else check command
+
+let unmount_helpers = [ "fusermount3"; "fusermount"; "umount" ]
+let available_unmount_helper () = List.find_opt command_exists unmount_helpers
+
+let require_unmount_helper () =
+  match available_unmount_helper () with
+  | Some helper -> helper
+  | None ->
+      raise
+        (Error
+           "no FUSE unmount helper found; expected fusermount3, fusermount, or \
+            umount in PATH")
+
 let is_mountpoint path =
   if Sys.file_exists "/proc/self/mounts" then (
     let mounted = ref false in
@@ -68,8 +117,8 @@ let wait_until ?(timeout = 30.0) ?(interval = 0.25) predicate =
   in
   loop ()
 
-let start ~gdfuse_exe ~label ~config_path ~mountpoint ~stdout_path ~stderr_path
-    =
+let start ~timeout ~gdfuse_exe ~label ~config_path ~mountpoint ~stdout_path
+    ~stderr_path =
   let stdin_fd = Unix.openfile "/dev/null" [ Unix.O_RDONLY ] 0 in
   let stdout_fd =
     Unix.openfile stdout_path
@@ -99,7 +148,7 @@ let start ~gdfuse_exe ~label ~config_path ~mountpoint ~stdout_path ~stderr_path
     { pid; mountpoint; stdout_path; stderr_path; exit_status = None }
   in
   let mounted =
-    wait_until (fun () ->
+    wait_until ~timeout (fun () ->
         match reap_if_exited process with
         | Some _ -> false
         | None -> is_mountpoint mountpoint)
@@ -141,19 +190,18 @@ let unmount mountpoint =
   || run_unmount_helper "fusermount" [ "-u"; mountpoint ]
   || run_unmount_helper "umount" [ mountpoint ]
 
-let stop process =
+let stop ~timeout process =
   let unmount_ok =
     if is_mountpoint process.mountpoint then unmount process.mountpoint
     else true
   in
   let unmounted =
     if unmount_ok then
-      wait_until ~timeout:10.0 (fun () ->
-          not (is_mountpoint process.mountpoint))
+      wait_until ~timeout (fun () -> not (is_mountpoint process.mountpoint))
     else false
   in
   let exited =
-    wait_until ~timeout:10.0 (fun () -> Option.is_some (reap_if_exited process))
+    wait_until ~timeout (fun () -> Option.is_some (reap_if_exited process))
   in
   if not exited then (
     (try Unix.kill process.pid Sys.sigterm with Unix.Unix_error _ -> ());

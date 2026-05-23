@@ -20,6 +20,7 @@ type t = {
   run_id : string;
   config_path : string;
   config : E2eConfig.t;
+  settings : E2eSettings.t;
   drive : E2eDrive.t;
   safe_parent_id : string;
   run_root_id : string;
@@ -80,6 +81,13 @@ let ensure_executable path =
             "google-drive-ocamlfuse executable not found at %s; run dune build \
              @install first"
             path))
+  else
+    try Unix.access path [ Unix.X_OK ]
+    with Unix.Unix_error _ ->
+      raise
+        (Error
+           (Printf.sprintf
+              "google-drive-ocamlfuse executable is not executable: %s" path))
 
 let make_run_id () =
   let millis = Int64.of_float (Unix.gettimeofday () *. 1000.0) in
@@ -147,24 +155,65 @@ let print_run_summary run =
   Printf.printf
     "e2e run id: %s\n\
      e2e config: %s\n\
+     e2e settings: %s\n\
      e2e test folder path: %s\n\
      e2e safe parent id: %s\n\
      e2e run root id: %s\n\
      e2e local root: %s\n\
      e2e mountpoint: %s\n\
      e2e app log: %s\n\
+     e2e stdout: %s\n\
+     e2e stderr: %s\n\
      %!"
-    run.run_id run.config_path run.config.E2eConfig.test_folder_path
-    run.safe_parent_id run.run_root_id run.paths.root run.paths.mountpoint
-    run.paths.app_log_path
+    run.run_id run.config_path
+    (E2eSettings.describe run.settings)
+    run.config.E2eConfig.test_folder_path run.safe_parent_id run.run_root_id
+    run.paths.root run.paths.mountpoint run.paths.app_log_path
+    run.paths.stdout_path run.paths.stderr_path
 
-let setup () =
+let load_common_environment () =
   let root = workspace_root () in
   let config_path = config_path root in
   let gdfuse_exe = gdfuse_exe root in
+  let settings = E2eSettings.load () in
   ensure_executable gdfuse_exe;
+  let unmount_helper = E2eMount.require_unmount_helper () in
   let config = E2eConfig.load config_path in
   Printf.printf "Loaded e2e config: %s\n%!" (E2eConfig.describe config);
+  Printf.printf "Loaded e2e settings: %s\n%!" (E2eSettings.describe settings);
+  Printf.printf "Using FUSE unmount helper: %s\n%!" unmount_helper;
+  (config_path, gdfuse_exe, settings, config)
+
+let preflight () =
+  let config_path, gdfuse_exe, settings, config = load_common_environment () in
+  let run_id = "preflight-" ^ make_run_id () in
+  let paths = make_local_paths run_id in
+  let cleanup () = remove_path paths.root in
+  try
+    let drive = E2eDrive.create config in
+    E2eDrive.preflight drive;
+    let safe_parent_id =
+      E2eDrive.resolve_or_create_path drive config.E2eConfig.test_folder_path
+    in
+    Printf.printf
+      "e2e preflight ok\n\
+       e2e config: %s\n\
+       e2e executable: %s\n\
+       e2e settings: %s\n\
+       e2e test folder path: %s\n\
+       e2e safe parent id: %s\n\
+       e2e temporary local root probe: %s\n\
+       %!"
+      config_path gdfuse_exe
+      (E2eSettings.describe settings)
+      config.E2eConfig.test_folder_path safe_parent_id paths.root;
+    cleanup ()
+  with e ->
+    cleanup ();
+    raise e
+
+let setup () =
+  let config_path, gdfuse_exe, settings, config = load_common_environment () in
   let drive = E2eDrive.create config in
   E2eDrive.preflight drive;
   let run_id = make_run_id () in
@@ -182,6 +231,7 @@ let setup () =
         run_id;
         config_path;
         config;
+        settings;
         drive;
         safe_parent_id;
         run_root_id = run_root.File.id;
@@ -204,7 +254,8 @@ let start_mount run =
   | Some _ -> ()
   | None ->
       let mount =
-        E2eMount.start ~gdfuse_exe:run.gdfuse_exe ~label:run.label
+        E2eMount.start ~timeout:run.settings.mount_timeout_seconds
+          ~gdfuse_exe:run.gdfuse_exe ~label:run.label
           ~config_path:run.paths.config_path ~mountpoint:run.paths.mountpoint
           ~stdout_path:run.paths.stdout_path ~stderr_path:run.paths.stderr_path
       in
@@ -215,7 +266,7 @@ let stop_mount run =
   | None -> ()
   | Some mount ->
       run.mount <- None;
-      E2eMount.stop mount
+      E2eMount.stop ~timeout:run.settings.unmount_timeout_seconds mount
 
 let remount run =
   stop_mount run;
@@ -235,8 +286,12 @@ let cleanup_remote run =
 let teardown ~keep_local run =
   let cleanup_errors = ref [] in
   let capture label f =
-    try f ()
+    try
+      f ();
+      Printf.printf "e2e cleanup %s: ok\n%!" label
     with e ->
+      Printf.eprintf "e2e cleanup %s: failed: %s\n%!" label
+        (Printexc.to_string e);
       cleanup_errors := (label, Printexc.to_string e) :: !cleanup_errors
   in
   capture "unmount" (fun () -> stop_mount run);
@@ -255,12 +310,47 @@ let teardown ~keep_local run =
       in
       raise (Error ("e2e cleanup failed:\n" ^ details))
 
+let print_file_excerpt label path lines =
+  let excerpt = E2eMount.tail_file ~lines path in
+  if excerpt = "" then Printf.eprintf "%s: %s (empty or missing)\n%!" label path
+  else Printf.eprintf "%s: %s\n%s\n%!" label path excerpt
+
+let print_failure_diagnostics run ~case ~exn =
+  Printf.eprintf
+    "\n\
+     e2e failure diagnostics\n\
+     case: %s\n\
+     exception: %s\n\
+     run id: %s\n\
+     run root id: %s\n\
+     local root: %s\n\
+     mountpoint: %s\n\
+     mount status: %s\n\
+     app log: %s\n\
+     stdout: %s\n\
+     stderr: %s\n\
+     %!"
+    case (Printexc.to_string exn) run.run_id run.run_root_id run.paths.root
+    run.paths.mountpoint
+    (if E2eMount.is_mountpoint run.paths.mountpoint then "mounted"
+     else "not mounted")
+    run.paths.app_log_path run.paths.stdout_path run.paths.stderr_path;
+  print_file_excerpt "last app log lines" run.paths.app_log_path
+    run.settings.log_excerpt_lines;
+  print_file_excerpt "last stdout lines" run.paths.stdout_path
+    run.settings.log_excerpt_lines;
+  print_file_excerpt "last stderr lines" run.paths.stderr_path
+    run.settings.log_excerpt_lines
+
 let with_run f =
   let run = setup () in
   let result =
     try Ok (f run) with e -> Error (e, Printexc.get_raw_backtrace ())
   in
-  let keep_local = match result with Ok _ -> false | Error _ -> true in
+  let keep_local =
+    run.settings.E2eSettings.keep_local
+    || match result with Ok _ -> false | Error _ -> true
+  in
   let cleanup_result =
     try Ok (teardown ~keep_local run)
     with e -> Error (e, Printexc.get_raw_backtrace ())

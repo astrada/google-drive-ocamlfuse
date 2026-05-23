@@ -1,0 +1,59 @@
+# End-To-End Tests
+
+This directory contains the optional end-to-end test suite for
+`google-drive-ocamlfuse`. The suite uses a real Google Drive account, a real
+FUSE mount, and the working-tree executable.
+
+The suite is intentionally separate from `dune runtest`.
+
+## Configure
+
+Copy the template and fill in local OAuth credentials:
+
+```sh
+cp test/e2e/config.template.json test/e2e/config.json
+```
+
+`test/e2e/config.json` is ignored by git. It must contain:
+
+- `client_id`: OAuth client id.
+- `client_secret`: OAuth client secret.
+- `refresh_token`: refresh token from an already completed OAuth flow.
+- `test_folder_path`: absolute Drive path for the safe parent folder.
+
+The safe parent folder should contain only disposable e2e run folders. The suite
+creates one run root inside it for each full run, then moves that run root to
+Drive trash during cleanup. Trashing keeps failed-run state available for manual
+debugging without leaving it visible in the mounted test area.
+
+## Run
+
+Validate local configuration, OAuth, Drive access, executable lookup, local temp
+directory creation, and FUSE helper availability without mounting:
+
+```sh
+make e2e-preflight
+```
+
+Run the full e2e smoke suite:
+
+```sh
+make e2e
+```
+
+The full suite creates a temporary local profile, mounts the working-tree
+executable, runs named filesystem tests under one remote run root, unmounts, and
+trashes the remote run root.
+
+## Overrides
+
+- `GDFUSE_E2E_CONFIG`: path to a config JSON file.
+- `GDFUSE_E2E_GDFUSE_EXE`: path to the executable under test.
+- `GDFUSE_E2E_MOUNT_TIMEOUT_SECONDS`: mount startup timeout.
+- `GDFUSE_E2E_UNMOUNT_TIMEOUT_SECONDS`: unmount timeout.
+- `GDFUSE_E2E_FS_TIMEOUT_SECONDS`: filesystem polling timeout.
+- `GDFUSE_E2E_KEEP_LOCAL`: keep local temporary state after successful runs.
+- `GDFUSE_E2E_LOG_EXCERPT_LINES`: number of log lines to show on failure.
+
+Secrets are redacted from normal output. On failure, the suite prints the local
+root, mountpoint, log paths, run root id, mount status, and log excerpts.

@@ -7,3 +7,8 @@
  (name e2e)
  (deps e2eSuite.exe ../../bin/gdfuse.exe)
  (action (run ./e2eSuite.exe)))
+
+(alias
+ (name e2e-preflight)
+ (deps e2eSuite.exe ../../bin/gdfuse.exe)
+ (action (run ./e2eSuite.exe --preflight)))
