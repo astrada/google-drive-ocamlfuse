@@ -389,43 +389,123 @@ let test_moderate_size_file_remount_read run dir =
       wait_file_size run file_path (Int64.of_int (String.length expected));
       wait_file_content run file_path expected)
 
-let suite =
+type case = {
+  label : string;
+  directory : string;
+  test : E2eHarness.t -> string -> unit;
+}
+
+let contains ~needle haystack =
+  let needle_length = String.length needle in
+  let haystack_length = String.length haystack in
+  if needle_length = 0 then true
+  else if needle_length > haystack_length then false
+  else
+    let rec loop index =
+      if index > haystack_length - needle_length then false
+      else if String.sub haystack index needle_length = needle then true
+      else loop (index + 1)
+    in
+    loop 0
+
+let cases =
+  [
+    {
+      label = "mount root listing";
+      directory = "test-mount-root-listing";
+      test = test_mount_root_listing;
+    };
+    {
+      label = "create write remount read";
+      directory = "test-create-write-remount-read";
+      test = test_create_write_remount_read;
+    };
+    {
+      label = "create remove directory";
+      directory = "test-create-remove-directory";
+      test = test_create_remove_directory;
+    };
+    {
+      label = "rename file";
+      directory = "test-rename-file";
+      test = test_rename_file;
+    };
+    {
+      label = "move file between directories";
+      directory = "test-move-file-between-directories";
+      test = test_move_file_between_directories;
+    };
+    {
+      label = "truncate remount read";
+      directory = "test-truncate-remount-read";
+      test = test_truncate_remount_read;
+    };
+    {
+      label = "delete remount absent";
+      directory = "test-delete-remount-absent";
+      test = test_delete_remount_absent;
+    };
+    {
+      label = "overwrite shorter remount read";
+      directory = "test-overwrite-shorter-remount-read";
+      test = test_overwrite_shorter_remount_read;
+    };
+    {
+      label = "overwrite longer remount read";
+      directory = "test-overwrite-longer-remount-read";
+      test = test_overwrite_longer_remount_read;
+    };
+    {
+      label = "append remount read";
+      directory = "test-append-remount-read";
+      test = test_append_remount_read;
+    };
+    {
+      label = "partial overwrite remount read";
+      directory = "test-partial-overwrite-remount-read";
+      test = test_partial_overwrite_remount_read;
+    };
+    {
+      label = "listing cache coherence";
+      directory = "test-listing-cache-coherence";
+      test = test_listing_cache_coherence;
+    };
+    {
+      label = "delete trashes remote file";
+      directory = "test-delete-trashes-remote-file";
+      test = test_delete_trashes_remote_file;
+    };
+    {
+      label = "moderate size file remount read";
+      directory = "test-moderate-size-file-remount-read";
+      test = test_moderate_size_file_remount_read;
+    };
+  ]
+
+let case_summary { label; directory; _ } =
+  Printf.sprintf "%s (%s)" label directory
+
+let available_cases_text () =
+  cases |> List.map case_summary
+  |> List.map (Printf.sprintf "  - %s")
+  |> String.concat "\n"
+
+let matches_filter filter { label; directory; _ } =
+  contains ~needle:filter label || contains ~needle:filter directory
+
+let selected_cases = function
+  | None -> cases
+  | Some filter -> List.filter (matches_filter filter) cases
+
+let suite ?only () =
+  let selected = selected_cases only in
+  if selected = [] then
+    raise
+      (E2eHarness.Error
+         (Printf.sprintf "no e2e cases matched %S. Available cases:\n%s"
+            (match only with None -> "" | Some filter -> filter)
+            (available_cases_text ())));
   "google-drive-ocamlfuse e2e"
-  >::: [
-         "mount root listing"
-         >:: with_case "test-mount-root-listing" test_mount_root_listing;
-         "create write remount read"
-         >:: with_case "test-create-write-remount-read"
-               test_create_write_remount_read;
-         "create remove directory"
-         >:: with_case "test-create-remove-directory"
-               test_create_remove_directory;
-         "rename file" >:: with_case "test-rename-file" test_rename_file;
-         "move file between directories"
-         >:: with_case "test-move-file-between-directories"
-               test_move_file_between_directories;
-         "truncate remount read"
-         >:: with_case "test-truncate-remount-read" test_truncate_remount_read;
-         "delete remount absent"
-         >:: with_case "test-delete-remount-absent" test_delete_remount_absent;
-         "overwrite shorter remount read"
-         >:: with_case "test-overwrite-shorter-remount-read"
-               test_overwrite_shorter_remount_read;
-         "overwrite longer remount read"
-         >:: with_case "test-overwrite-longer-remount-read"
-               test_overwrite_longer_remount_read;
-         "append remount read"
-         >:: with_case "test-append-remount-read" test_append_remount_read;
-         "partial overwrite remount read"
-         >:: with_case "test-partial-overwrite-remount-read"
-               test_partial_overwrite_remount_read;
-         "listing cache coherence"
-         >:: with_case "test-listing-cache-coherence"
-               test_listing_cache_coherence;
-         "delete trashes remote file"
-         >:: with_case "test-delete-trashes-remote-file"
-               test_delete_trashes_remote_file;
-         "moderate size file remount read"
-         >:: with_case "test-moderate-size-file-remount-read"
-               test_moderate_size_file_remount_read;
-       ]
+  >::: List.map
+         (fun case -> case.label >:: with_case case.directory case.test)
+         selected

@@ -41,6 +41,19 @@ Run the full e2e smoke suite:
 make e2e
 ```
 
+List the available named cases:
+
+```sh
+make e2e-list
+```
+
+Run a matching case or group of cases by label or per-case directory name:
+
+```sh
+make e2e CASE="append remount read"
+make e2e CASE=test-append-remount-read
+```
+
 The full suite creates a temporary local profile, mounts the working-tree
 executable, runs named filesystem tests under one remote run root, unmounts, and
 trashes the remote run root.
@@ -52,6 +65,8 @@ trashes the remote run root.
 - `GDFUSE_E2E_MOUNT_TIMEOUT_SECONDS`: mount startup timeout.
 - `GDFUSE_E2E_UNMOUNT_TIMEOUT_SECONDS`: unmount timeout.
 - `GDFUSE_E2E_FS_TIMEOUT_SECONDS`: filesystem polling timeout.
+- `GDFUSE_E2E_ONLY`: substring filter for case labels and per-case directory
+  names.
 - `GDFUSE_E2E_KEEP_LOCAL`: keep local temporary state after successful runs.
 - `GDFUSE_E2E_LOG_EXCERPT_LINES`: number of log lines to show on failure.
 

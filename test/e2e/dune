@@ -9,6 +9,11 @@
  (action (run ./e2eSuite.exe)))
 
 (alias
+ (name e2e-list)
+ (deps e2eSuite.exe)
+ (action (run ./e2eSuite.exe --list)))
+
+(alias
  (name e2e-preflight)
  (deps e2eSuite.exe ../../bin/gdfuse.exe)
  (action (run ./e2eSuite.exe --preflight)))

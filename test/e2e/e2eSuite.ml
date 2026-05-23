@@ -26,9 +26,34 @@ let run_preflight () =
     prerr_endline (classify_failure e);
     exit 1
 
+let env name = try Some (Sys.getenv name) with Not_found -> None
+
+let case_filter () =
+  match env "GDFUSE_E2E_ONLY" with
+  | None -> None
+  | Some value ->
+      let value = String.trim value in
+      if value = "" then None else Some value
+
+let list_cases () =
+  print_endline "Available e2e cases:";
+  print_endline (E2eFilesystemTests.available_cases_text ());
+  exit 0
+
+let run_suite () =
+  try
+    let only = case_filter () in
+    (match only with
+    | None -> ()
+    | Some filter -> Printf.eprintf "e2e case filter: %S\n%!" filter);
+    let suite = wrap_test_case (E2eFilesystemTests.suite ?only ()) in
+    OUnit.run_test_tt_main suite
+  with e ->
+    prerr_endline (classify_failure e);
+    exit 1
+
 let _ =
   Printexc.record_backtrace true;
   if Array.exists (( = ) "--preflight") Sys.argv then run_preflight ()
-  else
-    let suite = wrap_test_case E2eFilesystemTests.suite in
-    OUnit.run_test_tt_main suite
+  else if Array.exists (( = ) "--list") Sys.argv then list_cases ()
+  else run_suite ()

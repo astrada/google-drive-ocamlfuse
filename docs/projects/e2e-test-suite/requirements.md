@@ -38,7 +38,8 @@ behavior that is already covered by unit tests.
 - The executable should fail fast when required environment variables,
   credentials, FUSE support, or mount helpers are unavailable.
 - The test runner should support selecting one test, a small group of tests, or
-  the whole suite.
+  the whole suite with a substring filter over OUnit case labels and per-case
+  directory names.
 - The runner should enforce per-test timeouts and a global timeout.
 - Build and test commands that invoke dune should remain sequential because dune
   uses a lock file.
@@ -212,8 +213,8 @@ Additional coverage can be added after the harness is stable:
 - If a new opam dependency is required for the end-to-end suite, it should not
   make normal builds or unit tests harder to run unless there is a clear
   benefit.
-- A dedicated Makefile target may be added later, but it should invoke the
-  separate end-to-end command explicitly.
+- Dedicated Makefile targets should invoke the separate end-to-end commands
+  explicitly for the full suite, preflight, and case listing.
 
 ## Reporting Requirements
 
@@ -243,3 +244,6 @@ Additional coverage can be added after the harness is stable:
 - Trash run roots during cleanup instead of deleting them permanently.
 - Support `GDFUSE_E2E_CONFIG` for overriding the local e2e config path.
 - Support `GDFUSE_E2E_GDFUSE_EXE` for overriding the executable under test.
+- Support `GDFUSE_E2E_ONLY` and `make e2e CASE=...` for filtered case runs.
+- Support `make e2e-list` and `@e2e-list` for listing available cases without
+  mounting Drive.
