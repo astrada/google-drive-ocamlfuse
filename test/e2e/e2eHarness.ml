@@ -274,6 +274,10 @@ let remount run =
 
 let cleanup_remote run =
   try
+    let summary =
+      E2eDrive.visible_children_summary run.drive ~parent_id:run.run_root_id
+    in
+    Printf.printf "e2e run root before trash: %s\n%!" summary;
     E2eDrive.trash_file run.drive ~file_id:run.run_root_id;
     Printf.printf "Trashed e2e run root: %s\n%!" run.run_root_id
   with e ->

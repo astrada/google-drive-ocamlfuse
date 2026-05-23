@@ -5,9 +5,42 @@ let run_ref = ref None
 let run_failed = ref false
 let cleanup_registered = ref false
 
+let write_all fd content =
+  let bytes = Bytes.of_string content in
+  let rec loop offset remaining =
+    if remaining > 0 then
+      let written = Unix.write fd bytes offset remaining in
+      loop (offset + written) (remaining - written)
+  in
+  loop 0 (Bytes.length bytes)
+
 let write_file path content =
-  Utils.with_out_channel ~mode:[ Open_creat; Open_trunc; Open_wronly ] path
-    (fun ch -> output_string ch content)
+  let ch = open_out_bin path in
+  try
+    output_string ch content;
+    close_out ch
+  with e ->
+    close_out_noerr ch;
+    raise e
+
+let append_file path content =
+  let ch = open_out_gen [ Open_wronly; Open_append; Open_creat ] 0o644 path in
+  try
+    output_string ch content;
+    close_out ch
+  with e ->
+    close_out_noerr ch;
+    raise e
+
+let write_file_at path offset content =
+  let fd = Unix.openfile path [ Unix.O_RDWR ] 0 in
+  try
+    ignore (Unix.LargeFile.lseek fd offset Unix.SEEK_SET);
+    write_all fd content;
+    Unix.close fd
+  with e ->
+    Unix.close fd;
+    raise e
 
 let read_file path =
   let ch = open_in_bin path in
@@ -22,6 +55,10 @@ let read_file path =
 
 let assert_file_content expected path =
   assert_equal ~printer:(fun s -> s) expected (read_file path)
+
+let deterministic_content length =
+  String.init length (fun index ->
+      Char.chr (((index * 37) + (index / 17) + 11) land 0xff))
 
 let wait_until run description observe =
   let timeout = run.E2eHarness.settings.E2eSettings.fs_timeout_seconds in
@@ -58,7 +95,11 @@ let wait_file_content run path expected =
       else
         let actual = read_file path in
         ( actual = expected,
-          Printf.sprintf "content=%S length=%d" actual (String.length actual) ))
+          Printf.sprintf "length=%d md5=%s expected_length=%d expected_md5=%s"
+            (String.length actual)
+            (Digest.string actual |> Digest.to_hex)
+            (String.length expected)
+            (Digest.string expected |> Digest.to_hex) ))
 
 let wait_file_size run path expected =
   wait_until run (Printf.sprintf "%s size to be %Ld" path expected) (fun () ->
@@ -81,6 +122,64 @@ let wait_dir_omits run dir name =
         let entries = Sys.readdir dir |> Array.to_list in
         ( not (List.mem name entries),
           "entries=[" ^ String.concat "," entries ^ "]" ))
+
+let sorted_entries dir = Sys.readdir dir |> Array.to_list |> List.sort compare
+
+let wait_dir_contains_all run dir names =
+  wait_until run
+    (Printf.sprintf "%s listing to contain [%s]" dir (String.concat "," names))
+    (fun () ->
+      if not (Sys.file_exists dir) then (false, "directory missing")
+      else
+        let entries = sorted_entries dir in
+        let missing =
+          List.filter (fun name -> not (List.mem name entries)) names
+        in
+        ( missing = [],
+          Printf.sprintf "entries=[%s]; missing=[%s]"
+            (String.concat "," entries)
+            (String.concat "," missing) ))
+
+let wait_dir_omits_all run dir names =
+  wait_until run
+    (Printf.sprintf "%s listing to omit [%s]" dir (String.concat "," names))
+    (fun () ->
+      if not (Sys.file_exists dir) then (false, "directory missing")
+      else
+        let entries = sorted_entries dir in
+        let present = List.filter (fun name -> List.mem name entries) names in
+        ( present = [],
+          Printf.sprintf "entries=[%s]; present=[%s]"
+            (String.concat "," entries)
+            (String.concat "," present) ))
+
+let wait_remote_child run ~parent_id ~name ~trashed =
+  let result = ref None in
+  wait_until run
+    (Printf.sprintf "Drive child %S under %s with trashed=%b" name parent_id
+       trashed) (fun () ->
+      match
+        E2eDrive.find_child run.E2eHarness.drive ~parent_id ~name ~trashed
+      with
+      | None -> (false, "not found")
+      | Some file ->
+          result := Some file;
+          (true, "found id=" ^ file.GapiDriveV3Model.File.id));
+  match !result with
+  | Some file -> file
+  | None ->
+      assert_failure "unreachable: remote child wait succeeded without file"
+
+let wait_remote_file_trashed run ~file_id =
+  wait_until run (Printf.sprintf "Drive file %s to be trashed" file_id)
+    (fun () ->
+      let file = E2eDrive.get_file run.E2eHarness.drive ~file_id in
+      ( file.GapiDriveV3Model.File.trashed,
+        Printf.sprintf "trashed=%b" file.GapiDriveV3Model.File.trashed ))
+
+let remount_and_assert run f =
+  E2eHarness.remount run;
+  f ()
 
 let register_cleanup () =
   if not !cleanup_registered then (
@@ -179,6 +278,117 @@ let test_delete_remount_absent run dir =
   wait_path_absent run file_path;
   wait_dir_omits run dir "delete.txt"
 
+let test_overwrite_shorter_remount_read run dir =
+  let file_path = Filename.concat dir "overwrite-shorter.txt" in
+  write_file file_path "abcdefg";
+  wait_file_content run file_path "abcdefg";
+  write_file file_path "xy";
+  wait_file_size run file_path 2L;
+  wait_file_content run file_path "xy";
+  remount_and_assert run (fun () ->
+      wait_file_size run file_path 2L;
+      wait_file_content run file_path "xy")
+
+let test_overwrite_longer_remount_read run dir =
+  let file_path = Filename.concat dir "overwrite-longer.txt" in
+  write_file file_path "abc";
+  wait_file_content run file_path "abc";
+  write_file file_path "abcdefghijklmnopqrstuvwxyz";
+  wait_file_size run file_path 26L;
+  wait_file_content run file_path "abcdefghijklmnopqrstuvwxyz";
+  remount_and_assert run (fun () ->
+      wait_file_size run file_path 26L;
+      wait_file_content run file_path "abcdefghijklmnopqrstuvwxyz")
+
+let test_append_remount_read run dir =
+  let file_path = Filename.concat dir "append.txt" in
+  write_file file_path "alpha";
+  append_file file_path "-beta";
+  wait_file_size run file_path 10L;
+  wait_file_content run file_path "alpha-beta";
+  remount_and_assert run (fun () ->
+      wait_file_size run file_path 10L;
+      wait_file_content run file_path "alpha-beta")
+
+let test_partial_overwrite_remount_read run dir =
+  let file_path = Filename.concat dir "partial-overwrite.txt" in
+  write_file file_path "abcdefghij";
+  write_file_at file_path 3L "XYZ";
+  wait_file_size run file_path 10L;
+  wait_file_content run file_path "abcXYZghij";
+  remount_and_assert run (fun () ->
+      wait_file_size run file_path 10L;
+      wait_file_content run file_path "abcXYZghij")
+
+let test_listing_cache_coherence run dir =
+  let write name content = write_file (Filename.concat dir name) content in
+  write "alpha.txt" "alpha";
+  write "bravo.txt" "bravo";
+  write "charlie.txt" "charlie";
+  wait_dir_contains_all run dir [ "alpha.txt"; "bravo.txt"; "charlie.txt" ];
+  Sys.rename (Filename.concat dir "bravo.txt") (Filename.concat dir "delta.txt");
+  wait_dir_contains_all run dir [ "alpha.txt"; "charlie.txt"; "delta.txt" ];
+  wait_dir_omits run dir "bravo.txt";
+  let source_dir = Filename.concat dir "source" in
+  let dest_dir = Filename.concat dir "dest" in
+  Unix.mkdir source_dir 0o755;
+  Unix.mkdir dest_dir 0o755;
+  write_file (Filename.concat source_dir "moved.txt") "moved";
+  wait_dir_contains run source_dir "moved.txt";
+  Sys.rename
+    (Filename.concat source_dir "moved.txt")
+    (Filename.concat dest_dir "moved.txt");
+  wait_dir_omits run source_dir "moved.txt";
+  wait_dir_contains run dest_dir "moved.txt";
+  Sys.remove (Filename.concat dir "charlie.txt");
+  wait_dir_omits run dir "charlie.txt";
+  E2eHarness.remount run;
+  wait_dir_contains_all run dir [ "alpha.txt"; "delta.txt"; "source"; "dest" ];
+  wait_dir_omits_all run dir [ "bravo.txt"; "charlie.txt" ];
+  wait_dir_contains run dest_dir "moved.txt";
+  wait_dir_omits run source_dir "moved.txt"
+
+let test_delete_trashes_remote_file run dir =
+  let case_name = Filename.basename dir in
+  let remote_dir =
+    wait_remote_child run ~parent_id:run.E2eHarness.run_root_id ~name:case_name
+      ~trashed:false
+  in
+  let file_path = Filename.concat dir "trash-me.txt" in
+  write_file file_path "trash me";
+  remount_and_assert run (fun () -> wait_file_content run file_path "trash me");
+  let remote_file =
+    wait_remote_child run ~parent_id:remote_dir.GapiDriveV3Model.File.id
+      ~name:"trash-me.txt" ~trashed:false
+  in
+  Sys.remove file_path;
+  E2eHarness.remount run;
+  wait_path_absent run file_path;
+  wait_dir_omits run dir "trash-me.txt";
+  wait_remote_file_trashed run ~file_id:remote_file.GapiDriveV3Model.File.id
+
+let test_moderate_size_file_remount_read run dir =
+  let file_path = Filename.concat dir "moderate.bin" in
+  let initial = deterministic_content (1024 * 1024) in
+  write_file file_path initial;
+  remount_and_assert run (fun () ->
+      wait_file_size run file_path (Int64.of_int (String.length initial));
+      wait_file_content run file_path initial);
+  let replacement = deterministic_content 4096 in
+  let offset = 512 * 1024 in
+  write_file_at file_path (Int64.of_int offset) replacement;
+  let expected =
+    String.sub initial 0 offset
+    ^ replacement
+    ^ String.sub initial
+        (offset + String.length replacement)
+        (String.length initial - offset - String.length replacement)
+  in
+  wait_file_size run file_path (Int64.of_int (String.length expected));
+  remount_and_assert run (fun () ->
+      wait_file_size run file_path (Int64.of_int (String.length expected));
+      wait_file_content run file_path expected)
+
 let suite =
   "google-drive-ocamlfuse e2e"
   >::: [
@@ -198,4 +408,24 @@ let suite =
          >:: with_case "test-truncate-remount-read" test_truncate_remount_read;
          "delete remount absent"
          >:: with_case "test-delete-remount-absent" test_delete_remount_absent;
+         "overwrite shorter remount read"
+         >:: with_case "test-overwrite-shorter-remount-read"
+               test_overwrite_shorter_remount_read;
+         "overwrite longer remount read"
+         >:: with_case "test-overwrite-longer-remount-read"
+               test_overwrite_longer_remount_read;
+         "append remount read"
+         >:: with_case "test-append-remount-read" test_append_remount_read;
+         "partial overwrite remount read"
+         >:: with_case "test-partial-overwrite-remount-read"
+               test_partial_overwrite_remount_read;
+         "listing cache coherence"
+         >:: with_case "test-listing-cache-coherence"
+               test_listing_cache_coherence;
+         "delete trashes remote file"
+         >:: with_case "test-delete-trashes-remote-file"
+               test_delete_trashes_remote_file;
+         "moderate size file remount read"
+         >:: with_case "test-moderate-size-file-remount-read"
+               test_moderate_size_file_remount_read;
        ]

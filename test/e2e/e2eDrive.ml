@@ -116,6 +116,13 @@ let folder_query ~parent_id ~name =
     "name='%s' and '%s' in parents and trashed=false and mimeType='%s'"
     (escape_apostrophe name) parent_id folder_mime_type
 
+let child_query ~parent_id ~name ~trashed =
+  Printf.sprintf "name='%s' and '%s' in parents and trashed=%b"
+    (escape_apostrophe name) parent_id trashed
+
+let children_query ~parent_id ~trashed =
+  Printf.sprintf "'%s' in parents and trashed=%b" parent_id trashed
+
 let find_folder t ~parent_id ~name =
   let file_list =
     run t
@@ -134,6 +141,55 @@ let find_folder t ~parent_id ~name =
               "safe-area path is ambiguous: multiple folders named %S under \
                Drive parent %s"
               name parent_id))
+
+let find_child t ~parent_id ~name ~trashed =
+  let file_list =
+    run t
+      (FilesResource.list ~supportsAllDrives:true
+         ~std_params:file_list_std_params
+         ~q:(child_query ~parent_id ~name ~trashed)
+         ~pageSize:10)
+  in
+  match file_list.FileList.files with
+  | [] -> None
+  | [ file ] -> Some file
+  | _ ->
+      raise
+        (Error
+           (Printf.sprintf
+              "Drive path is ambiguous: multiple items named %S under parent \
+               %s with trashed=%b"
+              name parent_id trashed))
+
+let get_file t ~file_id =
+  run t
+    (FilesResource.get ~supportsAllDrives:true ~std_params:file_std_params
+       ~fileId:file_id)
+
+let list_children t ~parent_id ~trashed =
+  let rec loop ?pageToken acc =
+    let file_list =
+      run t
+        (FilesResource.list ~supportsAllDrives:true
+           ~std_params:file_list_std_params
+           ~q:(children_query ~parent_id ~trashed)
+           ~pageSize:100 ?pageToken)
+    in
+    let acc = file_list.FileList.files @ acc in
+    if file_list.FileList.nextPageToken = "" then List.rev acc
+    else loop ~pageToken:file_list.FileList.nextPageToken acc
+  in
+  loop []
+
+let visible_children_summary t ~parent_id =
+  let children = list_children t ~parent_id ~trashed:false in
+  let count = List.length children in
+  let names =
+    if count <= 20 then
+      children |> List.map (fun file -> file.File.name) |> String.concat ", "
+    else "<more than 20 children>"
+  in
+  Printf.sprintf "visible child count=%d; names=[%s]" count names
 
 let create_folder t ~parent_id ~name =
   let file =
