@@ -52,11 +52,19 @@ Run a matching case or group of cases by label or per-case directory name:
 ```sh
 make e2e CASE="append remount read"
 make e2e CASE=test-append-remount-read
+make e2e CASE="chmod remount stat"
+make e2e CASE="utime remount stat"
+make e2e CASE="xattr remount roundtrip"
 ```
 
 The full suite creates a temporary local profile, mounts the working-tree
 executable, runs named filesystem tests under one remote run root, unmounts, and
 trashes the remote run root.
+
+The metadata cases validate `chmod`, `utime`, and Linux `user.*` extended
+attributes through the mounted filesystem. The xattr case is skipped when the
+local platform, Python runtime, or FUSE stack does not support xattrs. `chown`
+and cross-account Drive sharing permissions are not part of the default e2e run.
 
 ## Overrides
 
@@ -67,6 +75,7 @@ trashes the remote run root.
 - `GDFUSE_E2E_FS_TIMEOUT_SECONDS`: filesystem polling timeout.
 - `GDFUSE_E2E_ONLY`: substring filter for case labels and per-case directory
   names.
+- `GDFUSE_E2E_PYTHON`: Python executable used for xattr syscalls.
 - `GDFUSE_E2E_KEEP_LOCAL`: keep local temporary state after successful runs.
 - `GDFUSE_E2E_LOG_EXCERPT_LINES`: number of log lines to show on failure.
 

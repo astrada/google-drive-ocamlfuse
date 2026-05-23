@@ -1,4 +1,5 @@
 open OUnit
+module File = GapiDriveV3Model.File
 
 let path run relative = Filename.concat run.E2eHarness.paths.mountpoint relative
 let run_ref = ref None
@@ -108,6 +109,27 @@ let wait_file_size run path expected =
         let actual = (Unix.LargeFile.stat path).Unix.LargeFile.st_size in
         (actual = expected, Printf.sprintf "size=%Ld" actual))
 
+let wait_file_perm run path expected =
+  wait_until run (Printf.sprintf "%s mode to be %03o" path expected) (fun () ->
+      if not (Sys.file_exists path) then (false, "missing")
+      else
+        let actual =
+          (Unix.LargeFile.stat path).Unix.LargeFile.st_perm land 0o7777
+        in
+        (actual = expected, Printf.sprintf "mode=%03o" actual))
+
+let wait_file_mtime run path ~expected ~tolerance =
+  wait_until run
+    (Printf.sprintf "%s mtime to be %.3f +/- %.3fs" path expected tolerance)
+    (fun () ->
+      if not (Sys.file_exists path) then (false, "missing")
+      else
+        let actual = (Unix.LargeFile.stat path).Unix.LargeFile.st_mtime in
+        let delta = abs_float (actual -. expected) in
+        ( delta <= tolerance,
+          Printf.sprintf "mtime=%.3f expected=%.3f delta=%.3f" actual expected
+            delta ))
+
 let wait_dir_contains run dir name =
   wait_until run (Printf.sprintf "%s listing to contain %s" dir name) (fun () ->
       if not (Sys.file_exists dir) then (false, "directory missing")
@@ -177,6 +199,91 @@ let wait_remote_file_trashed run ~file_id =
       ( file.GapiDriveV3Model.File.trashed,
         Printf.sprintf "trashed=%b" file.GapiDriveV3Model.File.trashed ))
 
+let app_property file name =
+  try Some (List.assoc name file.File.appProperties) with Not_found -> None
+
+let wait_remote_mode_app_property run ~file_id expected =
+  wait_until run
+    (Printf.sprintf "Drive file %s mode appProperty to be %03o" file_id expected)
+    (fun () ->
+      let file = E2eDrive.get_file run.E2eHarness.drive ~file_id in
+      match app_property file "mode" with
+      | None -> (false, "missing")
+      | Some value -> (
+          try
+            let actual = int_of_string value land 0o7777 in
+            ( actual = expected,
+              Printf.sprintf "mode_app_property=%s parsed_mode=%03o" value
+                actual )
+          with Failure _ ->
+            ( false,
+              Printf.sprintf "mode_app_property=%S is not an integer" value )))
+
+let wait_remote_app_property run ~file_id ~name ~value =
+  wait_until run
+    (Printf.sprintf "Drive file %s appProperty %s to be %S" file_id name value)
+    (fun () ->
+      let file = E2eDrive.get_file run.E2eHarness.drive ~file_id in
+      let actual = app_property file name in
+      ( actual = Some value,
+        Printf.sprintf "appProperty=%s"
+          (match actual with None -> "<missing>" | Some value -> value) ))
+
+let wait_remote_mtime run ~file_id ~expected ~tolerance =
+  wait_until run
+    (Printf.sprintf "Drive file %s modifiedTime to be %.3f +/- %.3fs" file_id
+       expected tolerance) (fun () ->
+      let file = E2eDrive.get_file run.E2eHarness.drive ~file_id in
+      let actual = Netdate.since_epoch file.File.modifiedTime in
+      let delta = abs_float (actual -. expected) in
+      ( delta <= tolerance,
+        Printf.sprintf "remote_mtime=%.3f expected=%.3f delta=%.3f" actual
+          expected delta ))
+
+let skip_xattr_unsupported operation e =
+  if E2eXattr.is_unsupported e then (
+    let message =
+      Printf.sprintf "xattr %s is unsupported by this environment: %s" operation
+        (Printexc.to_string e)
+    in
+    skip_if true message;
+    assert false)
+  else raise e
+
+let set_xattr_or_skip path name value =
+  try E2eXattr.set path name value with e -> skip_xattr_unsupported "set" e
+
+let remove_xattr_or_skip path name =
+  try E2eXattr.remove path name with e -> skip_xattr_unsupported "remove" e
+
+let get_xattr_or_skip path name =
+  try E2eXattr.get path name with e -> skip_xattr_unsupported "get" e
+
+let list_xattr_or_skip path =
+  try E2eXattr.list path with e -> skip_xattr_unsupported "list" e
+
+let wait_xattr_value run path name expected =
+  wait_until run (Printf.sprintf "%s xattr %s to be %S" path name expected)
+    (fun () ->
+      try
+        let actual = get_xattr_or_skip path name in
+        (actual = expected, Printf.sprintf "value=%S" actual)
+      with Not_found -> (false, "missing"))
+
+let wait_xattr_absent run path name =
+  wait_until run (Printf.sprintf "%s xattr %s to be absent" path name)
+    (fun () ->
+      try
+        let actual = get_xattr_or_skip path name in
+        (false, Printf.sprintf "value=%S" actual)
+      with Not_found -> (true, "missing"))
+
+let wait_xattr_list_contains run path name =
+  wait_until run (Printf.sprintf "%s xattr list to contain %s" path name)
+    (fun () ->
+      let names = list_xattr_or_skip path in
+      (List.mem name names, "names=[" ^ String.concat "," names ^ "]"))
+
 let remount_and_assert run f =
   E2eHarness.remount run;
   f ()
@@ -214,11 +321,12 @@ let case_dir run name =
 
 let with_case name f _ =
   let run = get_run () in
-  try f run (case_dir run name)
-  with e ->
-    run_failed := true;
-    E2eHarness.print_failure_diagnostics run ~case:name ~exn:e;
-    raise e
+  try f run (case_dir run name) with
+  | OUnitTest.Skip _ as e -> raise e
+  | e ->
+      run_failed := true;
+      E2eHarness.print_failure_diagnostics run ~case:name ~exn:e;
+      raise e
 
 let test_mount_root_listing run _dir =
   assert_bool "mountpoint should be a directory"
@@ -389,6 +497,80 @@ let test_moderate_size_file_remount_read run dir =
       wait_file_size run file_path (Int64.of_int (String.length expected));
       wait_file_content run file_path expected)
 
+let test_chmod_remount_stat run dir =
+  let case_name = Filename.basename dir in
+  let file_path = Filename.concat dir "mode.txt" in
+  write_file file_path "mode metadata\n";
+  remount_and_assert run (fun () ->
+      wait_file_content run file_path "mode metadata\n");
+  let remote_dir =
+    wait_remote_child run ~parent_id:run.E2eHarness.run_root_id ~name:case_name
+      ~trashed:false
+  in
+  let remote_file =
+    wait_remote_child run ~parent_id:remote_dir.File.id ~name:"mode.txt"
+      ~trashed:false
+  in
+  let expected_perm = 0o600 in
+  Unix.chmod file_path expected_perm;
+  wait_file_perm run file_path expected_perm;
+  wait_remote_mode_app_property run ~file_id:remote_file.File.id expected_perm;
+  remount_and_assert run (fun () ->
+      wait_file_perm run file_path expected_perm;
+      wait_file_content run file_path "mode metadata\n")
+
+let test_utime_remount_stat run dir =
+  let case_name = Filename.basename dir in
+  let file_path = Filename.concat dir "mtime.txt" in
+  write_file file_path "mtime metadata\n";
+  remount_and_assert run (fun () ->
+      wait_file_content run file_path "mtime metadata\n");
+  let remote_dir =
+    wait_remote_child run ~parent_id:run.E2eHarness.run_root_id ~name:case_name
+      ~trashed:false
+  in
+  let remote_file =
+    wait_remote_child run ~parent_id:remote_dir.File.id ~name:"mtime.txt"
+      ~trashed:false
+  in
+  let expected_mtime = 1_700_000_000.0 in
+  let tolerance = 1.0 in
+  Unix.utimes file_path expected_mtime expected_mtime;
+  wait_file_mtime run file_path ~expected:expected_mtime ~tolerance;
+  wait_remote_mtime run ~file_id:remote_file.File.id ~expected:expected_mtime
+    ~tolerance;
+  remount_and_assert run (fun () ->
+      wait_file_mtime run file_path ~expected:expected_mtime ~tolerance;
+      wait_file_content run file_path "mtime metadata\n")
+
+let test_xattr_remount_roundtrip run dir =
+  let case_name = Filename.basename dir in
+  let file_path = Filename.concat dir "xattr.txt" in
+  write_file file_path "xattr metadata\n";
+  remount_and_assert run (fun () ->
+      wait_file_content run file_path "xattr metadata\n");
+  let remote_dir =
+    wait_remote_child run ~parent_id:run.E2eHarness.run_root_id ~name:case_name
+      ~trashed:false
+  in
+  let remote_file =
+    wait_remote_child run ~parent_id:remote_dir.File.id ~name:"xattr.txt"
+      ~trashed:false
+  in
+  let name = "user.gdfuse_e2e" in
+  let value = "metadata-roundtrip" in
+  set_xattr_or_skip file_path name value;
+  wait_xattr_value run file_path name value;
+  wait_xattr_list_contains run file_path name;
+  wait_remote_app_property run ~file_id:remote_file.File.id ~name:("x-" ^ name)
+    ~value;
+  remount_and_assert run (fun () ->
+      wait_xattr_value run file_path name value;
+      wait_xattr_list_contains run file_path name);
+  remove_xattr_or_skip file_path name;
+  wait_xattr_absent run file_path name;
+  remount_and_assert run (fun () -> wait_xattr_absent run file_path name)
+
 type case = {
   label : string;
   directory : string;
@@ -479,6 +661,21 @@ let cases =
       label = "moderate size file remount read";
       directory = "test-moderate-size-file-remount-read";
       test = test_moderate_size_file_remount_read;
+    };
+    {
+      label = "chmod remount stat";
+      directory = "test-chmod-remount-stat";
+      test = test_chmod_remount_stat;
+    };
+    {
+      label = "utime remount stat";
+      directory = "test-utime-remount-stat";
+      test = test_utime_remount_stat;
+    };
+    {
+      label = "xattr remount roundtrip";
+      directory = "test-xattr-remount-roundtrip";
+      test = test_xattr_remount_roundtrip;
     };
   ]
 

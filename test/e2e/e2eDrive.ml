@@ -14,7 +14,7 @@ type t = {
 let folder_mime_type = "application/vnd.google-apps.folder"
 
 let file_fields =
-  "id,name,mimeType,parents,trashed,capabilities(canAddChildren,canTrash)"
+  "id,name,mimeType,parents,trashed,modifiedTime,appProperties,capabilities(canAddChildren,canEdit,canTrash)"
 
 let std_params fields =
   {

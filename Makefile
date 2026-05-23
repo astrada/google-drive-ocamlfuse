@@ -10,14 +10,14 @@ e2e:
 ifdef CASE
 	GDFUSE_E2E_ONLY="$(CASE)" dune build @e2e --force
 else
-	dune build @e2e
+	dune build @e2e --force
 endif
 
 e2e-list:
 	dune build @e2e-list --force
 
 e2e-preflight:
-	dune build @e2e-preflight
+	dune build @e2e-preflight --force
 
 format:
 	tools/format_ocaml
