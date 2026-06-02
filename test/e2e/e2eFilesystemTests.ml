@@ -2,10 +2,27 @@ open OUnit
 module File = GapiDriveV3Model.File
 
 let path run relative = Filename.concat run.E2eHarness.paths.mountpoint relative
-let run_ref = ref None
+
+type run_profile = Default_profile | Msoffice_profile
+
+type profile_requirements = {
+  req_profile : run_profile;
+  req_google_native_fixture : bool;
+  req_msoffice_fixture : bool;
+}
+
+let run_refs = ref []
 let run_failed = ref false
 let cleanup_registered = ref false
-let google_native_fixture_required = ref false
+let profile_requirements = ref []
+
+let profile_name = function
+  | Default_profile -> "default"
+  | Msoffice_profile -> "msoffice"
+
+let profile_docs_mode = function
+  | Default_profile -> None
+  | Msoffice_profile -> Some "msoffice"
 
 let write_all fd content =
   let bytes = Bytes.of_string content in
@@ -75,6 +92,11 @@ let string_contains ~needle haystack =
     in
     loop 0
 
+let string_starts_with ~prefix value =
+  let prefix_length = String.length prefix in
+  String.length value >= prefix_length
+  && String.sub value 0 prefix_length = prefix
+
 let wait_until run description observe =
   let timeout = run.E2eHarness.settings.E2eSettings.fs_timeout_seconds in
   let deadline = Unix.gettimeofday () +. timeout in
@@ -133,6 +155,21 @@ let wait_file_contains_all run path snippets =
           Printf.sprintf "length=%d md5=%s missing=[%s]" (String.length actual)
             (Digest.string actual |> Digest.to_hex)
             (String.concat "," missing) ))
+
+let wait_file_non_empty_with_prefix run path prefix =
+  wait_until run
+    (Printf.sprintf "%s contents to be non-empty with prefix %S" path prefix)
+    (fun () ->
+      if not (Sys.file_exists path) then (false, "missing")
+      else
+        let actual = read_file path in
+        let length = String.length actual in
+        let observed_prefix_length = min length (String.length prefix) in
+        let observed_prefix = String.sub actual 0 observed_prefix_length in
+        ( length > 0 && string_starts_with ~prefix actual,
+          Printf.sprintf "length=%d md5=%s observed_prefix=%S" length
+            (Digest.string actual |> Digest.to_hex)
+            observed_prefix ))
 
 let wait_file_size run path expected =
   wait_until run (Printf.sprintf "%s size to be %Ld" path expected) (fun () ->
@@ -349,9 +386,8 @@ let register_cleanup () =
   if not !cleanup_registered then (
     cleanup_registered := true;
     at_exit (fun () ->
-        match !run_ref with
-        | None -> ()
-        | Some run -> (
+        !run_refs |> List.rev
+        |> List.iter (fun (_profile, run) ->
             let keep_local =
               run.E2eHarness.settings.E2eSettings.keep_local || !run_failed
             in
@@ -360,17 +396,43 @@ let register_cleanup () =
               Printf.eprintf "e2e cleanup failed at process exit: %s\n%!"
                 (Printexc.to_string e))))
 
-let get_run () =
-  match !run_ref with
-  | Some run -> run
+let requirements_for profile =
+  match
+    List.find_opt
+      (fun requirements -> requirements.req_profile = profile)
+      !profile_requirements
+  with
+  | Some requirements -> requirements
   | None ->
-      register_cleanup ();
-      let run = E2eHarness.setup () in
-      if !google_native_fixture_required then
-        ignore (E2eHarness.ensure_google_native_fixture run);
-      E2eHarness.start_mount run;
-      run_ref := Some run;
-      run
+      {
+        req_profile = profile;
+        req_google_native_fixture = false;
+        req_msoffice_fixture = false;
+      }
+
+let setup_profile_run profile =
+  register_cleanup ();
+  let run =
+    match profile_docs_mode profile with
+    | None -> E2eHarness.setup ~profile_name:(profile_name profile) ()
+    | Some docs_mode ->
+        E2eHarness.setup ~profile_name:(profile_name profile) ~docs_mode ()
+  in
+  let requirements = requirements_for profile in
+  if requirements.req_google_native_fixture then
+    ignore (E2eHarness.ensure_google_native_fixture run);
+  if requirements.req_msoffice_fixture then
+    ignore (E2eHarness.ensure_msoffice_fixture run);
+  E2eHarness.start_mount run;
+  run_refs := (profile, run) :: !run_refs;
+  run
+
+let get_run profile =
+  match
+    List.find_opt (fun (run_profile, _run) -> run_profile = profile) !run_refs
+  with
+  | Some (_profile, run) -> run
+  | None -> setup_profile_run profile
 
 let case_dir run name =
   let dir = path run name in
@@ -378,12 +440,12 @@ let case_dir run name =
   wait_path_exists run dir;
   dir
 
-let with_case label name f _ =
+let with_case label profile name f _ =
   let started = Unix.gettimeofday () in
   print_case_start label;
   let current_run = ref None in
   try
-    let run = get_run () in
+    let run = get_run profile in
     current_run := Some run;
     f run (case_dir run name);
     print_case_pass label started
@@ -698,15 +760,49 @@ let test_drive_shortcut_target_visible run _dir =
     (Unix.readlink shortcut_path)
     fixture.E2eHarness.shortcut_target_content
 
+let google_doc_export_fixture_paths run =
+  let fixture = E2eHarness.google_doc_export_fixture run in
+  let fixture_dir = path run fixture.E2eHarness.export_folder_name in
+  let document_entry_path =
+    Filename.concat fixture_dir fixture.E2eHarness.export_document_entry_name
+  in
+  (fixture, fixture_dir, document_entry_path)
+
+let wait_docx_export run document_entry_path =
+  wait_file_non_empty_with_prefix run document_entry_path "PK"
+
+let test_google_doc_msoffice_export_readable run _dir =
+  let fixture, fixture_dir, document_entry_path =
+    google_doc_export_fixture_paths run
+  in
+  wait_path_exists run fixture_dir;
+  wait_dir_contains run fixture_dir
+    fixture.E2eHarness.export_document_entry_name;
+  wait_docx_export run document_entry_path;
+  remount_and_assert run (fun () ->
+      wait_dir_contains run fixture_dir
+        fixture.E2eHarness.export_document_entry_name;
+      wait_docx_export run document_entry_path)
+
 type case = {
   label : string;
+  profile : run_profile;
   directory : string;
   test : E2eHarness.t -> string -> unit;
   requires_google_native_fixture : bool;
+  requires_msoffice_fixture : bool;
 }
 
-let case ?(requires_google_native_fixture = false) label directory test =
-  { label; directory; test; requires_google_native_fixture }
+let case ?(profile = Default_profile) ?(requires_google_native_fixture = false)
+    ?(requires_msoffice_fixture = false) label directory test =
+  {
+    label;
+    profile;
+    directory;
+    test;
+    requires_google_native_fixture;
+    requires_msoffice_fixture;
+  }
 
 let cases =
   [
@@ -722,6 +818,10 @@ let cases =
       "test-google-doc-remount-stable" test_google_doc_remount_stable;
     case ~requires_google_native_fixture:true "drive shortcut target visible"
       "test-drive-shortcut-target-visible" test_drive_shortcut_target_visible;
+    case ~profile:Msoffice_profile ~requires_msoffice_fixture:true
+      "google doc msoffice export readable"
+      "test-google-doc-msoffice-export-readable"
+      test_google_doc_msoffice_export_readable;
     case "create write remount read" "test-create-write-remount-read"
       test_create_write_remount_read;
     case "create remove directory" "test-create-remove-directory"
@@ -770,6 +870,20 @@ let selected_cases = function
   | None -> cases
   | Some filter -> List.filter (matches_filter filter) cases
 
+let selected_profile_requirements selected profile =
+  {
+    req_profile = profile;
+    req_google_native_fixture =
+      List.exists
+        (fun case ->
+          case.profile = profile && case.requires_google_native_fixture)
+        selected;
+    req_msoffice_fixture =
+      List.exists
+        (fun case -> case.profile = profile && case.requires_msoffice_fixture)
+        selected;
+  }
+
 let suite ?only () =
   let selected = selected_cases only in
   if selected = [] then
@@ -778,10 +892,13 @@ let suite ?only () =
          (Printf.sprintf "no e2e cases matched %S. Available cases:\n%s"
             (match only with None -> "" | Some filter -> filter)
             (available_cases_text ())));
-  google_native_fixture_required :=
-    List.exists (fun case -> case.requires_google_native_fixture) selected;
+  profile_requirements :=
+    List.map
+      (selected_profile_requirements selected)
+      [ Default_profile; Msoffice_profile ];
   "google-drive-ocamlfuse e2e"
   >::: List.map
          (fun case ->
-           case.label >:: with_case case.label case.directory case.test)
+           case.label
+           >:: with_case case.label case.profile case.directory case.test)
          selected

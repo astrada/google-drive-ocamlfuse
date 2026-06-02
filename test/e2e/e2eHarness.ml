@@ -29,8 +29,18 @@ type google_native_fixture = {
   shortcut_id : string;
 }
 
+type google_doc_export_fixture = {
+  export_folder_name : string;
+  export_folder_id : string;
+  export_document_name : string;
+  export_document_entry_name : string;
+  export_document_id : string;
+}
+
 type t = {
   run_id : string;
+  profile_name : string;
+  docs_mode : string option;
   config_path : string;
   config : E2eConfig.t;
   settings : E2eSettings.t;
@@ -42,6 +52,7 @@ type t = {
   paths : local_paths;
   mutable mount : E2eMount.t option;
   mutable google_native_fixture : google_native_fixture option;
+  mutable google_doc_export_fixture : google_doc_export_fixture option;
 }
 
 module StateStore = KeyValueStore.MakeFileStore (State)
@@ -107,6 +118,11 @@ let make_run_id () =
   let millis = Int64.of_float (Unix.gettimeofday () *. 1000.0) in
   Printf.sprintf "%d-%Ld" (Unix.getpid ()) millis
 
+let make_profile_run_id profile_name =
+  let run_id = make_run_id () in
+  if profile_name = "default" then run_id else profile_name ^ "-" ^ run_id
+
+let docs_mode_description = function None -> "default" | Some mode -> mode
 let mkdir path = if not (Sys.file_exists path) then Unix.mkdir path 0o700
 
 let rec remove_path path =
@@ -168,6 +184,8 @@ let write_profile config run_root_id paths =
 let print_run_summary run =
   Printf.printf
     "e2e run id: %s\n\
+     e2e profile: %s\n\
+     e2e docs mode: %s\n\
      e2e config: %s\n\
      e2e settings: %s\n\
      e2e test folder path: %s\n\
@@ -179,7 +197,9 @@ let print_run_summary run =
      e2e stdout: %s\n\
      e2e stderr: %s\n\
      %!"
-    run.run_id run.config_path
+    run.run_id run.profile_name
+    (docs_mode_description run.docs_mode)
+    run.config_path
     (E2eSettings.describe run.settings)
     run.config.E2eConfig.test_folder_path run.safe_parent_id run.run_root_id
     run.paths.root run.paths.mountpoint run.paths.app_log_path
@@ -226,11 +246,11 @@ let preflight () =
     cleanup ();
     raise e
 
-let setup () =
+let setup ?(profile_name = "default") ?docs_mode () =
   let config_path, gdfuse_exe, settings, config = load_common_environment () in
   let drive = E2eDrive.create config in
   E2eDrive.preflight drive;
-  let run_id = make_run_id () in
+  let run_id = make_profile_run_id profile_name in
   let paths = make_local_paths run_id in
   let run_root_id = ref None in
   try
@@ -243,6 +263,8 @@ let setup () =
     let run =
       {
         run_id;
+        profile_name;
+        docs_mode;
         config_path;
         config;
         settings;
@@ -254,6 +276,7 @@ let setup () =
         paths;
         mount = None;
         google_native_fixture = None;
+        google_doc_export_fixture = None;
       }
     in
     print_run_summary run;
@@ -269,10 +292,11 @@ let start_mount run =
   | Some _ -> ()
   | None ->
       let mount =
-        E2eMount.start ~timeout:run.settings.mount_timeout_seconds
-          ~gdfuse_exe:run.gdfuse_exe ~label:run.label
-          ~config_path:run.paths.config_path ~mountpoint:run.paths.mountpoint
-          ~stdout_path:run.paths.stdout_path ~stderr_path:run.paths.stderr_path
+        E2eMount.start ~docs_mode:run.docs_mode
+          ~timeout:run.settings.mount_timeout_seconds ~gdfuse_exe:run.gdfuse_exe
+          ~label:run.label ~config_path:run.paths.config_path
+          ~mountpoint:run.paths.mountpoint ~stdout_path:run.paths.stdout_path
+          ~stderr_path:run.paths.stderr_path
       in
       run.mount <- Some mount
 
@@ -381,6 +405,63 @@ let google_native_fixture run =
         (Error
            "Google-native e2e fixture was requested before it was initialized")
 
+let create_google_doc_export_fixture run ~folder_name ~document_name
+    ~document_entry_name =
+  match run.mount with
+  | Some _ ->
+      raise
+        (Error
+           "Google Docs export e2e fixtures must be created before the mount \
+            starts")
+  | None ->
+      let folder =
+        E2eDrive.create_folder run.drive ~parent_id:run.run_root_id
+          ~name:folder_name
+      in
+      let document =
+        E2eDrive.create_google_document run.drive ~parent_id:folder.File.id
+          ~name:document_name
+      in
+      ignore
+        (wait_remote_child run ~parent_id:folder.File.id ~name:document_name);
+      let fixture =
+        {
+          export_folder_name = folder_name;
+          export_folder_id = folder.File.id;
+          export_document_name = document_name;
+          export_document_entry_name = document_entry_name;
+          export_document_id = document.File.id;
+        }
+      in
+      Printf.printf
+        "e2e google-doc export fixture: folder=%s document=%s expected_entry=%s\n\
+         %!"
+        fixture.export_folder_id fixture.export_document_id
+        fixture.export_document_entry_name;
+      fixture
+
+let ensure_msoffice_fixture run =
+  match run.google_doc_export_fixture with
+  | Some fixture -> fixture
+  | None ->
+      let fixture =
+        create_google_doc_export_fixture run
+          ~folder_name:"test-google-doc-msoffice-fixtures"
+          ~document_name:"Milestone 6 Doc"
+          ~document_entry_name:"Milestone 6 Doc.docx"
+      in
+      run.google_doc_export_fixture <- Some fixture;
+      fixture
+
+let google_doc_export_fixture run =
+  match run.google_doc_export_fixture with
+  | Some fixture -> fixture
+  | None ->
+      raise
+        (Error
+           "Google Docs export e2e fixture was requested before it was \
+            initialized")
+
 let cleanup_remote run =
   try
     let summary =
@@ -435,6 +516,8 @@ let print_failure_diagnostics run ~case ~exn =
      case: %s\n\
      exception: %s\n\
      run id: %s\n\
+     profile: %s\n\
+     docs mode: %s\n\
      run root id: %s\n\
      local root: %s\n\
      mountpoint: %s\n\
@@ -443,8 +526,9 @@ let print_failure_diagnostics run ~case ~exn =
      stdout: %s\n\
      stderr: %s\n\
      %!"
-    case (Printexc.to_string exn) run.run_id run.run_root_id run.paths.root
-    run.paths.mountpoint
+    case (Printexc.to_string exn) run.run_id run.profile_name
+    (docs_mode_description run.docs_mode)
+    run.run_root_id run.paths.root run.paths.mountpoint
     (if E2eMount.is_mountpoint run.paths.mountpoint then "mounted"
      else "not mounted")
     run.paths.app_log_path run.paths.stdout_path run.paths.stderr_path;
