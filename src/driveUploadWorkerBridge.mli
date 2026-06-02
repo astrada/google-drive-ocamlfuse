@@ -1,4 +1,4 @@
-type runtime = { cache : CacheData.t }
+type runtime = DriveRuntime.cache_only = { cache : CacheData.t }
 
 module type PORTS = sig
   val flush_memory_buffers : CacheData.Resource.t -> unit

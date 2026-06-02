@@ -1,7 +1,7 @@
 open GapiMonad
 open GapiMonad.SessionM.Infix
 
-type runtime = { cache : CacheData.t; config : Config.t }
+type runtime = DriveRuntime.base = { cache : CacheData.t; config : Config.t }
 
 type io_buffer =
   (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t

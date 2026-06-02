@@ -41,7 +41,7 @@ The runtime passed to `DriveMetadataMutations` contains the cache handle and
 config:
 
 ```ocaml
-type runtime = {
+type runtime = DriveRuntime.base = {
   cache : CacheData.t;
   config : Config.t;
 }

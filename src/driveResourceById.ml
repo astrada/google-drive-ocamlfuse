@@ -2,7 +2,7 @@ open GapiMonad
 open GapiMonad.SessionM.Infix
 module File = GapiDriveV3Model.File
 
-type runtime = { cache : CacheData.t }
+type runtime = DriveRuntime.cache_only = { cache : CacheData.t }
 
 module type PORTS = sig
   val root_directory : string

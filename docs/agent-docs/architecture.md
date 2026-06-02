@@ -69,6 +69,8 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   reconciliation
 - `src/driveXattrs.ml` holds the extended-attribute core for xattr reads,
   validation, and Drive app-property patches
+- `src/driveRuntime.ml` holds shared runtime record shapes, including the
+  common cache/config runtime used by extracted Drive policy modules
 - `src/driveResourceMapping.ml` holds filename cleanup, duplicate-name
   disambiguation, cache resource construction, and Drive `File` to
   cache-resource mapping
@@ -81,8 +83,8 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   `DriveRemoteUpdatePorts`, `DriveFileMutationPorts`,
   `DriveMetadataMutationPorts`, `DriveUploadDispatchPorts`,
   `DriveUploadWorkerBridgePorts`, `DriveUploadPorts`, and `DriveXattrPorts`,
-  builds the small runtimes from `Context`, and executes those sessions through
-  `Oauth2.do_request`
+  builds shared or specialized runtimes from `Context`, and executes those
+  sessions through `Oauth2.do_request`
 
 The design is stateful. A global `Context.t` stores the current config, state,
 cache handle, memory buffers, locks, and background threads.

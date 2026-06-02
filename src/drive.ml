@@ -188,6 +188,29 @@ let update_cached_resource_state_and_size cache state size id =
   Utils.log_with_header
     "END: Updating resource state and size in db (id=%Ld)\n%!" id
 
+let drive_runtime_base () =
+  let context = Context.get_ctx () in
+  {
+    DriveRuntime.cache = context.Context.cache;
+    config = context |. Context.config_lens;
+  }
+
+let drive_runtime_base_with_cache ?cache () =
+  let runtime = drive_runtime_base () in
+  match cache with
+  | None -> runtime
+  | Some cache -> { runtime with DriveRuntime.cache }
+
+let drive_runtime_cache_only cache = { DriveRuntime.cache }
+
+let drive_runtime_context_cache_only () =
+  let context = Context.get_ctx () in
+  { DriveRuntime.cache = context.Context.cache }
+
+let drive_runtime_config_only () =
+  let context = Context.get_ctx () in
+  { DriveRuntime.config = context |. Context.config_lens }
+
 let lookup_resource path trashed =
   Utils.log_with_header "BEGIN: Loading resource %s (trashed=%b) from db\n%!"
     path trashed;
@@ -493,12 +516,7 @@ end
 
 module MetadataRefreshOps = DriveMetadataRefresh.Make (DriveMetadataRefreshPorts)
 
-let drive_metadata_refresh_runtime () =
-  let context = Context.get_ctx () in
-  {
-    DriveMetadataRefresh.cache = context.Context.cache;
-    config = context |. Context.config_lens;
-  }
+let drive_metadata_refresh_runtime () = drive_runtime_base ()
 
 let get_metadata () =
   MetadataRefreshOps.get_metadata (drive_metadata_refresh_runtime ())
@@ -546,7 +564,9 @@ let get_resource_with_id_from_server remote_id =
   ResourceByIdOps.get_resource_with_id_from_server remote_id
 
 let get_resource_with_id remote_id cache =
-  ResourceByIdOps.get_resource_with_id { DriveResourceById.cache } remote_id
+  ResourceByIdOps.get_resource_with_id
+    (drive_runtime_cache_only cache)
+    remote_id
 
 module DriveResourceResolverPorts = struct
   let root_directory = root_directory
@@ -605,11 +625,7 @@ module ResourceResolverOps =
   DriveResourceResolver.Make (DriveResourceResolverPorts)
 
 let drive_resource_resolver_runtime ?cache () =
-  let context = Context.get_ctx () in
-  {
-    DriveResourceResolver.cache = Option.default context.Context.cache cache;
-    config = context |. Context.config_lens;
-  }
+  drive_runtime_base_with_cache ?cache ()
 
 let check_resource_in_cache cache path trashed =
   ResourceResolverOps.check_resource_in_cache
@@ -843,12 +859,7 @@ end
 
 module DownloadOps = DriveDownloads.Make (DriveDownloadPorts)
 
-let drive_download_runtime () =
-  let context = Context.get_ctx () in
-  {
-    DriveDownloads.cache = context.Context.cache;
-    config = context |. Context.config_lens;
-  }
+let drive_download_runtime () = drive_runtime_base ()
 
 let download_resource resource =
   DownloadOps.download_resource (drive_download_runtime ()) resource
@@ -951,12 +962,7 @@ end
 
 module DirectoryReadOps = DriveDirectoryReads.Make (DriveDirectoryReadPorts)
 
-let drive_directory_read_runtime () =
-  let context = Context.get_ctx () in
-  {
-    DriveDirectoryReads.cache = context.Context.cache;
-    config = context |. Context.config_lens;
-  }
+let drive_directory_read_runtime () = drive_runtime_base ()
 
 (* stat *)
 let get_attr path =
@@ -979,9 +985,7 @@ end
 
 module OpenOps = DriveOpens.Make (DriveOpenPorts)
 
-let drive_open_runtime () =
-  let context = Context.get_ctx () in
-  { DriveOpens.config = context |. Context.config_lens }
+let drive_open_runtime () = drive_runtime_config_only ()
 
 let fopen path flags =
   do_request (OpenOps.fopen (drive_open_runtime ()) path flags) |> ignore;
@@ -1011,12 +1015,7 @@ end
 
 module RemoteUpdateOps = DriveRemoteUpdates.Make (DriveRemoteUpdatePorts)
 
-let drive_remote_update_runtime () =
-  let context = Context.get_ctx () in
-  {
-    DriveRemoteUpdates.cache = context.Context.cache;
-    config = context |. Context.config_lens;
-  }
+let drive_remote_update_runtime () = drive_runtime_base ()
 
 let update_remote_resource path ?update_file_in_cache ?save_to_db ?purge_cache
     do_remote_update =
@@ -1045,12 +1044,7 @@ end
 module MetadataMutationOps =
   DriveMetadataMutations.Make (DriveMetadataMutationPorts)
 
-let drive_metadata_mutation_runtime () =
-  let context = Context.get_ctx () in
-  {
-    DriveMetadataMutations.cache = context.Context.cache;
-    config = context |. Context.config_lens;
-  }
+let drive_metadata_mutation_runtime () = drive_runtime_base ()
 
 (* utime *)
 let utime path atime mtime =
@@ -1089,12 +1083,7 @@ end
 
 module ReadOps = DriveReads.Make (DriveReadPorts)
 
-let drive_read_runtime () =
-  let context = Context.get_ctx () in
-  {
-    DriveReads.cache = context.Context.cache;
-    config = context |. Context.config_lens;
-  }
+let drive_read_runtime () = drive_runtime_base ()
 
 (* read *)
 let read path buf offset file_descr =
@@ -1129,12 +1118,7 @@ end
 
 module FileMutationOps = DriveFileMutations.Make (DriveFileMutationPorts)
 
-let drive_file_mutation_runtime () =
-  let context = Context.get_ctx () in
-  {
-    DriveFileMutations.cache = context.Context.cache;
-    config = context |. Context.config_lens;
-  }
+let drive_file_mutation_runtime () = drive_runtime_base ()
 
 (* write *)
 let write path buf offset file_descr =
@@ -1176,13 +1160,7 @@ end
 
 module UploadOps = DriveUploads.Make (DriveUploadPorts)
 
-let drive_upload_runtime () =
-  let context = Context.get_ctx () in
-  {
-    DriveUploads.cache = context.Context.cache;
-    config = context |. Context.config_lens;
-  }
-
+let drive_upload_runtime () = drive_runtime_base ()
 let upload resource = UploadOps.upload (drive_upload_runtime ()) resource
 
 module DriveUploadWorkerBridgePorts = struct
@@ -1202,9 +1180,7 @@ end
 module UploadWorkerBridgeOps =
   DriveUploadWorkerBridge.Make (DriveUploadWorkerBridgePorts)
 
-let drive_upload_worker_bridge_runtime () =
-  let context = Context.get_ctx () in
-  { DriveUploadWorkerBridge.cache = context.Context.cache }
+let drive_upload_worker_bridge_runtime () = drive_runtime_context_cache_only ()
 
 let upload_resource_with_retry resource =
   UploadWorkerBridgeOps.upload_resource_with_retry resource
@@ -1227,12 +1203,7 @@ end
 
 module RuntimeServiceOps = DriveRuntimeServices.Make (DriveRuntimeServicePorts)
 
-let drive_runtime_services_runtime () =
-  let context = Context.get_ctx () in
-  {
-    DriveRuntimeServices.cache = context.Context.cache;
-    config = context |. Context.config_lens;
-  }
+let drive_runtime_services_runtime () = drive_runtime_base ()
 
 let init_filesystem () =
   RuntimeServiceOps.init_filesystem (drive_runtime_services_runtime ())
@@ -1249,12 +1220,7 @@ end
 
 module UploadDispatchOps = DriveUploadDispatch.Make (DriveUploadDispatchPorts)
 
-let drive_upload_dispatch_runtime () =
-  let context = Context.get_ctx () in
-  {
-    DriveUploadDispatch.cache = context.Context.cache;
-    config = context |. Context.config_lens;
-  }
+let drive_upload_dispatch_runtime () = drive_runtime_base ()
 
 let upload_if_dirty path =
   match
@@ -1414,12 +1380,7 @@ end
 
 module XattrOps = DriveXattrs.Make (DriveXattrPorts)
 
-let drive_xattr_runtime () =
-  let context = Context.get_ctx () in
-  {
-    DriveXattrs.cache = context.Context.cache;
-    config = context |. Context.config_lens;
-  }
+let drive_xattr_runtime () = drive_runtime_base ()
 
 (* Create resources *)
 let create_remote_resource ?link_target is_folder path mode =

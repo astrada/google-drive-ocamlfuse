@@ -48,7 +48,7 @@ That is the whole control flow.
 
 At a high level, `upload_if_dirty` does this:
 
-1. build the upload-dispatch runtime from `Context`
+1. build the shared cache/config upload-dispatch runtime from `Context`
 2. call `DriveUploadDispatch.upload_if_dirty runtime path`
 3. if that returns `None`, return immediately
 4. if that returns `Some upload_request`, run `do_request upload_request`

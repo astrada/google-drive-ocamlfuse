@@ -18,8 +18,8 @@ This function also doubles as a background prefetch path:
 `readdir` requests and background folder warming.
 
 The public `Drive.read_dir` function in `src/drive.ml` is a thin
-adapter. It builds a small runtime from `Context`, then runs the real
-directory-listing logic in `DriveDirectoryReads.Make.read_dir` through
+adapter. It builds the shared cache/config runtime from `Context`, then runs
+the real directory-listing logic in `DriveDirectoryReads.Make.read_dir` through
 `do_request`.
 
 ## High-Level Behavior

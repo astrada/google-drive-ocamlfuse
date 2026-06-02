@@ -1,7 +1,7 @@
 open GapiMonad
 open GapiMonad.SessionM.Infix
 
-type runtime = { cache : CacheData.t; config : Config.t }
+type runtime = DriveRuntime.base = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
   val get_path_in_cache : string -> Config.t -> string * bool

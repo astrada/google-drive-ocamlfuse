@@ -4,7 +4,7 @@ module File = GapiDriveV3Model.File
 
 exception File_not_found = DriveMutations.File_not_found
 
-type runtime = { cache : CacheData.t; config : Config.t }
+type runtime = DriveRuntime.base = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
   val root_directory : string

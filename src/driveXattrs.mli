@@ -3,7 +3,7 @@ exception Invalid_operation
 exception No_attribute
 exception Permission_denied
 
-type runtime = { cache : CacheData.t; config : Config.t }
+type runtime = DriveRuntime.base = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
   val max_attribute_length : int

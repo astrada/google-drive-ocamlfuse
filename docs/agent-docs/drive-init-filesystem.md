@@ -53,10 +53,11 @@ let init_filesystem () =
   RuntimeServiceOps.init_filesystem (drive_runtime_services_runtime ())
 ```
 
-`drive_runtime_services_runtime` reads the cache and config from `Context`:
+`drive_runtime_services_runtime` reads the cache and config from `Context` and
+returns the shared cache/config runtime shape:
 
 ```ocaml
-type runtime = {
+type runtime = DriveRuntime.base = {
   cache : CacheData.t;
   config : Config.t;
 }

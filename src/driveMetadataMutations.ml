@@ -3,7 +3,7 @@ open GapiMonad
 open GapiMonad.SessionM.Infix
 open GapiDriveV3Model
 
-type runtime = { cache : CacheData.t; config : Config.t }
+type runtime = DriveRuntime.base = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
   val build_resource_keys_header_from_resource :

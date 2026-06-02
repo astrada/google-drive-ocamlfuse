@@ -48,7 +48,7 @@ The production ports in `DriveXattrPorts` own the surrounding effects:
 The runtime passed to `DriveXattrs` contains the cache handle and config:
 
 ```ocaml
-type runtime = {
+type runtime = DriveRuntime.base = {
   cache : CacheData.t;
   config : Config.t;
 }

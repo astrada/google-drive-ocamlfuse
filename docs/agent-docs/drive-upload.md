@@ -41,13 +41,14 @@ that follows a successful Drive response.
 The runtime is:
 
 ```ocaml
-type runtime = {
+type runtime = DriveRuntime.base = {
   cache : CacheData.t;
   config : Config.t;
 }
 ```
 
-Production wiring lives in `DriveUploadPorts` in `src/drive.ml`.
+Production wiring lives in `DriveUploadPorts` in `src/drive.ml`; the
+production runtime is built through the shared cache/config runtime helper.
 
 Important ports include:
 

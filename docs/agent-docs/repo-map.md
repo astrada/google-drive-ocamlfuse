@@ -96,6 +96,9 @@ The `Makefile` is only a small wrapper around these dune commands.
     `DriveFilesystemStats`.
   - Default Drive request exception translation and retry wrapping delegate
     into `DriveRequestHandling`.
+  - Shared cache/config, cache-only, and config-only runtime record shapes live
+    in `DriveRuntime` and are used by extracted Drive policy modules with
+    matching runtime needs.
   - FUSE-init runtime service startup delegates into `DriveRuntimeServices`.
   - Configured root-folder id resolution and synthetic well-known resource
     creation delegate into `DriveRootResolution` through

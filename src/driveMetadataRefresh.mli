@@ -7,7 +7,7 @@ type account_metadata = {
   storage_quota_usage : int64;
 }
 
-type runtime = { cache : CacheData.t; config : Config.t }
+type runtime = DriveRuntime.base = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
   val with_metadata_lock : (unit -> 'a) -> 'a

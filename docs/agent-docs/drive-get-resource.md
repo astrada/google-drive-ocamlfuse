@@ -28,7 +28,10 @@ val check_resource_in_cache : CacheData.t -> string -> bool -> bool
 The resolver module exposes the same behavior through a functorized runtime:
 
 ```ocaml
-type runtime = { cache : CacheData.t; config : Config.t }
+type runtime = DriveRuntime.base = {
+  cache : CacheData.t;
+  config : Config.t;
+}
 
 module Make (P : PORTS) : sig
   val get_resource :
