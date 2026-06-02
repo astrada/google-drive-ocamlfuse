@@ -2,17 +2,10 @@ open OUnit
 open GapiMonad
 module Opens = DriveOpens
 
-let session =
-  {
-    GapiConversation.Session.curl = GapiCurl.Initialized;
-    config = GapiConfig.default;
-    auth = GapiConversation.Session.NoAuth;
-    cookies = [];
-    etag = "";
-  }
+let run_session = DriveTestSupport.run_session
 
-let run_session m = fst (m session)
-let default_runtime ?(config = Config.default) () = { Opens.config }
+let default_runtime ?(config = Config.default) () =
+  DriveTestSupport.config_only_runtime ~config ()
 
 module FakePorts = struct
   type resource_response =

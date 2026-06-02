@@ -3,28 +3,10 @@ open GapiMonad
 open GapiMonad.SessionM.Infix
 module File = GapiDriveV3Model.File
 
-let session =
-  {
-    GapiConversation.Session.curl = GapiCurl.Initialized;
-    config = GapiConfig.default;
-    auth = GapiConversation.Session.NoAuth;
-    cookies = [];
-    etag = "";
-  }
-
-let run_session m = fst (m session)
-
-let dummy_cache =
-  {
-    CacheData.cache_dir = "/tmp";
-    db_path = "/tmp/test-cache.db";
-    busy_timeout = 0;
-    in_memory = true;
-    autosaving_interval = 0;
-  }
+let run_session = DriveTestSupport.run_session
 
 let default_runtime ?(config = Config.default) () =
-  { DriveXattrs.cache = dummy_cache; config }
+  DriveTestSupport.base_runtime ~config ()
 
 let string_list_printer values = "[" ^ String.concat "; " values ^ "]"
 let sort_strings = List.sort String.compare

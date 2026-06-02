@@ -1,28 +1,10 @@
 open OUnit
 open GapiMonad
 
-let session =
-  {
-    GapiConversation.Session.curl = GapiCurl.Initialized;
-    config = GapiConfig.default;
-    auth = GapiConversation.Session.NoAuth;
-    cookies = [];
-    etag = "";
-  }
-
-let run_session m = fst (m session)
-
-let dummy_cache =
-  {
-    CacheData.cache_dir = "/tmp";
-    db_path = "/tmp/test-cache.db";
-    busy_timeout = 0;
-    in_memory = true;
-    autosaving_interval = 0;
-  }
+let run_session = DriveTestSupport.run_session
 
 let default_runtime ?(config = Config.default) () =
-  { DriveUploadDispatch.cache = dummy_cache; config }
+  DriveTestSupport.base_runtime ~config ()
 
 let string_of_string_list values = String.concat "," values
 
