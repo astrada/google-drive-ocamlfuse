@@ -4,8 +4,7 @@ module Namespace = DrivePathNamespace
 let make_config ?(disable_trash = false) ?(lost_and_found = false) () =
   { Config.default with disable_trash; lost_and_found }
 
-let string_of_mapping (path, trashed) =
-  Printf.sprintf "(%S, %b)" path trashed
+let string_of_mapping (path, trashed) = Printf.sprintf "(%S, %b)" path trashed
 
 let assert_path_mapping expected path config =
   assert_equal ~printer:string_of_mapping expected
@@ -14,7 +13,8 @@ let assert_path_mapping expected path config =
 let test_constants () =
   assert_equal "/" Namespace.root_directory;
   assert_equal "/.Trash" Namespace.trash_directory;
-  assert_equal (String.length Namespace.trash_directory)
+  assert_equal
+    (String.length Namespace.trash_directory)
     Namespace.trash_directory_name_length;
   assert_equal "/.Trash/" Namespace.trash_directory_base_path;
   assert_equal "/lost+found" Namespace.lost_and_found_directory;
@@ -27,8 +27,9 @@ let test_trash_mapping_enabled () =
   assert_path_mapping ("/", true) "/.Trash" config;
   assert_path_mapping ("/file.txt", true) "/.Trash/file.txt" config;
   assert_path_mapping ("/dir/file.txt", true) "/.Trash/dir/file.txt" config;
-  assert_path_mapping ("/.Trashcan/file.txt", false) "/.Trashcan/file.txt"
-    config
+  assert_path_mapping
+    ("/.Trashcan/file.txt", false)
+    "/.Trashcan/file.txt" config
 
 let test_trash_mapping_disabled () =
   let config = make_config ~disable_trash:true () in
@@ -61,7 +62,8 @@ let test_lost_and_found_predicates () =
   assert_bool "trashed lost+found root is hidden"
     (not (Namespace.is_lost_and_found_root "/lost+found" true enabled));
   assert_bool "root predicate is exact"
-    (not (Namespace.is_lost_and_found_root "/lost+found/file.txt" false enabled));
+    (not
+       (Namespace.is_lost_and_found_root "/lost+found/file.txt" false enabled));
   assert_bool "nested lost+found path matches prefix"
     (Namespace.is_lost_and_found "/lost+found/file.txt" false enabled);
   assert_bool "lost+found prefix is disabled by config"
