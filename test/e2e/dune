@@ -1,5 +1,8 @@
 (executable
  (flags :standard -w -3)
+ (foreign_stubs
+  (language c)
+  (names e2e_xattr_stubs))
  (libraries threads google_drive_ocamlfuse ounit2 yojson)
  (name e2eSuite))
 

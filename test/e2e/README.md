@@ -63,8 +63,8 @@ trashes the remote run root.
 
 The metadata cases validate `chmod`, `utime`, and Linux `user.*` extended
 attributes through the mounted filesystem. The xattr case is skipped when the
-local platform, Python runtime, or FUSE stack does not support xattrs. `chown`
-and cross-account Drive sharing permissions are not part of the default e2e run.
+local platform or FUSE stack does not support xattrs. `chown` and cross-account
+Drive sharing permissions are not part of the default e2e run.
 
 ## Overrides
 
@@ -75,7 +75,6 @@ and cross-account Drive sharing permissions are not part of the default e2e run.
 - `GDFUSE_E2E_FS_TIMEOUT_SECONDS`: filesystem polling timeout.
 - `GDFUSE_E2E_ONLY`: substring filter for case labels and per-case directory
   names.
-- `GDFUSE_E2E_PYTHON`: Python executable used for xattr syscalls.
 - `GDFUSE_E2E_KEEP_LOCAL`: keep local temporary state after successful runs.
 - `GDFUSE_E2E_LOG_EXCERPT_LINES`: number of log lines to show on failure.
 
