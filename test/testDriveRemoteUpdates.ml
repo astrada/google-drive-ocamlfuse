@@ -84,26 +84,11 @@ module UpdateOps = RemoteUpdates.Make (FakePorts)
 
 let make_resource ?(id = 1L) ?(remote_id = Some "rid-file")
     ?(state = CacheData.Resource.State.Synchronized) ?(trashed = false) path =
-  let resource = Drive.create_resource path in
-  {
-    resource with
-    id;
-    remote_id;
-    name = Some (Filename.basename path);
-    mime_type = Some "text/plain";
-    size = Some 1L;
-    trashed = Some trashed;
-    version = Some 1L;
-    can_edit = Some true;
-    modified_time = Some 0.;
-    created_time = Some 0.;
-    viewed_by_me_time = Some 0.;
-    state;
-  }
+  DriveTestSupport.make_resource ~id ?remote_id ~state ~size:1L ~trashed path
 
 let make_file ?(id = "rid-updated") ?(name = "file.txt")
     ?(mime_type = "text/plain") ?(size = 2L) ?(version = 2L) () =
-  { File.empty with id; name; mimeType = mime_type; size; version }
+  DriveTestSupport.make_file ~id ~name ~mime_type ~size ~version ()
 
 let with_reset f =
   FakePorts.reset ();

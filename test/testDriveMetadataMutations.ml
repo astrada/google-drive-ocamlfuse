@@ -77,20 +77,7 @@ end
 module MetadataMutations = DriveMetadataMutations.Make (FakePorts)
 
 let make_resource ?(id = 1L) ?(remote_id = "rid-file") path =
-  let resource = Drive.create_resource path in
-  {
-    resource with
-    id;
-    remote_id = Some remote_id;
-    name = Some (Filename.basename path);
-    mime_type = Some "text/plain";
-    trashed = Some false;
-    version = Some 1L;
-    can_edit = Some true;
-    modified_time = Some 0.;
-    created_time = Some 0.;
-    viewed_by_me_time = Some 0.;
-  }
+  DriveTestSupport.make_resource ~id ~remote_id path
 
 let last_remote_update () =
   match List.rev !FakePorts.remote_update_calls with

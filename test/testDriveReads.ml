@@ -94,22 +94,8 @@ module ReadOps = DriveReads.Make (FakePorts)
 let make_resource ?(id = 1L) ?(remote_id = "rid-file")
     ?(state = CacheData.Resource.State.Synchronized) ?(size = 0L)
     ?(mime_type = "text/plain") ?(trashed = false) path =
-  let resource = Drive.create_resource path in
-  {
-    resource with
-    id;
-    remote_id = Some remote_id;
-    name = Some (Filename.basename path);
-    mime_type = Some mime_type;
-    size = Some size;
-    trashed = Some trashed;
-    version = Some 1L;
-    can_edit = Some true;
-    modified_time = Some 0.;
-    created_time = Some 0.;
-    viewed_by_me_time = Some 0.;
-    state;
-  }
+  DriveTestSupport.make_resource ~id ~remote_id ~state ~size ~mime_type ~trashed
+    path
 
 let streaming_config ?(memory_buffer_size = 0) ?(read_ahead_buffers = 0) () =
   {

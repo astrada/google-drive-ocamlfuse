@@ -82,21 +82,8 @@ let cached_xattrs xattrs =
 
 let make_resource ?(id = 1L) ?(remote_id = "rid-file") ?(trashed = false)
     ?(xattrs = []) path =
-  let resource = Drive.create_resource path in
-  {
-    resource with
-    id;
-    remote_id = Some remote_id;
-    name = Some (Filename.basename path);
-    mime_type = Some "text/plain";
-    trashed = Some trashed;
-    version = Some 1L;
-    can_edit = Some true;
-    modified_time = Some 0.;
-    created_time = Some 0.;
-    viewed_by_me_time = Some 0.;
-    xattrs = cached_xattrs xattrs;
-  }
+  let resource = DriveTestSupport.make_resource ~id ~remote_id ~trashed path in
+  { resource with xattrs = cached_xattrs xattrs }
 
 let last_remote_update () =
   match List.rev !FakePorts.remote_update_calls with
