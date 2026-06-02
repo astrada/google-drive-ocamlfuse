@@ -179,16 +179,27 @@ Acceptance criteria:
 After the safe helpers are in place, review the remaining duplication and decide
 whether additional helpers are worthwhile.
 
-Likely deferred helpers:
+The shared support module covers the repeated session, dummy cache, runtime
+constructors, resource/file builders, and trace list assertions. Individual test
+modules still keep small `default_runtime` wrappers when the production module
+has a module-specific runtime record or when a local default makes the tests
+easier to scan.
+
+Deferred helpers:
 
 - fake resource stores backed by `Hashtbl`
 - queued response helpers for `get_resource`
 - common path-normalization tracing
 
+These patterns are intentionally left local because they encode the behavior of
+each fake `PORTS` module. A shared helper would save little code and would make
+the dependency boundary less visible in the tests.
+
 Acceptance criteria:
 
 - No helper is added unless it makes at least two test modules clearer.
 - Tests remain easier to read than the duplicated version.
+- `dune runtest` passes.
 
 ## Non-Goals
 

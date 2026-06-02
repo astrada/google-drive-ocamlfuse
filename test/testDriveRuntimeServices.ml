@@ -1,15 +1,6 @@
 open OUnit
 module RuntimeServices = DriveRuntimeServices
 
-let dummy_cache =
-  {
-    CacheData.cache_dir = "/tmp";
-    db_path = "/tmp/test-cache.db";
-    busy_timeout = 0;
-    in_memory = true;
-    autosaving_interval = 0;
-  }
-
 let make_config ?(async_upload_queue = false) ?(async_upload_threads = 10)
     ?(background_folder_fetching = false) () =
   {
@@ -19,7 +10,8 @@ let make_config ?(async_upload_queue = false) ?(async_upload_threads = 10)
     background_folder_fetching;
   }
 
-let runtime ?(cache = dummy_cache) ?(config = make_config ()) () =
+let runtime ?(cache = DriveTestSupport.dummy_cache) ?(config = make_config ())
+    () =
   { RuntimeServices.cache; config }
 
 module FakePorts = struct

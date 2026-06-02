@@ -3,28 +3,10 @@ open GapiMonad
 open GapiMonad.SessionM.Infix
 module File = GapiDriveV3Model.File
 
-let session =
-  {
-    GapiConversation.Session.curl = GapiCurl.Initialized;
-    config = GapiConfig.default;
-    auth = GapiConversation.Session.NoAuth;
-    cookies = [];
-    etag = "";
-  }
-
-let run_session m = fst (m session)
-
-let dummy_cache =
-  {
-    CacheData.cache_dir = "/tmp";
-    db_path = "/tmp/test-cache.db";
-    busy_timeout = 0;
-    in_memory = true;
-    autosaving_interval = 0;
-  }
+let run_session = DriveTestSupport.run_session
 
 let default_runtime ?(config = Config.default) () =
-  { DriveDirectoryReads.cache = dummy_cache; config }
+  DriveTestSupport.base_runtime ~config ()
 
 module FakePorts = struct
   let resources = Hashtbl.create 64
@@ -90,7 +72,8 @@ module FakePorts = struct
 
   let build_resource_tables parent_path trashed =
     let resources =
-      select_resources_with_parent_path dummy_cache parent_path trashed
+      select_resources_with_parent_path DriveTestSupport.dummy_cache parent_path
+        trashed
     in
     let filename_table = Hashtbl.create 16 in
     let remote_id_table = Hashtbl.create 16 in

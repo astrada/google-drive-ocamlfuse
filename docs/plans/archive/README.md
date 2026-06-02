@@ -53,6 +53,9 @@
 - `drive-runtime-and-shared-concepts-refactor/plan.md`: archived completed
   plan for adding shared Drive runtime types and small reusable Drive
   `PORTS` fragments while keeping extracted modules independently testable.
+- `drive-test-support-refactor/plan.md`: archived completed plan for reducing
+  duplicated Drive unit-test setup with shared session, runtime, builder, and
+  trace helpers while keeping fake `PORTS` modules local.
 - `gdfuse-cli-error-handling/plan.md`: archived completed plan for restoring
   clean CLI handling for `-version`, `-help`, `--help`, and invalid options,
   and for expanding CLI behavior test coverage.

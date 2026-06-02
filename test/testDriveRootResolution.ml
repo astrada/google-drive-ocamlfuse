@@ -3,28 +3,10 @@ open GapiMonad
 module File = GapiDriveV3Model.File
 module Root = DriveRootResolution
 
-let session =
-  {
-    GapiConversation.Session.curl = GapiCurl.Initialized;
-    config = GapiConfig.default;
-    auth = GapiConversation.Session.NoAuth;
-    cookies = [];
-    etag = "";
-  }
-
-let run_session request = fst (request session)
-
-let dummy_cache =
-  {
-    CacheData.cache_dir = "/tmp";
-    db_path = "/tmp/test-cache.db";
-    busy_timeout = 0;
-    in_memory = true;
-    autosaving_interval = 0;
-  }
+let run_session = DriveTestSupport.run_session
 
 let default_runtime ?(config = Config.default) ?root_folder_id () =
-  { Root.cache = dummy_cache; config; root_folder_id }
+  { Root.cache = DriveTestSupport.dummy_cache; config; root_folder_id }
 
 let make_config ?(scope = "") ?(team_drive_id = "") ?(root_folder = "")
     ?(lost_and_found = false) () =
@@ -47,17 +29,7 @@ let make_resource ?(id = 1L) ?remote_id ?(trashed = false)
     trashed = Some trashed;
   }
 
-let index_of value values =
-  let rec loop i = function
-    | [] -> raise Not_found
-    | x :: xs -> if x = value then i else loop (i + 1) xs
-  in
-  loop 0 values
-
-let assert_before earlier later events =
-  assert_bool
-    (Printf.sprintf "expected %s before %s" earlier later)
-    (index_of earlier events < index_of later events)
+let assert_before = DriveTestSupport.Trace.assert_before
 
 module FakePorts = struct
   let trace = ref []

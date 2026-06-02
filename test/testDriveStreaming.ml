@@ -6,16 +6,7 @@ module Streaming = DriveStreaming
 
 exception Abusive_download
 
-let session =
-  {
-    GapiConversation.Session.curl = GapiCurl.Initialized;
-    config = GapiConfig.default;
-    auth = GapiConversation.Session.NoAuth;
-    cookies = [];
-    etag = "";
-  }
-
-let run_session m = fst (m session)
+let run_session = DriveTestSupport.run_session
 
 let buffer length =
   Bigarray.Array1.create Bigarray.char Bigarray.c_layout length
@@ -33,17 +24,8 @@ let media_download ?(range_spec = "") () =
   let destination = GapiMediaResource.ArrayBuffer (buffer 1) in
   { GapiMediaResource.destination; range_spec }
 
-let index_of value values =
-  let rec loop i = function
-    | [] -> raise Not_found
-    | x :: xs -> if x = value then i else loop (i + 1) xs
-  in
-  loop 0 values
-
-let assert_before earlier later events =
-  assert_bool
-    (Printf.sprintf "expected %s before %s" earlier later)
-    (index_of earlier events < index_of later events)
+let index_of = DriveTestSupport.Trace.index_of
+let assert_before = DriveTestSupport.Trace.assert_before
 
 let header_values headers =
   headers

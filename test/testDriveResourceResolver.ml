@@ -3,28 +3,10 @@ open GapiMonad
 module File = GapiDriveV3Model.File
 module Resolver = DriveResourceResolver
 
-let session =
-  {
-    GapiConversation.Session.curl = GapiCurl.Initialized;
-    config = GapiConfig.default;
-    auth = GapiConversation.Session.NoAuth;
-    cookies = [];
-    etag = "";
-  }
-
-let run_session m = fst (m session)
-
-let dummy_cache =
-  {
-    CacheData.cache_dir = "/tmp";
-    db_path = "/tmp/test-cache.db";
-    busy_timeout = 0;
-    in_memory = true;
-    autosaving_interval = 0;
-  }
+let run_session = DriveTestSupport.run_session
 
 let default_runtime ?(config = Config.default) () =
-  { Resolver.cache = dummy_cache; config }
+  DriveTestSupport.base_runtime ~config ()
 
 let make_metadata last_update =
   {
@@ -58,25 +40,12 @@ let make_file ?(mime_type = "text/plain") ?(trashed = false) ?(size = 0L)
     ?(version = 1L) id name =
   { File.empty with id; name; mimeType = mime_type; trashed; size; version }
 
-let index_of value values =
-  let rec loop i = function
-    | [] -> raise Not_found
-    | x :: xs -> if x = value then i else loop (i + 1) xs
-  in
-  loop 0 values
-
-let assert_before earlier later events =
-  assert_bool
-    (Printf.sprintf "expected %s before %s" earlier later)
-    (index_of earlier events < index_of later events)
+let assert_before = DriveTestSupport.Trace.assert_before
 
 let assert_has_event event events =
   assert_bool (Printf.sprintf "expected event %s" event) (List.mem event events)
 
-let assert_no_event prefix events =
-  assert_bool
-    (Printf.sprintf "unexpected event with prefix %s" prefix)
-    (not (List.exists (String.starts_with ~prefix) events))
+let assert_no_event = DriveTestSupport.Trace.assert_no_event
 
 module FakePorts = struct
   let root_directory = "/"

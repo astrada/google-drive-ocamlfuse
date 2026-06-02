@@ -1,16 +1,8 @@
 open OUnit
 module RequestHandling = DriveRequestHandling
 
-let session =
-  {
-    GapiConversation.Session.curl = GapiCurl.Initialized;
-    config = GapiConfig.default;
-    auth = GapiConversation.Session.NoAuth;
-    cookies = [];
-    etag = "";
-  }
-
-let run_session request = fst (request session)
+let session = DriveTestSupport.session
+let run_session = DriveTestSupport.run_session
 let pipe () = GapiPipe.OcamlnetPipe.create ()
 
 let single_error reason =

@@ -1,15 +1,6 @@
 open OUnit
 module Maintenance = DriveCacheMaintenance
 
-let dummy_cache =
-  {
-    CacheData.cache_dir = "/tmp";
-    db_path = "/tmp/test-cache.db";
-    busy_timeout = 0;
-    in_memory = true;
-    autosaving_interval = 0;
-  }
-
 let make_metadata ?(display_name = "metadata") ?(cache_size = 0L) () =
   {
     CacheData.Metadata.display_name;
@@ -35,7 +26,7 @@ let make_config ?(max_cache_size_mb = 512) () =
 
 let default_runtime ?config ?metadata () =
   {
-    Maintenance.cache = dummy_cache;
+    Maintenance.cache = DriveTestSupport.dummy_cache;
     config = Option.default Config.default config;
     metadata;
   }
@@ -124,7 +115,9 @@ module Ops = Maintenance.Make (FakePorts)
 
 let test_update_cache_size_zero_skips_side_effects () =
   FakePorts.reset ();
-  Ops.update_cache_size 0L (make_metadata ~cache_size:10L ()) dummy_cache;
+  Ops.update_cache_size 0L
+    (make_metadata ~cache_size:10L ())
+    DriveTestSupport.dummy_cache;
   assert_equal [] !FakePorts.trace
 
 let test_update_cache_size_updates_db_then_context () =
@@ -133,7 +126,7 @@ let test_update_cache_size_updates_db_then_context () =
     make_metadata ~display_name:"context" ~cache_size:1L ();
   Ops.update_cache_size 25L
     (make_metadata ~display_name:"argument" ~cache_size:100L ())
-    dummy_cache;
+    DriveTestSupport.dummy_cache;
   assert_equal
     [ "db:25"; "context_update"; "context_size:125" ]
     !FakePorts.trace;

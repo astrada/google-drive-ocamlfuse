@@ -4,28 +4,10 @@ module Change = GapiDriveV3Model.Change
 module File = GapiDriveV3Model.File
 module Refresh = DriveMetadataRefresh
 
-let session =
-  {
-    GapiConversation.Session.curl = GapiCurl.Initialized;
-    config = GapiConfig.default;
-    auth = GapiConversation.Session.NoAuth;
-    cookies = [];
-    etag = "";
-  }
-
-let run_session m = fst (m session)
-
-let dummy_cache =
-  {
-    CacheData.cache_dir = "/tmp";
-    db_path = "/tmp/test-cache.db";
-    busy_timeout = 0;
-    in_memory = true;
-    autosaving_interval = 0;
-  }
+let run_session = DriveTestSupport.run_session
 
 let default_runtime ?(config = Config.default) () =
-  { Refresh.cache = dummy_cache; config }
+  DriveTestSupport.base_runtime ~config ()
 
 let make_metadata ?(display_name = "Cached User") ?(start_page_token = "old")
     ?(cache_size = 10L) ?(last_update = 100.0) () =
@@ -79,10 +61,7 @@ let make_resource ?(id = 1L) ?(state = CacheData.Resource.State.Synchronized)
 let assert_has_event event events =
   assert_bool (Printf.sprintf "expected event %s" event) (List.mem event events)
 
-let assert_no_event prefix events =
-  assert_bool
-    (Printf.sprintf "unexpected event with prefix %s" prefix)
-    (not (List.exists (String.starts_with ~prefix) events))
+let assert_no_event = DriveTestSupport.Trace.assert_no_event
 
 module FakePorts = struct
   let trace = ref []

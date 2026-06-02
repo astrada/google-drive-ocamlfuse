@@ -3,27 +3,8 @@ open GapiMonad
 module File = GapiDriveV3Model.File
 module ResourceById = DriveResourceById
 
-let session =
-  {
-    GapiConversation.Session.curl = GapiCurl.Initialized;
-    config = GapiConfig.default;
-    auth = GapiConversation.Session.NoAuth;
-    cookies = [];
-    etag = "";
-  }
-
-let run_session m = fst (m session)
-
-let dummy_cache =
-  {
-    CacheData.cache_dir = "/tmp";
-    db_path = "/tmp/test-cache.db";
-    busy_timeout = 0;
-    in_memory = true;
-    autosaving_interval = 0;
-  }
-
-let runtime = { ResourceById.cache = dummy_cache }
+let run_session = DriveTestSupport.run_session
+let runtime = DriveTestSupport.cache_only_runtime ()
 
 let make_resource ?(id = 1L) ?remote_id ?(mime_type = "text/plain") path =
   let resource =
@@ -44,17 +25,7 @@ let make_file ?(parents = [ "root" ]) ?(shared = false)
     ?(mime_type = "text/plain") id name =
   { File.empty with id; name; mimeType = mime_type; parents; shared }
 
-let index_of value values =
-  let rec loop i = function
-    | [] -> raise Not_found
-    | x :: xs -> if x = value then i else loop (i + 1) xs
-  in
-  loop 0 values
-
-let assert_before earlier later events =
-  assert_bool
-    (Printf.sprintf "expected %s before %s" earlier later)
-    (index_of earlier events < index_of later events)
+let assert_before = DriveTestSupport.Trace.assert_before
 
 module FakePorts = struct
   let root_directory = "/"
@@ -197,7 +168,8 @@ let test_server_result_is_not_inserted_into_cache () =
   FakePorts.add_remote_file (make_file "rid-child" "child.txt");
   ignore (get_resource_with_id "rid-child");
   assert_equal None
-    (FakePorts.select_first_resource_with_remote_id dummy_cache "rid-child")
+    (FakePorts.select_first_resource_with_remote_id DriveTestSupport.dummy_cache
+       "rid-child")
 
 let test_fetch_exception_propagates () =
   FakePorts.reset ();

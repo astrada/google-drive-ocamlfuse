@@ -2,7 +2,7 @@
 
 Active plans:
 
-- [Drive Test Support Refactor](drive-test-support-refactor.md)
+None.
 
 Backlog:
 

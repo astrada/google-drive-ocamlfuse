@@ -5,27 +5,11 @@ module Bridge = DriveUploadWorkerBridge
 
 exception Upload_failed
 
-let session =
-  {
-    GapiConversation.Session.curl = GapiCurl.Initialized;
-    config = GapiConfig.default;
-    auth = GapiConversation.Session.NoAuth;
-    cookies = [];
-    etag = "";
-  }
+let run_session = DriveTestSupport.run_session
 
-let run_session m = fst (m session)
+let runtime ?(cache = DriveTestSupport.dummy_cache) () =
+  DriveTestSupport.cache_only_runtime ~cache ()
 
-let dummy_cache =
-  {
-    CacheData.cache_dir = "/tmp";
-    db_path = "/tmp/test-cache.db";
-    busy_timeout = 0;
-    in_memory = true;
-    autosaving_interval = 0;
-  }
-
-let runtime ?(cache = dummy_cache) () = { Bridge.cache }
 let string_of_string_list values = String.concat "," values
 
 let make_resource ?(id = 1L) ?(state = CacheData.Resource.State.ToUpload) path
