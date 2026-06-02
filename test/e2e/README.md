@@ -41,6 +41,12 @@ Run the full e2e smoke suite:
 make e2e
 ```
 
+`make e2e` builds the e2e runner and `google-drive-ocamlfuse`, then executes the
+runner directly so case output is visible as it is produced. The `@e2e` Dune
+alias is still available for Dune-native workflows; use
+`dune build --no-buffer -j 1 @e2e --force` when live action output is needed
+through Dune.
+
 List the available named cases:
 
 ```sh

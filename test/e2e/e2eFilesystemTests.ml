@@ -332,6 +332,19 @@ let remount_and_assert run f =
   E2eHarness.remount run;
   f ()
 
+let case_duration started = Unix.gettimeofday () -. started
+let print_case_start label = Printf.printf "e2e case start: %s\n%!" label
+
+let print_case_pass label started =
+  Printf.printf "e2e case pass: %s (%.2fs)\n%!" label (case_duration started)
+
+let print_case_skip label started =
+  Printf.printf "e2e case skip: %s (%.2fs)\n%!" label (case_duration started)
+
+let print_case_fail label started e =
+  Printf.eprintf "e2e case fail: %s (%.2fs): %s\n%!" label
+    (case_duration started) (Printexc.to_string e)
+
 let register_cleanup () =
   if not !cleanup_registered then (
     cleanup_registered := true;
@@ -365,13 +378,25 @@ let case_dir run name =
   wait_path_exists run dir;
   dir
 
-let with_case name f _ =
-  let run = get_run () in
-  try f run (case_dir run name) with
-  | OUnitTest.Skip _ as e -> raise e
+let with_case label name f _ =
+  let started = Unix.gettimeofday () in
+  print_case_start label;
+  let current_run = ref None in
+  try
+    let run = get_run () in
+    current_run := Some run;
+    f run (case_dir run name);
+    print_case_pass label started
+  with
+  | OUnitTest.Skip _ as e ->
+      print_case_skip label started;
+      raise e
   | e ->
+      print_case_fail label started e;
       run_failed := true;
-      E2eHarness.print_failure_diagnostics run ~case:name ~exn:e;
+      (match !current_run with
+      | None -> ()
+      | Some run -> E2eHarness.print_failure_diagnostics run ~case:name ~exn:e);
       raise e
 
 let test_mount_root_listing run _dir =
@@ -757,5 +782,6 @@ let suite ?only () =
     List.exists (fun case -> case.requires_google_native_fixture) selected;
   "google-drive-ocamlfuse e2e"
   >::: List.map
-         (fun case -> case.label >:: with_case case.directory case.test)
+         (fun case ->
+           case.label >:: with_case case.label case.directory case.test)
          selected
