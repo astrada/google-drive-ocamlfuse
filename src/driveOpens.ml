@@ -6,8 +6,8 @@ exception Permission_denied = DriveMutations.Permission_denied
 type runtime = DriveRuntime.config_only = { config : Config.t }
 
 module type PORTS = sig
-  val get_path_in_cache : string -> Config.t -> string * bool
-  val get_resource : string -> bool -> CacheData.Resource.t SessionM.m
+  include DrivePortFragments.PATH_LOOKUP
+  include DrivePortFragments.RESOURCE_LOOKUP
 end
 
 let is_desktop_format config resource =

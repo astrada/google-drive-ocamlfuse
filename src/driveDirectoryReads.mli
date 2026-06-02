@@ -3,8 +3,9 @@ module File = GapiDriveV3Model.File
 type runtime = DriveRuntime.base = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
-  val get_path_in_cache : string -> Config.t -> string * bool
-  val get_resource : string -> bool -> CacheData.Resource.t GapiMonad.SessionM.m
+  include DrivePortFragments.PATH_LOOKUP
+  include DrivePortFragments.RESOURCE_LOOKUP
+
   val get_folder_id : string -> bool -> string GapiMonad.SessionM.m
   val is_lost_and_found_root : string -> bool -> Config.t -> bool
   val is_shared_with_me_root : string -> bool -> Config.t -> bool

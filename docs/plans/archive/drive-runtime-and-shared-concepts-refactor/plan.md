@@ -100,6 +100,10 @@ Likely deferred or extended cases:
 - `DriveMutations.runtime`, because it adds mountpoint path and skip-trash
   behavior.
 
+Review result: keep these runtimes module-specific. Each extra field is tied to
+the owning module's policy, and introducing shared extended records would mostly
+create single-use aliases or hide important test fixture state.
+
 ## Production Runtime Builders
 
 After introducing shared runtime types, centralize production runtime
@@ -288,22 +292,71 @@ Acceptance criteria:
 - Changes are made only where the resulting runtime is clearer than the current
   module-specific shape.
 
+Review result:
+
+- `DriveViews`: keep module-specific; `mountpoint_path` and
+  `mountpoint_stats` are view/stat-specific state.
+- `DriveRootResolution`: keep module-specific; `root_folder_id` is the
+  root-resolution memoization boundary.
+- `DriveCacheMaintenance`: keep module-specific; optional metadata is tied to
+  cache-size accounting and cleanup paths.
+- `DriveFilesystemStats`: keep module-specific; quota metadata plus config is a
+  pure statfs input, not a reusable Drive runtime.
+- `DriveStreaming`: keep module-specific; memory buffers and eviction-thread
+  state belong to the streaming policy.
+- `DriveMutations`: keep module-specific; `mountpoint_path` and `skip_trash`
+  are mutation-only operational state.
+
 ### 6. Factor Small Port Fragments
 
 Introduce reusable module-type fragments only for repeated concepts that remain
 after runtime cleanup.
 
-Suggested order:
+First pass:
 
-1. path lookup
-2. resource lookup
-3. resource store/cache update
-4. remote update
+- Add a type-only `DrivePortFragments` module.
+- Define small fragments for path lookup, resource lookup, and single-resource
+  resource-key header construction.
+- Include those fragments in extracted modules that already declare the same
+  ports.
+
+Initial fragments:
+
+```ocaml
+module type PATH_LOOKUP = sig
+  val get_path_in_cache : string -> Config.t -> string * bool
+end
+
+module type RESOURCE_LOOKUP = sig
+  val get_resource :
+    string -> bool -> CacheData.Resource.t GapiMonad.SessionM.m
+end
+
+module type RESOURCE_KEYS = sig
+  val build_resource_keys_header_from_resource :
+    CacheData.Resource.t -> GapiCore.Header.t list
+end
+```
+
+Initial targets:
+
+- lookup fragments: `DriveReads`, `DriveOpens`, `DriveRemoteUpdates`,
+  `DriveFileMutations`, `DriveXattrs`, `DriveViews`, `DriveDirectoryReads`,
+  `DriveUploadDispatch`, and `DriveMutations`
+- resource-key fragment: `DriveXattrs`, `DriveUploads`, `DriveStreaming`,
+  `DriveMetadataMutations`, and `DriveMutations`
+
+Deferred:
+
+- resource store/cache update fragments
+- remote-update service or remote-update port fragments
 
 Acceptance criteria:
 
+- `DrivePortFragments` contains module types only.
 - Port fragments reduce fake-test duplication.
 - Individual extracted modules still expose narrow semantic `PORTS`.
+- No behavior moves between modules.
 - No module starts depending on an oversized shared dependency signature.
 
 ### 7. Update Documentation

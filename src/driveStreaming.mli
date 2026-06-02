@@ -8,8 +8,7 @@ type runtime = {
 }
 
 module type PORTS = sig
-  val build_resource_keys_header_from_resource :
-    CacheData.Resource.t -> GapiCore.Header.t list
+  include DrivePortFragments.RESOURCE_KEYS
 
   val get_media :
     acknowledge_abuse:bool ->

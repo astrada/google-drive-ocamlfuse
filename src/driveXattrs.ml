@@ -11,13 +11,12 @@ exception Permission_denied = DriveMutations.Permission_denied
 type runtime = DriveRuntime.base = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
+  include DrivePortFragments.PATH_LOOKUP
+  include DrivePortFragments.RESOURCE_LOOKUP
+  include DrivePortFragments.RESOURCE_KEYS
+
   val max_attribute_length : int
   val json_length : string -> int
-  val get_path_in_cache : string -> Config.t -> string * bool
-  val get_resource : string -> bool -> CacheData.Resource.t SessionM.m
-
-  val build_resource_keys_header_from_resource :
-    CacheData.Resource.t -> GapiCore.Header.t list
 
   val remote_update :
     custom_headers:GapiCore.Header.t list ->

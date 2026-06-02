@@ -6,6 +6,8 @@ module File = GapiDriveV3Model.File
 type runtime = DriveRuntime.base = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
+  include DrivePortFragments.RESOURCE_KEYS
+
   val get_content_path : CacheData.t -> CacheData.Resource.t -> string
 
   val create_file_resource :
@@ -16,9 +18,6 @@ module type PORTS = sig
 
   val update_cached_resource_state_and_size :
     CacheData.t -> CacheData.Resource.State.t -> int64 -> int64 -> unit
-
-  val build_resource_keys_header_from_resource :
-    CacheData.Resource.t -> GapiCore.Header.t list
 
   val now : unit -> Netdate.t
 

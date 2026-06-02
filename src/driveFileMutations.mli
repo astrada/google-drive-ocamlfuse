@@ -4,8 +4,9 @@ type io_buffer =
   (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 
 module type PORTS = sig
-  val get_path_in_cache : string -> Config.t -> string * bool
-  val get_resource : string -> bool -> CacheData.Resource.t GapiMonad.SessionM.m
+  include DrivePortFragments.PATH_LOOKUP
+  include DrivePortFragments.RESOURCE_LOOKUP
+
   val ensure_local_content : CacheData.Resource.t -> string GapiMonad.SessionM.m
   val flush_memory_buffers : CacheData.Resource.t -> unit
 

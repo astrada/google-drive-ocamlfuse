@@ -99,6 +99,9 @@ The `Makefile` is only a small wrapper around these dune commands.
   - Shared cache/config, cache-only, and config-only runtime record shapes live
     in `DriveRuntime` and are used by extracted Drive policy modules with
     matching runtime needs.
+  - Shared `PORTS` module-type fragments live in `DrivePortFragments` and are
+    included by extracted Drive modules for repeated path lookup, resource
+    lookup, and resource-key dependencies.
   - FUSE-init runtime service startup delegates into `DriveRuntimeServices`.
   - Configured root-folder id resolution and synthetic well-known resource
     creation delegate into `DriveRootResolution` through

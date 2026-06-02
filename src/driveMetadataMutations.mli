@@ -1,8 +1,7 @@
 type runtime = DriveRuntime.base = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
-  val build_resource_keys_header_from_resource :
-    CacheData.Resource.t -> GapiCore.Header.t list
+  include DrivePortFragments.RESOURCE_KEYS
 
   val remote_update :
     custom_headers:GapiCore.Header.t list ->

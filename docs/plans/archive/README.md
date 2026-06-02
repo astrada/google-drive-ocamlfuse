@@ -50,6 +50,9 @@
 - `drive-root-resolution-extraction/plan.md`: archived completed plan for
   extracting `DriveRootResolution` and making configured root-folder ids and
   synthetic well-known resource rows unit testable.
+- `drive-runtime-and-shared-concepts-refactor/plan.md`: archived completed
+  plan for adding shared Drive runtime types and small reusable Drive
+  `PORTS` fragments while keeping extracted modules independently testable.
 - `gdfuse-cli-error-handling/plan.md`: archived completed plan for restoring
   clean CLI handling for `-version`, `-help`, `--help`, and invalid options,
   and for expanding CLI behavior test coverage.

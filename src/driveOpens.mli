@@ -3,8 +3,8 @@ exception Permission_denied
 type runtime = DriveRuntime.config_only = { config : Config.t }
 
 module type PORTS = sig
-  val get_path_in_cache : string -> Config.t -> string * bool
-  val get_resource : string -> bool -> CacheData.Resource.t GapiMonad.SessionM.m
+  include DrivePortFragments.PATH_LOOKUP
+  include DrivePortFragments.RESOURCE_LOOKUP
 end
 
 val is_file_read_only : Config.t -> CacheData.Resource.t -> bool

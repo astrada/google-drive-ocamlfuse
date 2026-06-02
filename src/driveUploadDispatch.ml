@@ -4,7 +4,8 @@ open GapiMonad.SessionM.Infix
 type runtime = DriveRuntime.base = { cache : CacheData.t; config : Config.t }
 
 module type PORTS = sig
-  val get_path_in_cache : string -> Config.t -> string * bool
+  include DrivePortFragments.PATH_LOOKUP
+  include DrivePortFragments.RESOURCE_LOOKUP
 
   val lookup_resource :
     CacheData.t -> string -> bool -> CacheData.Resource.t option
@@ -12,7 +13,6 @@ module type PORTS = sig
   val update_cached_resource_state :
     CacheData.t -> CacheData.Resource.State.t -> int64 -> unit
 
-  val get_resource : string -> bool -> CacheData.Resource.t SessionM.m
   val flush_memory_buffers : CacheData.Resource.t -> unit
 
   val enqueue_async_upload :

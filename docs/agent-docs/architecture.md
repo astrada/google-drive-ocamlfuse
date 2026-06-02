@@ -71,6 +71,14 @@ paths, the concrete upload-attempt path, and the xattr paths are separated:
   validation, and Drive app-property patches
 - `src/driveRuntime.ml` holds shared runtime record shapes, including the
   common cache/config runtime used by extracted Drive policy modules
+- `src/drivePortFragments.ml` holds small reusable `PORTS` module-type
+  fragments for repeated Drive dependencies such as path lookup, resource
+  lookup, and resource-key header construction
+- Extended runtimes stay local to the modules that need additional operational
+  state: views keep mountpoint stats, streaming keeps memory-buffer state, root
+  resolution keeps the memoized root id, cache maintenance keeps optional
+  metadata, filesystem stats keeps quota metadata, and mutations keep
+  mountpoint and skip-trash state
 - `src/driveResourceMapping.ml` holds filename cleanup, duplicate-name
   disambiguation, cache resource construction, and Drive `File` to
   cache-resource mapping

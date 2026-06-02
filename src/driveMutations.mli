@@ -14,11 +14,14 @@ type runtime = {
 }
 
 module type PORTS = sig
+  include DrivePortFragments.PATH_LOOKUP
+  include DrivePortFragments.RESOURCE_LOOKUP
+  include DrivePortFragments.RESOURCE_KEYS
+
   val max_link_target_length : int
   val json_length : string -> int
   val is_lost_and_found : string -> bool -> Config.t -> bool
   val is_lost_and_found_root : string -> bool -> Config.t -> bool
-  val get_path_in_cache : string -> Config.t -> string * bool
   val is_filesystem_read_only : unit -> bool
   val create_resource : string -> CacheData.Resource.t
 
@@ -33,11 +36,6 @@ module type PORTS = sig
     CacheData.Resource.t ->
     GapiDriveV3Model.File.t ->
     CacheData.Resource.t
-
-  val get_resource : string -> bool -> CacheData.Resource.t GapiMonad.SessionM.m
-
-  val build_resource_keys_header_from_resource :
-    CacheData.Resource.t -> GapiCore.Header.t list
 
   val build_resource_keys_header_from_resources :
     CacheData.Resource.t list -> GapiCore.Header.t list
