@@ -3,17 +3,17 @@
  (libraries threads google_drive_ocamlfuse ounit2 yojson)
  (name e2eSuite))
 
-(alias
- (name e2e)
+(rule
+ (alias e2e)
  (deps e2eSuite.exe ../../bin/gdfuse.exe)
  (action (run ./e2eSuite.exe)))
 
-(alias
- (name e2e-list)
+(rule
+ (alias e2e-list)
  (deps e2eSuite.exe)
  (action (run ./e2eSuite.exe --list)))
 
-(alias
- (name e2e-preflight)
+(rule
+ (alias e2e-preflight)
  (deps e2eSuite.exe ../../bin/gdfuse.exe)
  (action (run ./e2eSuite.exe --preflight)))

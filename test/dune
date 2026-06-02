@@ -3,7 +3,7 @@
  (libraries threads google_drive_ocamlfuse ounit2)
  (name testSuite))
 
-(alias
- (name runtest)
+(rule
+ (alias runtest)
  (deps testSuite.exe)
  (action (run ./testSuite.exe)))
