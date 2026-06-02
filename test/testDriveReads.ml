@@ -10,12 +10,7 @@ let default_runtime ?(config = Config.default) () =
 let buffer length =
   Bigarray.Array1.create Bigarray.char Bigarray.c_layout length
 
-let index_of value values =
-  let rec loop i = function
-    | [] -> raise Not_found
-    | x :: xs -> if x = value then i else loop (i + 1) xs
-  in
-  loop 0 values
+let index_of = DriveTestSupport.Trace.index_of
 
 module FakePorts = struct
   let resource_responses = ref []

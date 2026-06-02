@@ -35,12 +35,7 @@ let buffer_of_string s =
 let string_of_int64_list values =
   String.concat "," (List.map Int64.to_string values)
 
-let index_of value values =
-  let rec loop i = function
-    | [] -> raise Not_found
-    | x :: xs -> if x = value then i else loop (i + 1) xs
-  in
-  loop 0 values
+let index_of = DriveTestSupport.Trace.index_of
 
 module FakePorts = struct
   let resources = Hashtbl.create 32
