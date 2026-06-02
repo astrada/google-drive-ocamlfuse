@@ -5,6 +5,7 @@ let path run relative = Filename.concat run.E2eHarness.paths.mountpoint relative
 let run_ref = ref None
 let run_failed = ref false
 let cleanup_registered = ref false
+let google_native_fixture_required = ref false
 
 let write_all fd content =
   let bytes = Bytes.of_string content in
@@ -61,6 +62,19 @@ let deterministic_content length =
   String.init length (fun index ->
       Char.chr (((index * 37) + (index / 17) + 11) land 0xff))
 
+let string_contains ~needle haystack =
+  let needle_length = String.length needle in
+  let haystack_length = String.length haystack in
+  if needle_length = 0 then true
+  else if needle_length > haystack_length then false
+  else
+    let rec loop index =
+      if index > haystack_length - needle_length then false
+      else if String.sub haystack index needle_length = needle then true
+      else loop (index + 1)
+    in
+    loop 0
+
 let wait_until run description observe =
   let timeout = run.E2eHarness.settings.E2eSettings.fs_timeout_seconds in
   let deadline = Unix.gettimeofday () +. timeout in
@@ -101,6 +115,24 @@ let wait_file_content run path expected =
             (Digest.string actual |> Digest.to_hex)
             (String.length expected)
             (Digest.string expected |> Digest.to_hex) ))
+
+let wait_file_contains_all run path snippets =
+  wait_until run
+    (Printf.sprintf "%s contents to contain [%s]" path
+       (String.concat "," snippets))
+    (fun () ->
+      if not (Sys.file_exists path) then (false, "missing")
+      else
+        let actual = read_file path in
+        let missing =
+          List.filter
+            (fun snippet -> not (string_contains ~needle:snippet actual))
+            snippets
+        in
+        ( missing = [],
+          Printf.sprintf "length=%d md5=%s missing=[%s]" (String.length actual)
+            (Digest.string actual |> Digest.to_hex)
+            (String.concat "," missing) ))
 
 let wait_file_size run path expected =
   wait_until run (Printf.sprintf "%s size to be %Ld" path expected) (fun () ->
@@ -284,6 +316,18 @@ let wait_xattr_list_contains run path name =
       let names = list_xattr_or_skip path in
       (List.mem name names, "names=[" ^ String.concat "," names ^ "]"))
 
+let wait_symlink_target run path expected =
+  wait_until run (Printf.sprintf "%s symlink target to be %s" path expected)
+    (fun () ->
+      if not (Sys.file_exists path) then (false, "missing")
+      else
+        let stat = Unix.LargeFile.lstat path in
+        if stat.Unix.LargeFile.st_kind <> Unix.S_LNK then
+          (false, "kind is not S_LNK")
+        else
+          let actual = Unix.readlink path in
+          (actual = expected, Printf.sprintf "target=%s" actual))
+
 let remount_and_assert run f =
   E2eHarness.remount run;
   f ()
@@ -309,6 +353,8 @@ let get_run () =
   | None ->
       register_cleanup ();
       let run = E2eHarness.setup () in
+      if !google_native_fixture_required then
+        ignore (E2eHarness.ensure_google_native_fixture run);
       E2eHarness.start_mount run;
       run_ref := Some run;
       run
@@ -571,112 +617,116 @@ let test_xattr_remount_roundtrip run dir =
   wait_xattr_absent run file_path name;
   remount_and_assert run (fun () -> wait_xattr_absent run file_path name)
 
+let google_native_fixture_paths run =
+  let fixture = E2eHarness.google_native_fixture run in
+  let fixture_dir = path run fixture.E2eHarness.folder_name in
+  let document_entry_path =
+    Filename.concat fixture_dir fixture.E2eHarness.document_entry_name
+  in
+  let shortcut_target_path =
+    Filename.concat fixture_dir fixture.E2eHarness.shortcut_target_name
+  in
+  let shortcut_path =
+    Filename.concat fixture_dir fixture.E2eHarness.shortcut_name
+  in
+  ( fixture,
+    fixture_dir,
+    document_entry_path,
+    shortcut_target_path,
+    shortcut_path )
+
+let wait_google_doc_desktop_entry run document_entry_path =
+  wait_file_contains_all run document_entry_path
+    [ "[Desktop Entry]"; "Type=Link"; "Name=Milestone 5 Doc"; "URL=https://" ]
+
+let test_google_doc_desktop_entry_visible run _dir =
+  let fixture, fixture_dir, _document_entry_path, _target_path, _shortcut_path =
+    google_native_fixture_paths run
+  in
+  wait_path_exists run fixture_dir;
+  wait_dir_contains run fixture_dir fixture.E2eHarness.document_entry_name
+
+let test_google_doc_desktop_entry_readable run _dir =
+  let fixture, fixture_dir, document_entry_path, _target_path, _shortcut_path =
+    google_native_fixture_paths run
+  in
+  wait_dir_contains run fixture_dir fixture.E2eHarness.document_entry_name;
+  wait_google_doc_desktop_entry run document_entry_path
+
+let test_google_doc_remount_stable run _dir =
+  let fixture, fixture_dir, document_entry_path, _target_path, _shortcut_path =
+    google_native_fixture_paths run
+  in
+  wait_dir_contains run fixture_dir fixture.E2eHarness.document_entry_name;
+  wait_google_doc_desktop_entry run document_entry_path;
+  remount_and_assert run (fun () ->
+      wait_dir_contains run fixture_dir fixture.E2eHarness.document_entry_name;
+      wait_google_doc_desktop_entry run document_entry_path)
+
+let test_drive_shortcut_target_visible run _dir =
+  let fixture, _fixture_dir, _document_entry_path, target_path, shortcut_path =
+    google_native_fixture_paths run
+  in
+  wait_file_content run target_path fixture.E2eHarness.shortcut_target_content;
+  wait_symlink_target run shortcut_path target_path;
+  wait_file_content run
+    (Unix.readlink shortcut_path)
+    fixture.E2eHarness.shortcut_target_content
+
 type case = {
   label : string;
   directory : string;
   test : E2eHarness.t -> string -> unit;
+  requires_google_native_fixture : bool;
 }
 
-let contains ~needle haystack =
-  let needle_length = String.length needle in
-  let haystack_length = String.length haystack in
-  if needle_length = 0 then true
-  else if needle_length > haystack_length then false
-  else
-    let rec loop index =
-      if index > haystack_length - needle_length then false
-      else if String.sub haystack index needle_length = needle then true
-      else loop (index + 1)
-    in
-    loop 0
+let case ?(requires_google_native_fixture = false) label directory test =
+  { label; directory; test; requires_google_native_fixture }
 
 let cases =
   [
-    {
-      label = "mount root listing";
-      directory = "test-mount-root-listing";
-      test = test_mount_root_listing;
-    };
-    {
-      label = "create write remount read";
-      directory = "test-create-write-remount-read";
-      test = test_create_write_remount_read;
-    };
-    {
-      label = "create remove directory";
-      directory = "test-create-remove-directory";
-      test = test_create_remove_directory;
-    };
-    {
-      label = "rename file";
-      directory = "test-rename-file";
-      test = test_rename_file;
-    };
-    {
-      label = "move file between directories";
-      directory = "test-move-file-between-directories";
-      test = test_move_file_between_directories;
-    };
-    {
-      label = "truncate remount read";
-      directory = "test-truncate-remount-read";
-      test = test_truncate_remount_read;
-    };
-    {
-      label = "delete remount absent";
-      directory = "test-delete-remount-absent";
-      test = test_delete_remount_absent;
-    };
-    {
-      label = "overwrite shorter remount read";
-      directory = "test-overwrite-shorter-remount-read";
-      test = test_overwrite_shorter_remount_read;
-    };
-    {
-      label = "overwrite longer remount read";
-      directory = "test-overwrite-longer-remount-read";
-      test = test_overwrite_longer_remount_read;
-    };
-    {
-      label = "append remount read";
-      directory = "test-append-remount-read";
-      test = test_append_remount_read;
-    };
-    {
-      label = "partial overwrite remount read";
-      directory = "test-partial-overwrite-remount-read";
-      test = test_partial_overwrite_remount_read;
-    };
-    {
-      label = "listing cache coherence";
-      directory = "test-listing-cache-coherence";
-      test = test_listing_cache_coherence;
-    };
-    {
-      label = "delete trashes remote file";
-      directory = "test-delete-trashes-remote-file";
-      test = test_delete_trashes_remote_file;
-    };
-    {
-      label = "moderate size file remount read";
-      directory = "test-moderate-size-file-remount-read";
-      test = test_moderate_size_file_remount_read;
-    };
-    {
-      label = "chmod remount stat";
-      directory = "test-chmod-remount-stat";
-      test = test_chmod_remount_stat;
-    };
-    {
-      label = "utime remount stat";
-      directory = "test-utime-remount-stat";
-      test = test_utime_remount_stat;
-    };
-    {
-      label = "xattr remount roundtrip";
-      directory = "test-xattr-remount-roundtrip";
-      test = test_xattr_remount_roundtrip;
-    };
+    case "mount root listing" "test-mount-root-listing" test_mount_root_listing;
+    case ~requires_google_native_fixture:true "google doc desktop entry visible"
+      "test-google-doc-desktop-entry-visible"
+      test_google_doc_desktop_entry_visible;
+    case ~requires_google_native_fixture:true
+      "google doc desktop entry readable"
+      "test-google-doc-desktop-entry-readable"
+      test_google_doc_desktop_entry_readable;
+    case ~requires_google_native_fixture:true "google doc remount stable"
+      "test-google-doc-remount-stable" test_google_doc_remount_stable;
+    case ~requires_google_native_fixture:true "drive shortcut target visible"
+      "test-drive-shortcut-target-visible" test_drive_shortcut_target_visible;
+    case "create write remount read" "test-create-write-remount-read"
+      test_create_write_remount_read;
+    case "create remove directory" "test-create-remove-directory"
+      test_create_remove_directory;
+    case "rename file" "test-rename-file" test_rename_file;
+    case "move file between directories" "test-move-file-between-directories"
+      test_move_file_between_directories;
+    case "truncate remount read" "test-truncate-remount-read"
+      test_truncate_remount_read;
+    case "delete remount absent" "test-delete-remount-absent"
+      test_delete_remount_absent;
+    case "overwrite shorter remount read" "test-overwrite-shorter-remount-read"
+      test_overwrite_shorter_remount_read;
+    case "overwrite longer remount read" "test-overwrite-longer-remount-read"
+      test_overwrite_longer_remount_read;
+    case "append remount read" "test-append-remount-read"
+      test_append_remount_read;
+    case "partial overwrite remount read" "test-partial-overwrite-remount-read"
+      test_partial_overwrite_remount_read;
+    case "listing cache coherence" "test-listing-cache-coherence"
+      test_listing_cache_coherence;
+    case "delete trashes remote file" "test-delete-trashes-remote-file"
+      test_delete_trashes_remote_file;
+    case "moderate size file remount read"
+      "test-moderate-size-file-remount-read"
+      test_moderate_size_file_remount_read;
+    case "chmod remount stat" "test-chmod-remount-stat" test_chmod_remount_stat;
+    case "utime remount stat" "test-utime-remount-stat" test_utime_remount_stat;
+    case "xattr remount roundtrip" "test-xattr-remount-roundtrip"
+      test_xattr_remount_roundtrip;
   ]
 
 let case_summary { label; directory; _ } =
@@ -688,7 +738,8 @@ let available_cases_text () =
   |> String.concat "\n"
 
 let matches_filter filter { label; directory; _ } =
-  contains ~needle:filter label || contains ~needle:filter directory
+  string_contains ~needle:filter label
+  || string_contains ~needle:filter directory
 
 let selected_cases = function
   | None -> cases
@@ -702,6 +753,8 @@ let suite ?only () =
          (Printf.sprintf "no e2e cases matched %S. Available cases:\n%s"
             (match only with None -> "" | Some filter -> filter)
             (available_cases_text ())));
+  google_native_fixture_required :=
+    List.exists (fun case -> case.requires_google_native_fixture) selected;
   "google-drive-ocamlfuse e2e"
   >::: List.map
          (fun case -> case.label >:: with_case case.directory case.test)

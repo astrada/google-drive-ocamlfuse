@@ -12,9 +12,11 @@ type t = {
 }
 
 let folder_mime_type = "application/vnd.google-apps.folder"
+let google_document_mime_type = "application/vnd.google-apps.document"
+let shortcut_mime_type = "application/vnd.google-apps.shortcut"
 
 let file_fields =
-  "id,name,mimeType,parents,trashed,modifiedTime,appProperties,capabilities(canAddChildren,canEdit,canTrash)"
+  "id,name,mimeType,parents,trashed,modifiedTime,appProperties,webViewLink,shortcutDetails(targetId,targetMimeType,targetResourceKey),capabilities(canAddChildren,canEdit,canTrash)"
 
 let std_params fields =
   {
@@ -185,9 +187,9 @@ let visible_children_summary t ~parent_id =
   let children = list_children t ~parent_id ~trashed:false in
   let count = List.length children in
   let names =
-    if count <= 20 then
+    if count <= 30 then
       children |> List.map (fun file -> file.File.name) |> String.concat ", "
-    else "<more than 20 children>"
+    else "<more than 30 children>"
   in
   Printf.sprintf "visible child count=%d; names=[%s]" count names
 
@@ -198,6 +200,60 @@ let create_folder t ~parent_id ~name =
       File.name;
       mimeType = folder_mime_type;
       parents = [ parent_id ];
+    }
+  in
+  run t
+    (FilesResource.create ~enforceSingleParent:true ~supportsAllDrives:true
+       ~std_params:file_std_params file)
+
+let create_google_document t ~parent_id ~name =
+  let file =
+    {
+      File.empty with
+      File.name;
+      mimeType = google_document_mime_type;
+      parents = [ parent_id ];
+    }
+  in
+  run t
+    (FilesResource.create ~enforceSingleParent:true ~supportsAllDrives:true
+       ~std_params:file_std_params file)
+
+let create_text_file t ~parent_id ~name ~content =
+  let media_source =
+    {
+      GapiMediaResource.source = GapiMediaResource.String content;
+      name;
+      content_type = "text/plain";
+      content_length = Int64.of_int (String.length content);
+    }
+  in
+  let file =
+    {
+      File.empty with
+      File.name;
+      mimeType = "text/plain";
+      parents = [ parent_id ];
+    }
+  in
+  run t
+    (FilesResource.create ~media_source ~enforceSingleParent:true
+       ~supportsAllDrives:true ~std_params:file_std_params file)
+
+let create_shortcut t ~parent_id ~name ~target_id =
+  let shortcutDetails =
+    {
+      File.ShortcutDetails.empty with
+      File.ShortcutDetails.targetId = target_id;
+    }
+  in
+  let file =
+    {
+      File.empty with
+      File.name;
+      mimeType = shortcut_mime_type;
+      parents = [ parent_id ];
+      shortcutDetails;
     }
   in
   run t

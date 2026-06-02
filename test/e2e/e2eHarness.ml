@@ -16,6 +16,19 @@ type local_paths = {
   stderr_path : string;
 }
 
+type google_native_fixture = {
+  folder_name : string;
+  folder_id : string;
+  document_name : string;
+  document_entry_name : string;
+  document_id : string;
+  shortcut_target_name : string;
+  shortcut_target_content : string;
+  shortcut_target_id : string;
+  shortcut_name : string;
+  shortcut_id : string;
+}
+
 type t = {
   run_id : string;
   config_path : string;
@@ -28,6 +41,7 @@ type t = {
   label : string;
   paths : local_paths;
   mutable mount : E2eMount.t option;
+  mutable google_native_fixture : google_native_fixture option;
 }
 
 module StateStore = KeyValueStore.MakeFileStore (State)
@@ -239,6 +253,7 @@ let setup () =
         label = "e2e-" ^ run_id;
         paths;
         mount = None;
+        google_native_fixture = None;
       }
     in
     print_run_summary run;
@@ -271,6 +286,100 @@ let stop_mount run =
 let remount run =
   stop_mount run;
   start_mount run
+
+let wait_remote_child run ~parent_id ~name =
+  let deadline =
+    Unix.gettimeofday () +. run.settings.E2eSettings.fs_timeout_seconds
+  in
+  let rec loop () =
+    match E2eDrive.find_child run.drive ~parent_id ~name ~trashed:false with
+    | Some file -> file
+    | None ->
+        if Unix.gettimeofday () >= deadline then
+          raise
+            (Error
+               (Printf.sprintf
+                  "Timed out waiting for Drive child %S under parent %s before \
+                   mounting"
+                  name parent_id))
+        else (
+          Thread.delay 0.5;
+          loop ())
+  in
+  loop ()
+
+let create_google_native_fixture run =
+  match run.mount with
+  | Some _ ->
+      raise
+        (Error
+           "Google-native e2e fixtures must be created before the mount starts")
+  | None ->
+      let folder_name = "test-google-native-fixtures" in
+      let document_name = "Milestone 5 Doc" in
+      let document_entry_name = document_name ^ ".desktop" in
+      let shortcut_target_name = "shortcut-target.txt" in
+      let shortcut_target_content = "shortcut target content\n" in
+      let shortcut_name = "target-shortcut" in
+      let folder =
+        E2eDrive.create_folder run.drive ~parent_id:run.run_root_id
+          ~name:folder_name
+      in
+      let document =
+        E2eDrive.create_google_document run.drive ~parent_id:folder.File.id
+          ~name:document_name
+      in
+      let shortcut_target =
+        E2eDrive.create_text_file run.drive ~parent_id:folder.File.id
+          ~name:shortcut_target_name ~content:shortcut_target_content
+      in
+      let shortcut =
+        E2eDrive.create_shortcut run.drive ~parent_id:folder.File.id
+          ~name:shortcut_name ~target_id:shortcut_target.File.id
+      in
+      ignore
+        (wait_remote_child run ~parent_id:folder.File.id ~name:document_name);
+      ignore
+        (wait_remote_child run ~parent_id:folder.File.id
+           ~name:shortcut_target_name);
+      ignore
+        (wait_remote_child run ~parent_id:folder.File.id ~name:shortcut_name);
+      let fixture =
+        {
+          folder_name;
+          folder_id = folder.File.id;
+          document_name;
+          document_entry_name;
+          document_id = document.File.id;
+          shortcut_target_name;
+          shortcut_target_content;
+          shortcut_target_id = shortcut_target.File.id;
+          shortcut_name;
+          shortcut_id = shortcut.File.id;
+        }
+      in
+      Printf.printf
+        "e2e google-native fixture: folder=%s document=%s target=%s shortcut=%s\n\
+         %!"
+        fixture.folder_id fixture.document_id fixture.shortcut_target_id
+        fixture.shortcut_id;
+      fixture
+
+let ensure_google_native_fixture run =
+  match run.google_native_fixture with
+  | Some fixture -> fixture
+  | None ->
+      let fixture = create_google_native_fixture run in
+      run.google_native_fixture <- Some fixture;
+      fixture
+
+let google_native_fixture run =
+  match run.google_native_fixture with
+  | Some fixture -> fixture
+  | None ->
+      raise
+        (Error
+           "Google-native e2e fixture was requested before it was initialized")
 
 let cleanup_remote run =
   try

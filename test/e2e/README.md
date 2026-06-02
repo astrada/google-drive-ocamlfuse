@@ -55,6 +55,8 @@ make e2e CASE=test-append-remount-read
 make e2e CASE="chmod remount stat"
 make e2e CASE="utime remount stat"
 make e2e CASE="xattr remount roundtrip"
+make e2e CASE="google doc"
+make e2e CASE="drive shortcut"
 ```
 
 The full suite creates a temporary local profile, mounts the working-tree
@@ -65,6 +67,11 @@ The metadata cases validate `chmod`, `utime`, and Linux `user.*` extended
 attributes through the mounted filesystem. The xattr case is skipped when the
 local platform or FUSE stack does not support xattrs. `chown` and cross-account
 Drive sharing permissions are not part of the default e2e run.
+
+The Google-native cases create a disposable remote fixture folder before the
+mount starts. They validate the default Google Docs `desktop` representation and
+Drive shortcut behavior through the mounted filesystem. They do not open desktop
+entries, run editors, or test non-default docs modes.
 
 ## Overrides
 
