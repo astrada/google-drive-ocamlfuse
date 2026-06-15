@@ -69,7 +69,7 @@ How to build
 
 * [OCaml][] >= 4.08.3
 * [dune][] >= 2.0.0
-* [fuse3][]
+* [fuse3][] >= 3.10.0
 * [gapi-ocaml][] >= 0.4.9
 * [sqlite3-ocaml][] >= 1.6.1
 * [tiny_httpd] >= 0.10

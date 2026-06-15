@@ -14,7 +14,7 @@ FUSE 3 callback shape.
 
 ## Current State
 
-- `google-drive-ocamlfuse.opam` depends on `fuse3`.
+- `google-drive-ocamlfuse.opam` depends on `fuse3 >= 3.10.0`.
 - `src/dune` links the library with `fuse3`.
 - `bin/gdfuseFuse.ml` uses `Fuse.Fuse_compat.main` and
   `Fuse.Fuse_compat.default_operations`.
