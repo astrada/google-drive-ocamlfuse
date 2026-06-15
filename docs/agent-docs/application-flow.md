@@ -66,7 +66,7 @@ command-line parsing.
 
 Important behavior:
 
-- `fuse_args` starts with `-f` and `-obig_writes`
+- `fuse_args` starts with `-f`
 - foreground mode is forced unconditionally
 - this is intentional: on OCaml 5+, calling `fork()` after `caml_main()` is not
   safe, so the old daemonizing path should not be relied on
@@ -237,8 +237,8 @@ It:
 - logs each request
 - forwards operations to `Drive`
 - prepends `"."` and `".."` in `readdir`
-- builds the final `Fuse.main` argv from executable name, `fuse_args`, and
-  mountpoint
+- builds the final `Fuse.Fuse_compat.main` argv from executable name,
+  `fuse_args`, and mountpoint
 
 ## Testability
 

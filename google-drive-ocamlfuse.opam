@@ -15,7 +15,7 @@ depends: [
   "camlidl" {build}
   "gapi-ocaml" {>= "0.4.9"}
   "dune" {>= "2.0.0"}
-  "ocamlfuse" {>= "2.7.2"}
+  "fuse3"
   "cryptokit" {>= "1.21"}
   "extlib"
   "otoml"

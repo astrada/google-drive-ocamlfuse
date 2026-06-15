@@ -37,8 +37,7 @@ let test_parse_argv_forces_foreground () =
         assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "/tmp/mnt" |])
       in
       assert_bool "Expected mountpoint to be detected" parsed.mount_requested;
-      assert_equal ~printer:(String.concat ",") [ "-f"; "-obig_writes" ]
-        parsed.fuse_args)
+      assert_equal ~printer:(String.concat ",") [ "-f" ] parsed.fuse_args)
 
 let test_parse_argv_debug_sets_verbose_without_extra_f_flag () =
   with_clean_cli_globals (fun () ->
@@ -46,8 +45,7 @@ let test_parse_argv_debug_sets_verbose_without_extra_f_flag () =
         assert_parsed
           (GdfuseCli.parse_argv [| "gdfuse"; "-debug"; "/tmp/mnt" |])
       in
-      assert_equal ~printer:(String.concat ",") [ "-f"; "-obig_writes" ]
-        parsed.fuse_args;
+      assert_equal ~printer:(String.concat ",") [ "-f" ] parsed.fuse_args;
       assert_equal ~printer:string_of_bool true !Utils.verbose;
       assert_equal ~printer:string_of_bool true parsed.params.GdfuseCommon.debug)
 
@@ -61,8 +59,7 @@ let test_parse_argv_mount_options_extract_gdfroot () =
       assert_equal
         ~printer:(fun x -> x)
         "/tmp/root" parsed.params.GdfuseCommon.base_dir;
-      assert_equal ~printer:(String.concat ",")
-        [ "-oallow_other"; "-f"; "-obig_writes" ]
+      assert_equal ~printer:(String.concat ",") [ "-oallow_other"; "-f" ]
         parsed.fuse_args)
 
 let test_parse_argv_help_returns_help_outcome () =
@@ -101,18 +98,14 @@ let test_parse_argv_d_adds_fuse_debug_flag () =
       let parsed =
         assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "-d"; "/tmp/mnt" |])
       in
-      assert_equal ~printer:(String.concat ",")
-        [ "-d"; "-f"; "-obig_writes" ]
-        parsed.fuse_args)
+      assert_equal ~printer:(String.concat ",") [ "-d"; "-f" ] parsed.fuse_args)
 
 let test_parse_argv_s_forces_single_threaded_mode () =
   with_clean_cli_globals (fun () ->
       let parsed =
         assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "-s"; "/tmp/mnt" |])
       in
-      assert_equal ~printer:(String.concat ",")
-        [ "-s"; "-f"; "-obig_writes" ]
-        parsed.fuse_args;
+      assert_equal ~printer:(String.concat ",") [ "-s"; "-f" ] parsed.fuse_args;
       assert_equal ~printer:string_of_bool false
         parsed.params.GdfuseCommon.multi_threading)
 
@@ -121,8 +114,7 @@ let test_parse_argv_m_enables_multithreading_without_changing_fuse_args () =
       let parsed =
         assert_parsed (GdfuseCli.parse_argv [| "gdfuse"; "-m"; "/tmp/mnt" |])
       in
-      assert_equal ~printer:(String.concat ",") [ "-f"; "-obig_writes" ]
-        parsed.fuse_args;
+      assert_equal ~printer:(String.concat ",") [ "-f" ] parsed.fuse_args;
       assert_equal ~printer:string_of_bool true
         parsed.params.GdfuseCommon.multi_threading)
 

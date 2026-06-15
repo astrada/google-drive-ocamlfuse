@@ -117,8 +117,7 @@ let test_mount_invocation_runs_mount_mode () =
           assert_equal
             ~printer:(fun x -> x)
             "/tmp/mnt" params.GdfuseCommon.mountpoint;
-          assert_equal ~printer:(String.concat ",") [ "-f"; "-obig_writes" ]
-            fuse_args
+          assert_equal ~printer:(String.concat ",") [ "-f" ] fuse_args
       | _ -> assert_failure "Expected exactly one mount invocation")
 
 let test_no_mount_invocation_runs_bootstrap_only () =

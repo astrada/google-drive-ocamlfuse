@@ -16,11 +16,12 @@ So this is an adapter-level design choice, not a missing implementation inside
 
 ## Where They Are Registered
 
-`start_filesystem` passes them into `Fuse.main` through the operations record:
+`start_filesystem` passes them into `Fuse.Fuse_compat.main` through the
+operations record:
 
 ```ocaml
 {
-  Fuse.default_operations with
+  Fuse.Fuse_compat.default_operations with
   ...
   opendir;
   releasedir;

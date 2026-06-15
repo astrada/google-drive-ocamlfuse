@@ -74,7 +74,10 @@ let utime path atime mtime =
 
 let fopen path flags =
   Utils.log_with_header "fopen %s %s\n%!" path (Utils.flags_to_string flags);
-  with_drive_op ~label:"fopen" ~param:path (fun () -> Drive.fopen path flags)
+  with_drive_op ~label:"fopen" ~param:path (fun () ->
+      let handle = Drive.fopen path flags in
+      if List.mem Unix.O_TRUNC flags then Drive.truncate path 0L;
+      handle)
 
 let read path buf offset file_descr =
   let buf_len = Bigarray.Array1.dim buf in
@@ -176,10 +179,10 @@ let start_filesystem mountpoint fuse_args =
   let fuse_argv =
     Sys.argv.(0) :: (fuse_args @ [ mountpoint ]) |> Array.of_list
   in
-  Fuse.main fuse_argv
+  let operations : Fuse.Fuse_compat.operations =
     {
-      Fuse.default_operations with
-      Fuse.init = init_filesystem;
+      Fuse.Fuse_compat.default_operations with
+      init = init_filesystem;
       statfs;
       getattr;
       readdir;
@@ -208,3 +211,5 @@ let start_filesystem mountpoint fuse_args =
       readlink;
       symlink;
     }
+  in
+  Fuse.Fuse_compat.main fuse_argv operations

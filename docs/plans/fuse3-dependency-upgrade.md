@@ -1,6 +1,6 @@
 # FUSE 3 Dependency Upgrade Plan
 
-Status: planned; recommendations accepted.
+Status: M0 and M1 complete; M2 planned.
 
 ## Goal
 
@@ -13,6 +13,25 @@ The first implementation should keep the application behavior stable by using
 FUSE 3 callback shape.
 
 ## Current State
+
+- `google-drive-ocamlfuse.opam` depends on `fuse3`.
+- `src/dune` links the library with `fuse3`.
+- `bin/gdfuseFuse.ml` uses `Fuse.Fuse_compat.main` and
+  `Fuse.Fuse_compat.default_operations`.
+- The default FUSE argv contains `-f` and no longer passes the libfuse 2-era
+  `-obig_writes` option.
+- The compatibility adapter handles `O_TRUNC` delivered through `fopen` by
+  calling `Drive.truncate path 0L` after open-time access validation succeeds.
+- `fuse3` defaults `Fuse.Fuse_compat.main` to multithreaded libfuse loop mode.
+- The application CLI help already treats multithreaded mode as the default,
+  and `-s` remains the single-threaded opt-out.
+- `ConfigRuntime.resolve` still uses the application-level `multi_threading`
+  flag to raise the SQLite busy timeout for multithreaded operation. M2 owns
+  aligning that flag with the new binding default.
+- The live e2e harness mounts the working-tree executable without `-s`, so it
+  exercises the multithreaded default.
+
+## Starting State
 
 - `google-drive-ocamlfuse.opam` depends on `ocamlfuse >= 2.7.2`.
 - `src/dune` links the library with `ocamlfuse`.
@@ -84,6 +103,8 @@ record:
 
 ### M0: Baseline
 
+Status: complete.
+
 Run the current build and unit tests before dependency changes.
 
 Tasks:
@@ -98,7 +119,19 @@ Exit criteria:
 - The pre-upgrade baseline is known.
 - Any existing failures are recorded before changing dependencies.
 
+Result:
+
+- `ocamlfind query fuse3`: passed.
+- `ocamlfind query ocamlfuse`: passed.
+- `dune build @install`: passed.
+- `dune runtest`: passed.
+- `make e2e-preflight`: failed inside the sandbox with
+  `Unix.Unix_error(Unix.EPERM, "getifaddrs", "")`.
+- `make e2e-preflight` outside the sandbox: passed.
+
 ### M1: Compatibility-Mode Dependency Switch
+
+Status: complete.
 
 Switch from `ocamlfuse` to `fuse3` while keeping the old callback shape through
 `Fuse.Fuse_compat`.
@@ -111,6 +144,9 @@ Tasks:
 - Update `bin/gdfuseFuse.ml` to use `Fuse.Fuse_compat.default_operations`.
 - Keep top-level `Fuse.xattr_flags`, `Fuse.Unix_util`, and Bigarray buffer use
   unchanged.
+- Remove the default `-obig_writes` FUSE option, which libfuse 3 rejects.
+- Handle `O_TRUNC` in `bin/gdfuseFuse.ml` when FUSE 3 delivers truncation
+  through `fopen`.
 - Update README requirements and relevant agent docs from `ocamlfuse` to
   `fuse3`.
 
@@ -119,6 +155,25 @@ Exit criteria:
 - The application builds against `fuse3`.
 - The existing FUSE adapter behavior remains on the compatibility callback
   shape.
+- Default live e2e coverage passes against the mounted `fuse3` build.
+
+Result:
+
+- `tools/format_ocaml bin/gdfuseFuse.ml src/gdfuseCli.ml test/testGdfuseCli.ml test/testGdfuseApp.ml test/testGdfuseFlow.ml`:
+  passed.
+- `dune build @install`: passed.
+- `dune runtest`: passed.
+- `make e2e-preflight` outside the sandbox: passed.
+- Initial `make e2e` outside the sandbox failed during mount startup because
+  libfuse 3 rejected `-obig_writes`.
+- After removing `-obig_writes`, `make e2e CASE="mount root listing"` outside
+  the sandbox passed.
+- A later full `make e2e` outside the sandbox found one
+  `overwrite shorter remount read` failure because FUSE 3 delivered
+  truncate-on-open as `O_TRUNC` in `fopen`.
+- After handling `O_TRUNC`, `make e2e CASE="overwrite shorter remount read"`
+  outside the sandbox passed.
+- Final `make e2e` outside the sandbox passed, 22 tests.
 
 ### M2: Threading Default Alignment
 

@@ -23,7 +23,7 @@ let parse_argv argv =
   let argv = if Array.length argv = 0 then [| "gdfuse" |] else argv in
   let fs_label = ref GdfuseCommon.default_fs_label in
   let mountpoint = ref "" in
-  let fuse_args = ref [ "-f"; "-obig_writes" ] in
+  let fuse_args = ref [ "-f" ] in
   let show_version = ref false in
   let debug = ref false in
   let client_id = ref "" in

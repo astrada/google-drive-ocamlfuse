@@ -156,7 +156,7 @@ let test_mount_mode_registers_shutdown_and_starts_fuse () =
   with_temp_dir (fun dir ->
       with_clean_runtime (fun () ->
           let params = default_params ~base_dir:dir ~mountpoint:dir in
-          Flow.run_mount_mode params [ "-f"; "-obig_writes" ];
+          Flow.run_mount_mode params [ "-f" ];
           assert_bool "Expected shutdown callback to be registered"
             (Option.is_some !FakeDeps.registered_exit);
           assert_equal ~printer:(String.concat ";")
@@ -250,7 +250,7 @@ let test_shutdown_flushes_and_cleans_up_in_order () =
             |> State.saved_version ^= Config.version
           in
           write_state app_dir state;
-          Flow.run_mount_mode params [ "-f"; "-obig_writes" ];
+          Flow.run_mount_mode params [ "-f" ];
           let shutdown =
             match !FakeDeps.registered_exit with
             | Some callback -> callback

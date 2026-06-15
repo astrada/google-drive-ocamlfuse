@@ -69,7 +69,7 @@ How to build
 
 * [OCaml][] >= 4.08.3
 * [dune][] >= 2.0.0
-* [ocamlfuse][] >= 2.7.2
+* [fuse3][]
 * [gapi-ocaml][] >= 0.4.9
 * [sqlite3-ocaml][] >= 1.6.1
 * [tiny_httpd] >= 0.10
@@ -78,7 +78,7 @@ How to build
 
 [OCaml]: https://ocaml.org/
 [dune]: https://dune.build/
-[ocamlfuse]: https://github.com/astrada/ocamlfuse
+[fuse3]: https://github.com/astrada/ocamlfuse
 [gapi-ocaml]: https://github.com/astrada/gapi-ocaml
 [sqlite3-ocaml]: https://mmottl.github.io/sqlite3-ocaml/
 [tiny_httpd]: https://github.com/c-cube/tiny_httpd/

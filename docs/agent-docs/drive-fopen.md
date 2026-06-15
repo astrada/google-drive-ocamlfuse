@@ -51,11 +51,18 @@ The production FUSE adapter in `bin/gdfuseFuse.ml` wires:
 
 ```ocaml
 let fopen path flags =
-  with_drive_op ~label:"fopen" ~param:path (fun () -> Drive.fopen path flags)
+  with_drive_op ~label:"fopen" ~param:path (fun () ->
+      let handle = Drive.fopen path flags in
+      if List.mem Unix.O_TRUNC flags then Drive.truncate path 0L;
+      handle)
 ```
 
 So any exception raised by `Drive.fopen` is translated at the boundary into a
 Unix/FUSE error.
+
+When FUSE delivers `O_TRUNC` through the open callback, the adapter preserves
+ordinary truncate-on-open behavior by calling `Drive.truncate path 0L` after
+`Drive.fopen` has accepted the requested access mode.
 
 In particular:
 
@@ -83,6 +90,10 @@ then returns `None`.
 
 So this is a validation path with side effects only through exceptions and
 through any metadata refresh that `get_resource` triggers.
+
+The FUSE adapter may add one extra side effect around this validation path: for
+opens with `O_TRUNC`, it calls `Drive.truncate path 0L` after validation
+succeeds. That behavior lives in `bin/gdfuseFuse.ml`, not in `DriveOpens`.
 
 ## Path Normalization
 
