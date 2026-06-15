@@ -2,7 +2,7 @@
 
 Active plans:
 
-None.
+- [FUSE 3 Dependency Upgrade](fuse3-dependency-upgrade.md)
 
 Backlog:
 
