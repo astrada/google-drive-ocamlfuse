@@ -111,7 +111,7 @@ let default_params ~base_dir ~mountpoint =
     headless = false;
     skip_trash = false;
     base_dir;
-    multi_threading = false;
+    multi_threading = true;
     config_path = "";
     xdg_base_directory = false;
     browser = "test-browser";

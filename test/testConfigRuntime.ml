@@ -14,7 +14,7 @@ let default_inputs () =
     cli_docs_mode = "";
     cli_port = Config.default.Config.oauth2_loopback_port;
     device = false;
-    multi_threading = false;
+    multi_threading = true;
   }
 
 let test_id_and_secret_persist () =
@@ -78,6 +78,30 @@ let test_no_changes_do_not_persist () =
   assert_equal ~printer:string_of_bool false result.ConfigRuntime.should_persist;
   assert_equal ~printer:string_of_bool false result.ConfigRuntime.clear_cache
 
+let test_multithreading_raises_legacy_sqlite_busy_timeout () =
+  let defaults = default_inputs () in
+  let persisted = { Config.default with Config.sqlite3_busy_timeout = 500 } in
+  let result = ConfigRuntime.resolve { defaults with persisted } in
+  assert_equal ~printer:string_of_int 5000
+    result.ConfigRuntime.runtime_config.Config.sqlite3_busy_timeout
+
+let test_single_threading_keeps_legacy_sqlite_busy_timeout () =
+  let defaults = default_inputs () in
+  let persisted = { Config.default with Config.sqlite3_busy_timeout = 500 } in
+  let result =
+    ConfigRuntime.resolve
+      { defaults with persisted; ConfigRuntime.multi_threading = false }
+  in
+  assert_equal ~printer:string_of_int 500
+    result.ConfigRuntime.runtime_config.Config.sqlite3_busy_timeout
+
+let test_multithreading_preserves_custom_sqlite_busy_timeout () =
+  let defaults = default_inputs () in
+  let persisted = { Config.default with Config.sqlite3_busy_timeout = 1234 } in
+  let result = ConfigRuntime.resolve { defaults with persisted } in
+  assert_equal ~printer:string_of_int 1234
+    result.ConfigRuntime.runtime_config.Config.sqlite3_busy_timeout
+
 let test_migrated_config_is_not_persisted_again () =
   let defaults = default_inputs () in
   let result =
@@ -110,6 +134,12 @@ let suite =
          "test_docs_mode_requests_cache_clear"
          >:: test_docs_mode_requests_cache_clear;
          "test_no_changes_do_not_persist" >:: test_no_changes_do_not_persist;
+         "test_multithreading_raises_legacy_sqlite_busy_timeout"
+         >:: test_multithreading_raises_legacy_sqlite_busy_timeout;
+         "test_single_threading_keeps_legacy_sqlite_busy_timeout"
+         >:: test_single_threading_keeps_legacy_sqlite_busy_timeout;
+         "test_multithreading_preserves_custom_sqlite_busy_timeout"
+         >:: test_multithreading_preserves_custom_sqlite_busy_timeout;
          "test_migrated_config_is_not_persisted_again"
          >:: test_migrated_config_is_not_persisted_again;
          "test_created_config_is_not_persisted_again"

@@ -1,6 +1,6 @@
 # FUSE 3 Dependency Upgrade Plan
 
-Status: M0 and M1 complete; M2 planned.
+Status: M0 through M2 complete; M3 planned.
 
 ## Goal
 
@@ -23,11 +23,13 @@ FUSE 3 callback shape.
 - The compatibility adapter handles `O_TRUNC` delivered through `fopen` by
   calling `Drive.truncate path 0L` after open-time access validation succeeds.
 - `fuse3` defaults `Fuse.Fuse_compat.main` to multithreaded libfuse loop mode.
-- The application CLI help already treats multithreaded mode as the default,
-  and `-s` remains the single-threaded opt-out.
-- `ConfigRuntime.resolve` still uses the application-level `multi_threading`
-  flag to raise the SQLite busy timeout for multithreaded operation. M2 owns
-  aligning that flag with the new binding default.
+- Default CLI parsing sets application-level `multi_threading` to true, so
+  runtime config matches the libfuse 3 multithreaded loop default.
+- `-m` remains accepted as an explicit, idempotent multithreaded-mode request.
+- `-s` remains the single-threaded opt-out and clears application-level
+  `multi_threading`.
+- `ConfigRuntime.resolve` uses the application-level `multi_threading` flag to
+  raise legacy SQLite busy-timeout values for multithreaded operation.
 - The live e2e harness mounts the working-tree executable without `-s`, so it
   exercises the multithreaded default.
 
@@ -177,6 +179,8 @@ Result:
 
 ### M2: Threading Default Alignment
 
+Status: complete.
+
 Make application-level threading state match the binding default.
 
 Tasks:
@@ -195,6 +199,20 @@ Exit criteria:
 - A default mount uses the `fuse3` multithreaded loop and application runtime
   config reflects multithreaded mode.
 - `-s` remains the opt-out and keeps the legacy SQLite busy-timeout behavior.
+
+Result:
+
+- Default CLI parsing now sets `multi_threading = true`.
+- `-m` remains idempotent and does not add FUSE argv.
+- `-s` keeps prepending `-s` to FUSE argv and sets `multi_threading = false`.
+- Unit tests cover default, `-m`, `-s`, and SQLite busy-timeout behavior for
+  multithreaded, single-threaded, and custom-timeout configurations.
+- `tools/format_ocaml src/gdfuseCli.ml test/testGdfuseCli.ml test/testConfigRuntime.ml test/testGdfuseFlow.ml`:
+  passed.
+- `dune build @install`: passed.
+- `dune runtest`: passed, 326 tests.
+- `make e2e-preflight` outside the sandbox: passed.
+- `make e2e` outside the sandbox: passed, 22 tests.
 
 ### M3: e2e Harness Single-Threaded Path
 

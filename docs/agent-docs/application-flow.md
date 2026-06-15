@@ -72,8 +72,9 @@ Important behavior:
   safe, so the old daemonizing path should not be relied on
 - there is no separate `-f` CLI option anymore
 - `-debug` enables verbose logging
-- `-s` forces single-threaded FUSE and clears app-level `multi_threading`
-- `-m` only affects app-level `multi_threading`
+- default mount mode is multithreaded and sets app-level `multi_threading`
+- `-m` is accepted as an explicit, idempotent multithreaded-mode request
+- `-s` prepends the FUSE `-s` option and clears app-level `multi_threading`
 - `-o` is split by commas
 - `gdfroot=...` is handled specially and stored in `base_dir`
 - all remaining mount options are forwarded into the FUSE argv
