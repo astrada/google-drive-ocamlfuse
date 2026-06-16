@@ -1,3 +1,13 @@
+0.9.0
+=====
+This version moves the filesystem to FUSE 3. Source builds now require
+`fuse3` and libfuse 3 development headers, with libfuse 3.10.0 or newer as the
+supported baseline. The old libfuse 2 binding is no longer supported.
+
+The FUSE loop runs in multithreaded mode by default. Use `-s` if you need to
+force single-threaded mode; `-m` remains accepted as an explicit
+multithreaded-mode request.
+
 0.8.1
 =====
 This version introduces a new config option: `editable_docs`. If set to

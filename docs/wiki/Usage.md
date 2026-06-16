@@ -42,12 +42,20 @@ can have a different configuration for each one.
 
 To unmount the filesystem, issue this command:
 
-    fusermount -u ~/GoogleDrive
+    fusermount3 -u ~/GoogleDrive
+
+On distributions that still provide the older helper name, use
+`fusermount -u ~/GoogleDrive` instead.
 
 Options
 -------
 
-Run `google-drive-ocamlfuse -help` to get all the command options available. To find more details about `-o` mount options, you can refer to this [page](http://manpages.ubuntu.com/manpages/zesty/man8/mount.fuse.8.html). Non-standard mount option `gdfroot` can be used to specify a custom path to the configuration directory (default is `$HOME/.gdfuse`).
+Run `google-drive-ocamlfuse -help` to get all the command options available. To find more details about `-o` mount options, refer to `man mount.fuse3` or your distribution's FUSE 3 documentation. Non-standard mount option `gdfroot` can be used to specify a custom path to the configuration directory (default is `$HOME/.gdfuse`).
+
+#### Since 0.9.0
+The FUSE loop runs in multithreaded mode by default. Use `-s` to force
+single-threaded mode. The `-m` option is still accepted as an explicit
+multithreaded-mode request.
 
 #### Since 0.7.5
 `-docsmode`: This option can be used to quickly set Google Docs config options. Supported values are:

@@ -87,12 +87,11 @@ There is Docker [image](https://hub.docker.com/r/maltokyo/docker-google-drive-oc
 
 ## Gentoo
 
-_As of 2025-09-10_:
 Unless you are on a testing (`~amd64`) branch, add the following packages to `/etc/portage/package.accept_keywords`:
 ```
 sys-fs/google-drive-ocamlfuse
 dev-ml/gapi-ocaml
-dev-ml/ocamlfuse
+dev-ml/fuse3
 dev-ml/ocaml-sqlite3
 dev-ml/tiny_httpd
 dev-ml/hmap
@@ -104,6 +103,10 @@ After that, just run `emerge -av sys-fs/google-drive-ocamlfuse`
 ## Installing from source
 
 If you are using a different distribution or you want to build the package from source, you may want to use OPAM (an OCaml package manager). If you are on a Debian Jessie, check out these instructions (contributed by Martin Gallant): [[How to install from source on Debian Jessie]].
+
+Source builds require libfuse 3 development headers. Install your
+distribution's FUSE 3 development package first, for example `libfuse3-dev` on
+Debian/Ubuntu or `fuse3-devel` on Fedora.
 
 ### Installing with OPAM
 
@@ -153,7 +156,7 @@ Also works on Nobara Linux and Ultramarine Linux. Last tested on Fedora 43.
 
 1. As root, install OPAM and google-drive-ocamlfuse dependencies:
 
-        sudo dnf install opam fuse-devel gmp-devel libcurl-devel sqlite-devel
+        sudo dnf install opam fuse3-devel gmp-devel libcurl-devel sqlite-devel
 
 2. Initialise OPAM on your own user profile:
 
@@ -176,7 +179,7 @@ You will now be able to run `google-drive-ocamlfuse`.
 
 Installing with OPAM on Gentoo can be achieved, but there are issues. Give this a try:
 
-    emerge sys-fs/fuse:0                                   #Currently no support for fuse version 3
+    emerge sys-fs/fuse:3                                   #Needs FUSE version 3
     emerge dev-db/sqlite:3                                 #Needs sqlite version 3
     echo -e 'dev-ml/* ~amd64\t\t\t#Needed to install google-drive-ocamlfuse\n' >> /etc/portage/package.accept_keywords
     emerge  dev-ml/opam

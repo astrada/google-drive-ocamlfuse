@@ -82,7 +82,7 @@ After=network.target
 
 [Service]
 ExecStart=google-drive-ocamlfuse -label {label} {mountpoint}
-ExecStop=fusermount -u {mountpoint}
+ExecStop=fusermount3 -u {mountpoint}
 Restart=always
 Type=exec
 
@@ -119,7 +119,7 @@ After=network.target
 User={username}
 Group={username}
 ExecStart=google-drive-ocamlfuse -label {label} {mountpoint}
-ExecStop=fusermount -u {mountpoint}
+ExecStop=fusermount3 -u {mountpoint}
 Restart=always
 Type=exec
 

@@ -37,7 +37,10 @@ Caveat: I do not know whether this is the "optimal" way to do this.  I was in a 
         mkdir /my_mnt_dir
         google-drive-ocamlfuse -label me /my_mnt_dir
 
-1. Finally, to unmount, elsewhere in the instructions it says to use `fusermount -u mountpoint`.  That did not work for me for some reason, but `umount mountpoint` did.
+1. Finally, to unmount, use `fusermount3 -u mountpoint`. On distributions that
+   still provide the older helper name, use `fusermount -u mountpoint`
+   instead. If the FUSE helper does not work in your environment,
+   `umount mountpoint` may also work.
 
 Troubleshooting
 ---------------

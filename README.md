@@ -67,7 +67,7 @@ How to build
 
 ### Requirements
 
-* [OCaml][] >= 4.08.3
+* [OCaml][] >= 4.08.0
 * [dune][] >= 2.0.0
 * [fuse3][] >= 3.10.0
 * [gapi-ocaml][] >= 0.4.9
@@ -147,7 +147,10 @@ can have a different configuration for each one.
 
 To unmount the filesystem, issue this command:
 
-    fusermount -u ~/GoogleDrive
+    fusermount3 -u ~/GoogleDrive
+
+On distributions that still provide the older helper name, use
+`fusermount -u ~/GoogleDrive` instead.
 
 ### Troubleshooting
 
@@ -160,6 +163,9 @@ trash your file, so you should always be able to rollback any changes. If you
 have problems, you can turn on debug logging:
 
     google-drive-ocamlfuse -debug mountpoint
+
+The process is always kept in foreground; `-debug` enables debug and verbose
+logging.
 
 In `~/.gdfuse/default` you can find `curl.log` that will track every request
 to the Google Drive API, and `gdfuse.log` that will log FUSE operations and
