@@ -45,41 +45,57 @@ let statfs path =
   Utils.log_with_header "statfs %s\n%!" path;
   with_drive_op ~log_exception:true ~label:"statfs" ~param:path Drive.statfs
 
-let getattr path =
+let getattr path _file_info =
   drive_path_op ~name:"getattr" ~label:"stat" path Drive.get_attr
 
-let readdir path hnd =
-  Utils.log_with_header "readdir %s %d\n%!" path hnd;
+let readdir path offset file_info flags =
+  let file_handle = GdfuseFuseNative.file_handle_as_int file_info in
+  Utils.log_with_header "readdir %s %Ld %d %d\n%!" path offset file_handle
+    flags.Fuse.readdir_flags_raw;
   let dir_list =
     with_drive_op ~label:"readdir" ~param:path (fun () -> Drive.read_dir path)
   in
   Filename.current_dir_name :: Filename.parent_dir_name :: dir_list
+  |> GdfuseFuseNative.dir_entries_of_names
 
-let opendir path flags =
+let opendir path file_info =
+  let flags = GdfuseFuseNative.flags_of_file_info file_info in
   Utils.log_with_header "opendir %s %s\n%!" path (Utils.flags_to_string flags);
-  with_drive_op ~label:"opendir" ~param:path (fun () ->
-      Drive.opendir path flags)
+  let handle =
+    with_drive_op ~label:"opendir" ~param:path (fun () ->
+        Drive.opendir path flags)
+  in
+  GdfuseFuseNative.file_info_update_of_handle handle
 
-let releasedir path flags _hnd =
+let releasedir path file_info =
+  let flags = GdfuseFuseNative.flags_of_file_info file_info in
   Utils.log_with_header "releasedir %s %s\n%!" path
     (Utils.flags_to_string flags)
 
-let fsyncdir path ds hnd =
-  Utils.log_with_header "fsyncdir %s %b %d\n%!" path ds hnd
+let fsyncdir path ds file_info =
+  let file_handle = GdfuseFuseNative.file_handle_as_int file_info in
+  Utils.log_with_header "fsyncdir %s %b %d\n%!" path ds file_handle
 
-let utime path atime mtime =
-  Utils.log_with_header "utime %s %f %f\n%!" path atime mtime;
-  with_drive_op ~label:"utime" ~param:path (fun () ->
+let utimens path atime mtime _file_info =
+  let atime = GdfuseFuseNative.float_of_timestamp "utimens" path atime in
+  let mtime = GdfuseFuseNative.float_of_timestamp "utimens" path mtime in
+  Utils.log_with_header "utimens %s %f %f\n%!" path atime mtime;
+  with_drive_op ~label:"utimens" ~param:path (fun () ->
       Drive.utime path atime mtime)
 
-let fopen path flags =
+let fopen path file_info =
+  let flags = GdfuseFuseNative.flags_of_file_info file_info in
   Utils.log_with_header "fopen %s %s\n%!" path (Utils.flags_to_string flags);
-  with_drive_op ~label:"fopen" ~param:path (fun () ->
-      let handle = Drive.fopen path flags in
-      if List.mem Unix.O_TRUNC flags then Drive.truncate path 0L;
-      handle)
+  let handle =
+    with_drive_op ~label:"fopen" ~param:path (fun () ->
+        let handle = Drive.fopen path flags in
+        if List.mem Unix.O_TRUNC flags then Drive.truncate path 0L;
+        handle)
+  in
+  GdfuseFuseNative.file_info_update_of_handle handle
 
-let read path buf offset file_descr =
+let read path buf offset file_info =
+  let file_descr = GdfuseFuseNative.file_handle_as_int file_info in
   let buf_len = Bigarray.Array1.dim buf in
   Utils.log_with_header "read %s [%d bytes] %Ld %d\n%!" path buf_len offset
     file_descr;
@@ -93,7 +109,8 @@ let read path buf offset file_descr =
       buf result;
   result
 
-let write path buf offset file_descr =
+let write path buf offset file_info =
+  let file_descr = GdfuseFuseNative.file_handle_as_int file_info in
   let buf_len = Bigarray.Array1.dim buf in
   Utils.log_with_header "write %s [%d bytes] %Ld %d\n%!" path buf_len offset
     file_descr;
@@ -116,36 +133,42 @@ let mkdir path mode =
 let unlink path = drive_path_op ~name:"unlink" path Drive.unlink
 let rmdir path = drive_path_op ~name:"rmdir" path Drive.rmdir
 
-let rename path new_path =
-  Utils.log_with_header "rename %s %s\n%!" path new_path;
+let rename path new_path flags =
+  Utils.log_with_header "rename %s %s %d\n%!" path new_path
+    flags.Fuse.rename_flags_raw;
+  GdfuseFuseNative.reject_unsupported_rename_flags path flags;
   with_drive_op ~label:"rename" ~param:path (fun () ->
       Drive.rename path new_path)
 
-let truncate path size =
+let truncate path size _file_info =
   Utils.log_with_header "truncate %s %Ld\n%!" path size;
   with_drive_op ~label:"truncate" ~param:path (fun () ->
       Drive.truncate path size)
 
-let release path flags hnd =
+let release path file_info =
+  let flags = GdfuseFuseNative.flags_of_file_info file_info in
+  let hnd = GdfuseFuseNative.file_handle_as_int file_info in
   Utils.log_with_header "release %s %s\n%!" path (Utils.flags_to_string flags);
   with_drive_op ~label:"release" ~param:path (fun () ->
       Drive.release path flags hnd)
 
-let flush path file_descr =
+let flush path file_info =
+  let file_descr = GdfuseFuseNative.file_handle_as_int file_info in
   Utils.log_with_header "flush %s %d\n%!" path file_descr;
   with_drive_op ~label:"flush" ~param:path (fun () ->
       Drive.flush path file_descr)
 
-let fsync path ds file_descr =
+let fsync path ds file_info =
+  let file_descr = GdfuseFuseNative.file_handle_as_int file_info in
   Utils.log_with_header "fsync %s %b %d\n%!" path ds file_descr;
   with_drive_op ~label:"fsync" ~param:path (fun () ->
       Drive.fsync path ds file_descr)
 
-let chmod path mode =
+let chmod path mode _file_info =
   Utils.log_with_header "chmod %s %o\n%!" path mode;
   with_drive_op ~label:"chmod" ~param:path (fun () -> Drive.chmod path mode)
 
-let chown path uid gid =
+let chown path uid gid _file_info =
   Utils.log_with_header "chown %s %d %d\n%!" path uid gid;
   with_drive_op ~label:"chown" ~param:path (fun () -> Drive.chown path uid gid)
 
@@ -179,9 +202,9 @@ let start_filesystem mountpoint fuse_args =
   let fuse_argv =
     Sys.argv.(0) :: (fuse_args @ [ mountpoint ]) |> Array.of_list
   in
-  let operations : Fuse.Fuse_compat.operations =
+  let operations : Fuse.operations =
     {
-      Fuse.Fuse_compat.default_operations with
+      Fuse.default_operations with
       init = init_filesystem;
       statfs;
       getattr;
@@ -189,7 +212,7 @@ let start_filesystem mountpoint fuse_args =
       opendir;
       releasedir;
       fsyncdir;
-      utime;
+      utimens;
       fopen;
       read;
       write;
@@ -212,4 +235,4 @@ let start_filesystem mountpoint fuse_args =
       symlink;
     }
   in
-  Fuse.Fuse_compat.main fuse_argv operations
+  Fuse.main fuse_argv operations

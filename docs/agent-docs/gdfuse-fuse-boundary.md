@@ -17,6 +17,15 @@ These helpers are the main bridge between:
 Most callback functions in `bin/gdfuseFuse.ml` stay thin precisely because this
 layer centralizes logging, exception translation, and the common path-op shape.
 
+Native FUSE 3 value conversion lives in `src/gdfuseFuseNative.ml`. That module
+keeps pure boundary conversions testable outside a mounted filesystem:
+
+- `Fuse.file_info` handles and flags are converted to the integer handles and
+  flag lists still expected by `Drive`
+- `Fuse.timestamp` values are converted to float timestamps for `Drive.utime`
+- unsupported nonzero `rename` flags are rejected before calling `Drive.rename`
+- `readdir` names are converted to `Fuse.dir_entry` records
+
 ## The Three Helpers
 
 At a high level, the helpers split responsibilities like this:

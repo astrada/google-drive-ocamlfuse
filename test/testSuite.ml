@@ -9,6 +9,7 @@ let _ =
            TestGdfuseCli.suite;
            TestGdfuseApp.suite;
            TestGdfuseFlow.suite;
+           TestGdfuseFuseNative.suite;
            TestDriveCacheMaintenance.suite;
            TestDriveDownloads.suite;
            TestDriveStreaming.suite;

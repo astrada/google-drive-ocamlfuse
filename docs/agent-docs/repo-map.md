@@ -72,7 +72,11 @@ The `Makefile` is only a small wrapper around these dune commands.
 - `bin/gdfuseFuse.ml`
   - Production FUSE adapter layer.
   - Maps `Drive` exceptions into Unix/FUSE errors and registers callback
-    functions with `Fuse.Fuse_compat.main`.
+    functions with `Fuse.main`.
+
+- `src/gdfuseFuseNative.ml`
+  - Pure helpers for native FUSE 3 callback conversion: file handles,
+    `utimens` timestamps, rename flags, and directory entries.
 
 ### Core Filesystem Logic
 

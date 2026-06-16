@@ -126,7 +126,7 @@ The production boot sequence is:
 11. Populate and install global `Context`.
 12. Ensure OAuth credentials are available.
 13. In mount mode, register shutdown through injected `register_exit`.
-14. Enter `Fuse.Fuse_compat.main`, with callbacks delegated to `Drive`.
+14. Enter `Fuse.main`, with callbacks delegated to `Drive`.
 
 The no-mountpoint branch runs startup/auth/bootstrap without
 entering the FUSE loop.

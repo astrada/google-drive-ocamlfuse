@@ -238,8 +238,10 @@ It:
 - logs each request
 - forwards operations to `Drive`
 - prepends `"."` and `".."` in `readdir`
-- builds the final `Fuse.Fuse_compat.main` argv from executable name,
-  `fuse_args`, and mountpoint
+- builds the final `Fuse.main` argv from executable name, `fuse_args`, and
+  mountpoint
+- converts native FUSE 3 callback details such as `file_info`, `utimens`
+  timestamps, rename flags, and directory entries before calling `Drive`
 
 ## Testability
 

@@ -1,6 +1,6 @@
 # FUSE 3 Dependency Upgrade Plan
 
-Status: M0 through M3 complete; M4 planned.
+Status: M0 through M4 complete.
 
 ## Goal
 
@@ -8,21 +8,22 @@ Upgrade `google-drive-ocamlfuse` from the libfuse 2 `ocamlfuse` binding to the
 libfuse 3 `fuse3` binding, while using the application as a realistic
 integration test for the upgraded binding.
 
-The first implementation should keep the application behavior stable by using
-`Fuse.Fuse_compat`. A later milestone can migrate the adapter to the native
-FUSE 3 callback shape.
+The migration used `Fuse.Fuse_compat` for the first dependency switch to keep
+behavior stable, then moved the application adapter to the native FUSE 3
+callback shape.
 
 ## Current State
 
 - `google-drive-ocamlfuse.opam` depends on `fuse3 >= 3.10.0`.
 - `src/dune` links the library with `fuse3`.
-- `bin/gdfuseFuse.ml` uses `Fuse.Fuse_compat.main` and
-  `Fuse.Fuse_compat.default_operations`.
+- `bin/gdfuseFuse.ml` uses native `Fuse.main` and `Fuse.default_operations`.
 - The default FUSE argv contains `-f` and no longer passes the libfuse 2-era
   `-obig_writes` option.
-- The compatibility adapter handles `O_TRUNC` delivered through `fopen` by
-  calling `Drive.truncate path 0L` after open-time access validation succeeds.
-- `fuse3` defaults `Fuse.Fuse_compat.main` to multithreaded libfuse loop mode.
+- The native adapter handles `O_TRUNC` delivered through `fopen` by calling
+  `Drive.truncate path 0L` after open-time access validation succeeds.
+- `src/gdfuseFuseNative.ml` holds native FUSE 3 conversion helpers for file
+  handles, `utimens` timestamps, rename flags, and directory entries.
+- `fuse3` defaults `Fuse.main` to multithreaded libfuse loop mode.
 - Default CLI parsing sets application-level `multi_threading` to true, so
   runtime config matches the libfuse 3 multithreaded loop default.
 - `-m` remains accepted as an explicit, idempotent multithreaded-mode request.
@@ -89,19 +90,18 @@ single-threaded Makefile target when adding this coverage.
 
 ### Native FUSE 3 API
 
-Defer the native `Fuse.operations` migration to a later milestone.
+Use native `Fuse.operations` in `bin/gdfuseFuse.ml`.
 
-When that milestone starts, adapt `bin/gdfuseFuse.ml` to the native FUSE 3
-record:
+The adapter maps the native FUSE 3 record deliberately:
 
-- callbacks with `file_info` should ignore it initially where the application
-  has no file-handle state;
-- `fopen` and `opendir` should return `Fuse.default_file_info_update`;
-- `rename` should reject unsupported nonzero flags or map supported flags
-  deliberately;
-- `utimens` should convert `Fuse.timestamp` to the existing float timestamp
-  behavior, rejecting unsupported sentinels if needed;
-- `readdir` should return `Fuse.dir_entry list`.
+- callbacks with `file_info` convert the native file handle to the existing
+  integer handle where `Drive` still expects one;
+- `fopen` and `opendir` convert optional integer handles to
+  `Fuse.file_info_update`, which is currently `Fuse.default_file_info_update`;
+- `rename` rejects unsupported nonzero flags;
+- `utimens` converts `Fuse.timestamp` values to the existing float timestamp
+  behavior and rejects `Now` or `Omit`;
+- `readdir` returns `Fuse.dir_entry list`.
 
 ## Milestones
 
@@ -251,6 +251,8 @@ Result:
 
 ### M4: Native FUSE 3 Adapter
 
+Status: complete.
+
 Move `bin/gdfuseFuse.ml` from `Fuse.Fuse_compat` to native `Fuse.operations`.
 
 Tasks:
@@ -267,6 +269,24 @@ Exit criteria:
 
 - The application no longer depends on `Fuse.Fuse_compat`.
 - Native FUSE 3 callbacks are covered by unit tests and the live e2e suite.
+
+Result:
+
+- `bin/gdfuseFuse.ml` now builds a native `Fuse.operations` record and enters
+  `Fuse.main`.
+- `src/gdfuseFuseNative.ml` provides unit-tested conversion helpers for native
+  file handles, file-info updates, timestamps, rename flags, and directory
+  entries.
+- Native `readdir`, `opendir`, `fopen`, `read`, `write`, `release`, `flush`,
+  `fsync`, `releasedir`, `fsyncdir`, `chmod`, `chown`, `truncate`, `utimens`,
+  and `rename` signatures are wired to the existing `Drive` behavior.
+- `tools/format_ocaml bin/gdfuseFuse.ml src/gdfuseFuseNative.ml src/gdfuseFuseNative.mli test/testGdfuseFuseNative.ml test/testSuite.ml`:
+  passed.
+- `dune build @install`: passed.
+- `dune runtest`: passed, 334 tests.
+- `make e2e` outside the sandbox: passed, 22 tests.
+- `make e2e-single-threaded CASE="mount root listing"` outside the sandbox:
+  passed.
 
 ## Verification
 

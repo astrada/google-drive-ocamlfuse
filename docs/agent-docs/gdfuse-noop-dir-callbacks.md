@@ -16,12 +16,12 @@ So this is an adapter-level design choice, not a missing implementation inside
 
 ## Where They Are Registered
 
-`start_filesystem` passes them into `Fuse.Fuse_compat.main` through the
-operations record:
+`start_filesystem` passes them into `Fuse.main` through the native operations
+record:
 
 ```ocaml
 {
-  Fuse.Fuse_compat.default_operations with
+  Fuse.default_operations with
   ...
   opendir;
   releasedir;
@@ -38,12 +38,14 @@ though their bodies are small.
 The implementations are:
 
 ```ocaml
-let releasedir path flags _hnd =
+let releasedir path file_info =
+  let flags = GdfuseFuseNative.flags_of_file_info file_info in
   Utils.log_with_header "releasedir %s %s\n%!" path
     (Utils.flags_to_string flags)
 
-let fsyncdir path ds hnd =
-  Utils.log_with_header "fsyncdir %s %b %d\n%!" path ds hnd
+let fsyncdir path ds file_info =
+  let file_handle = GdfuseFuseNative.file_handle_as_int file_info in
+  Utils.log_with_header "fsyncdir %s %b %d\n%!" path ds file_handle
 ```
 
 That is the entire behavior.
