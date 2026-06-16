@@ -50,11 +50,16 @@ as a handle-construction step.
 The production FUSE adapter in `bin/gdfuseFuse.ml` wires:
 
 ```ocaml
-let fopen path flags =
-  with_drive_op ~label:"fopen" ~param:path (fun () ->
-      let handle = Drive.fopen path flags in
-      if List.mem Unix.O_TRUNC flags then Drive.truncate path 0L;
-      handle)
+let fopen path file_info =
+  let flags = GdfuseFuseNative.flags_of_file_info file_info in
+  Utils.log_with_header "fopen %s %s\n%!" path (Utils.flags_to_string flags);
+  let handle =
+    with_drive_op ~label:"fopen" ~param:path (fun () ->
+        let handle = Drive.fopen path flags in
+        if List.mem Unix.O_TRUNC flags then Drive.truncate path 0L;
+        handle)
+  in
+  GdfuseFuseNative.file_info_update_of_handle handle
 ```
 
 So any exception raised by `Drive.fopen` is translated at the boundary into a
@@ -63,6 +68,10 @@ Unix/FUSE error.
 When FUSE delivers `O_TRUNC` through the open callback, the adapter preserves
 ordinary truncate-on-open behavior by calling `Drive.truncate path 0L` after
 `Drive.fopen` has accepted the requested access mode.
+
+The native FUSE 3 callback returns `Fuse.file_info_update`. Because
+`Drive.fopen` currently returns `None`, the helper returns
+`Fuse.default_file_info_update`.
 
 In particular:
 

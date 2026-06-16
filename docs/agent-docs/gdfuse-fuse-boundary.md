@@ -26,6 +26,9 @@ keeps pure boundary conversions testable outside a mounted filesystem:
 - unsupported nonzero `rename` flags are rejected before calling `Drive.rename`
 - `readdir` names are converted to `Fuse.dir_entry` records
 
+`start_filesystem` builds a native `Fuse.operations` record and calls
+`Fuse.main`. It uses the native FUSE 3 API rather than `Fuse.Fuse_compat`.
+
 ## The Three Helpers
 
 At a high level, the helpers split responsibilities like this:
@@ -40,6 +43,80 @@ So the control flow for a typical callback is:
 ```text
 FUSE callback -> drive_path_op / with_drive_op -> Drive.* -> exception mapping
 ```
+
+## Native FUSE 3 Callback Shape
+
+`bin/gdfuseFuse.ml` is a native FUSE 3 adapter. Several callbacks receive
+FUSE-level values that are intentionally kept out of the `Drive` entrypoint
+types. Keep these conversions at the boundary rather than pushing FUSE types
+deeper into `Drive`.
+
+### `file_info`
+
+Native callbacks use `Fuse.file_info`; the `Drive` entrypoints still receive
+separate flag lists and integer handles.
+
+The adapter consumes it in three ways:
+
+- `flags_of_file_info` extracts `fi_flags` for `fopen`, `opendir`, `release`,
+  and `releasedir`
+- `file_handle_as_int` converts `fi_fh` for `readdir`, `read`, `write`,
+  `release`, `flush`, `fsync`, and `fsyncdir`
+- callbacks that do not need file state ignore it explicitly, such as
+  `getattr`, `truncate`, `chmod`, `chown`, and `utimens`
+
+`int_of_file_handle` rejects handles that cannot fit in an OCaml `int` with
+`Unix.EOVERFLOW`. That keeps the conversion failure explicit instead of
+silently truncating libfuse state.
+
+### Open Updates
+
+Native `fopen` and `opendir` return `Fuse.file_info_update`.
+
+`Drive.fopen` and `Drive.opendir` currently act as validation gates and return
+`None` for the handle, so `file_info_update_of_handle None` returns
+`Fuse.default_file_info_update`. If either `Drive` entrypoint starts returning
+a real integer handle later, the helper will set `fi_update_fh`.
+
+`fopen` still handles `O_TRUNC` at the boundary. The order is deliberate:
+
+1. extract flags from `file_info`
+2. call `Drive.fopen` to enforce open-time access rules
+3. if `O_TRUNC` is present, call `Drive.truncate path 0L`
+4. convert the optional handle to `Fuse.file_info_update`
+
+So truncate-on-open only happens after open-time write access validation
+succeeds.
+
+### `readdir`
+
+Native `readdir` returns `Fuse.dir_entry list`, not string names.
+
+The adapter still asks `Drive.read_dir path` for basename strings, prepends
+`"."` and `".."`, then uses `GdfuseFuseNative.dir_entries_of_names`. These
+entries intentionally leave stats and offsets unset:
+
+- `entry_stats = None`
+- `entry_offset = None`
+- `entry_flags.fill_dir_plus = false`
+
+### `utimens`
+
+Native FUSE 3 uses `utimens` with `Fuse.timestamp` values.
+
+`GdfuseFuseNative.float_of_timestamp` converts `Fuse.Time` to the float
+seconds expected by `Drive.utime`. It rejects `Fuse.Now` and `Fuse.Omit` with
+`Unix.EINVAL`. Those sentinels are not currently mapped to application
+semantics.
+
+### `rename`
+
+Native FUSE 3 passes `Fuse.rename_flags`.
+
+`GdfuseFuseNative.reject_unsupported_rename_flags` rejects any nonzero raw flag
+with `Unix.EINVAL` before calling `Drive.rename`. This keeps unsupported
+`RENAME_NOREPLACE`, `RENAME_EXCHANGE`, and `RENAME_WHITEOUT` semantics from
+being treated as ordinary rename requests.
 
 ## `handle_exception`
 
@@ -203,7 +280,7 @@ That means these callbacks all share the same adapter pattern:
 Many callbacks go straight to `with_drive_op` instead because they need one of
 these variations:
 
-- extra arguments in the log line, such as `write`, `truncate`, or `utime`
+- extra arguments in the log line, such as `write`, `truncate`, or `utimens`
 - a different chosen `param`, such as `symlink`
 - `log_exception = true`, such as `init_filesystem` and `statfs`
 - post-call handling, such as `read` returning a byte count or `readdir`
@@ -270,6 +347,8 @@ surface even when the eventual errno mapping stays the same.
 - `docs/agent-docs/architecture.md`
 - `docs/agent-docs/gdfuse-noop-dir-callbacks.md`
 - `docs/agent-docs/application-flow.md`
+- `docs/agent-docs/drive-fopen.md`
+- `docs/agent-docs/drive-opendir.md`
 
 ## Source Pointers
 
@@ -277,3 +356,5 @@ surface even when the eventual errno mapping stays the same.
 - `bin/gdfuseFuse.ml`: `with_drive_op`
 - `bin/gdfuseFuse.ml`: `drive_path_op`
 - `bin/gdfuseFuse.ml`: `start_filesystem`
+- `src/gdfuseFuseNative.ml`: native FUSE 3 conversion helpers
+- `test/testGdfuseFuseNative.ml`: conversion helper tests

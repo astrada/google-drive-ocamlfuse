@@ -58,16 +58,18 @@ val chown : string -> int -> int -> unit
 The production FUSE adapter wires:
 
 ```ocaml
-let utime path atime mtime =
-  Utils.log_with_header "utime %s %f %f\n%!" path atime mtime;
-  with_drive_op ~label:"utime" ~param:path (fun () ->
+let utimens path atime mtime _file_info =
+  let atime = GdfuseFuseNative.float_of_timestamp "utimens" path atime in
+  let mtime = GdfuseFuseNative.float_of_timestamp "utimens" path mtime in
+  Utils.log_with_header "utimens %s %f %f\n%!" path atime mtime;
+  with_drive_op ~label:"utimens" ~param:path (fun () ->
       Drive.utime path atime mtime)
 
-let chmod path mode =
+let chmod path mode _file_info =
   Utils.log_with_header "chmod %s %o\n%!" path mode;
   with_drive_op ~label:"chmod" ~param:path (fun () -> Drive.chmod path mode)
 
-let chown path uid gid =
+let chown path uid gid _file_info =
   Utils.log_with_header "chown %s %d %d\n%!" path uid gid;
   with_drive_op ~label:"chown" ~param:path (fun () -> Drive.chown path uid gid)
 ```
@@ -79,6 +81,10 @@ So all three:
 - rely on `handle_exception` in `bin/gdfuseFuse.ml` for Unix/FUSE error mapping
 
 None of the three entrypoints contains its own special exception translation.
+
+The FUSE 3 boundary names the timestamp callback `utimens`. It converts
+`Fuse.Time` values to float seconds before calling `Drive.utime` and rejects
+`Fuse.Now` or `Fuse.Omit` with `EINVAL`.
 
 ## Shared Shape
 
@@ -272,6 +278,6 @@ ports:
 - `src/driveRemoteUpdates.ml`: metadata-side `update_remote_resource`
 - `src/drive.ml`: `DriveMetadataMutationPorts`
 - `src/drive.ml`: `DriveRemoteUpdatePorts`
-- `bin/gdfuseFuse.ml`: `utime`
+- `bin/gdfuseFuse.ml`: `utimens`
 - `bin/gdfuseFuse.ml`: `chmod`
 - `bin/gdfuseFuse.ml`: `chown`

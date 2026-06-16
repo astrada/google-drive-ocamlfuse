@@ -2,9 +2,7 @@
 
 ## Current Design
 
-Config handling no longer uses `KeyValueStore.MakeFileStore(Config)`.
-
-The current implementation is split across:
+Config handling is TOML-backed and split across:
 
 - `src/configStore.ml`
 - `src/configRuntime.ml`
@@ -15,9 +13,9 @@ The current implementation is split across:
 
 `bin/gdfuse.ml` is only a thin executable entrypoint.
 
-The state file uses the old key/value store through
+The state file uses the key/value store through
 `Context.StateFileStore = KeyValueStore.MakeFileStore(State)` in
-`src/context.ml`. Only config moved to the TOML-backed `ConfigStore` path.
+`src/context.ml`. Config uses the `ConfigStore` path.
 
 ## Persistent Format
 

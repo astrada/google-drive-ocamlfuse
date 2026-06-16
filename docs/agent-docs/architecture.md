@@ -110,6 +110,7 @@ Startup is split across:
 - `src/gdfuseFlow.ml`: orchestration
 - `bin/gdfuseRuntimeDeps.ml`: production side-effect wiring
 - `bin/gdfuseFuse.ml`: FUSE callback registration
+- `src/gdfuseFuseNative.ml`: native FUSE 3 callback value conversion
 
 The production boot sequence is:
 
@@ -126,7 +127,16 @@ The production boot sequence is:
 11. Populate and install global `Context`.
 12. Ensure OAuth credentials are available.
 13. In mount mode, register shutdown through injected `register_exit`.
-14. Enter `Fuse.main`, with callbacks delegated to `Drive`.
+14. Build native `Fuse.operations` in `bin/gdfuseFuse.ml` and enter
+    `Fuse.main`.
+
+`bin/gdfuseFuse.ml` is the production FUSE boundary. It registers native FUSE
+3 callbacks, wraps request logging and exception translation, and then calls
+the existing `Drive` entrypoints. Native callback shapes are normalized by
+`src/gdfuseFuseNative.ml` before they reach `Drive`: `Fuse.file_info` becomes
+the existing flag/handle arguments, `utimens` timestamps become float seconds,
+rename flags are rejected unless supported, and `readdir` names become
+`Fuse.dir_entry` records on the way back to libfuse.
 
 The no-mountpoint branch runs startup/auth/bootstrap without
 entering the FUSE loop.
@@ -241,8 +251,11 @@ Most remote operations run through:
 - `DriveRequestHandling`: Drive-specific exception mapping and default retries,
   exposed to production wiring through the `Drive` helper aliases
 
-The FUSE adapter boundary in `bin/gdfuseFuse.ml` then wraps `Drive` callbacks
-through `handle_exception`, `with_drive_op`, and `drive_path_op`; see
+The FUSE adapter boundary in `bin/gdfuseFuse.ml` then wraps native FUSE 3
+callbacks through `handle_exception`, `with_drive_op`, and `drive_path_op`.
+`src/gdfuseFuseNative.ml` converts callback values such as `file_info`,
+`utimens` timestamps, rename flags, and directory entries between libfuse and
+the existing `Drive` callback shape; see
 `docs/agent-docs/gdfuse-fuse-boundary.md`.
 
 Retry handling is split:
@@ -272,7 +285,8 @@ Filesystem-wide capacity reporting enters through `Drive.statfs` and delegates
 the quota math to `DriveFilesystemStats`; see `docs/agent-docs/drive-statfs.md`.
 
 Metadata-only `utime` / `chmod` / `chown` requests enter through thin wrappers
-over `DriveMetadataMutations`; see
+over `DriveMetadataMutations`. The native FUSE `utimens` callback is converted
+to `Drive.utime` at the adapter boundary; see
 `docs/agent-docs/drive-chmod-chown-utime.md`.
 
 The metadata-side remote update wrapper used by those paths lives in

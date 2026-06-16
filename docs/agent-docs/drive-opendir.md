@@ -38,14 +38,22 @@ validation happens, but no persistent handle object is created.
 The production FUSE adapter wires:
 
 ```ocaml
-let opendir path flags =
+let opendir path file_info =
+  let flags = GdfuseFuseNative.flags_of_file_info file_info in
   Utils.log_with_header "opendir %s %s\n%!" path (Utils.flags_to_string flags);
-  with_drive_op ~label:"opendir" ~param:path (fun () ->
-      Drive.opendir path flags)
+  let handle =
+    with_drive_op ~label:"opendir" ~param:path (fun () ->
+        Drive.opendir path flags)
+  in
+  GdfuseFuseNative.file_info_update_of_handle handle
 ```
 
 So repository exceptions raised by `Drive.opendir` are translated at the
 boundary into Unix/FUSE errors.
+
+The native FUSE 3 callback returns `Fuse.file_info_update`. Since
+`Drive.opendir` currently returns `None`, this is
+`Fuse.default_file_info_update`.
 
 The most important visible one here is:
 

@@ -28,17 +28,21 @@ val release : string -> 'a -> 'b -> unit
 The production FUSE adapter wires:
 
 ```ocaml
-let release path flags hnd =
+let release path file_info =
+  let flags = GdfuseFuseNative.flags_of_file_info file_info in
+  let hnd = GdfuseFuseNative.file_handle_as_int file_info in
   Utils.log_with_header "release %s %s\n%!" path (Utils.flags_to_string flags);
   with_drive_op ~label:"release" ~param:path (fun () ->
       Drive.release path flags hnd)
 
-let flush path file_descr =
+let flush path file_info =
+  let file_descr = GdfuseFuseNative.file_handle_as_int file_info in
   Utils.log_with_header "flush %s %d\n%!" path file_descr;
   with_drive_op ~label:"flush" ~param:path (fun () ->
       Drive.flush path file_descr)
 
-let fsync path ds file_descr =
+let fsync path ds file_info =
+  let file_descr = GdfuseFuseNative.file_handle_as_int file_info in
   Utils.log_with_header "fsync %s %b %d\n%!" path ds file_descr;
   with_drive_op ~label:"fsync" ~param:path (fun () ->
       Drive.fsync path ds file_descr)
@@ -46,6 +50,8 @@ let fsync path ds file_descr =
 
 So all three:
 
+- convert native `Fuse.file_info` into the flags or integer handle still
+  expected by `Drive`
 - log the visible path and extra FUSE parameters
 - run through the shared `with_drive_op` exception-mapping wrapper
 - rely on `handle_exception` in `bin/gdfuseFuse.ml` for Unix/FUSE error mapping
