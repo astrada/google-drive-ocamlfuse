@@ -117,8 +117,8 @@ let wait_until ?(timeout = 30.0) ?(interval = 0.25) predicate =
   in
   loop ()
 
-let start ~docs_mode ~timeout ~gdfuse_exe ~label ~config_path ~mountpoint
-    ~stdout_path ~stderr_path =
+let start ~docs_mode ~gdfuse_args ~timeout ~gdfuse_exe ~label ~config_path
+    ~mountpoint ~stdout_path ~stderr_path =
   let stdin_fd = Unix.openfile "/dev/null" [ Unix.O_RDONLY ] 0 in
   let stdout_fd =
     Unix.openfile stdout_path
@@ -136,7 +136,7 @@ let start ~docs_mode ~timeout ~gdfuse_exe ~label ~config_path ~mountpoint
   let args =
     Array.of_list
       ([ gdfuse_exe; "-label"; label; "-config"; config_path ]
-      @ docs_mode_args @ [ mountpoint ])
+      @ docs_mode_args @ gdfuse_args @ [ mountpoint ])
   in
   let pid =
     try Unix.create_process gdfuse_exe args stdin_fd stdout_fd stderr_fd

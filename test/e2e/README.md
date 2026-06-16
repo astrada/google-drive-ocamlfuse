@@ -47,6 +47,15 @@ alias is still available for Dune-native workflows; use
 `dune build --no-buffer -j 1 @e2e --force` when live action output is needed
 through Dune.
 
+Run the same suite with the FUSE single-threaded loop option:
+
+```sh
+make e2e-single-threaded
+```
+
+This target sets `GDFUSE_E2E_GDFUSE_ARGS="-s"` before invoking the runner.
+`make e2e` remains the default multithreaded coverage path.
+
 List the available named cases:
 
 ```sh
@@ -64,6 +73,7 @@ make e2e CASE="xattr remount roundtrip"
 make e2e CASE="google doc"
 make e2e CASE="msoffice"
 make e2e CASE="drive shortcut"
+make e2e-single-threaded CASE="mount root listing"
 ```
 
 The full suite creates temporary local profiles, mounts the working-tree
@@ -90,6 +100,9 @@ editing Google-native documents through exported files.
 - `GDFUSE_E2E_MOUNT_TIMEOUT_SECONDS`: mount startup timeout.
 - `GDFUSE_E2E_UNMOUNT_TIMEOUT_SECONDS`: unmount timeout.
 - `GDFUSE_E2E_FS_TIMEOUT_SECONDS`: filesystem polling timeout.
+- `GDFUSE_E2E_GDFUSE_ARGS`: whitespace-separated extra arguments inserted
+  before the mountpoint in the `google-drive-ocamlfuse` command. Use `-s` for
+  single-threaded loop mode. Values containing spaces are not supported.
 - `GDFUSE_E2E_ONLY`: substring filter for case labels and per-case directory
   names.
 - `GDFUSE_E2E_KEEP_LOCAL`: keep local temporary state after successful runs.

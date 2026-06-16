@@ -20,3 +20,8 @@
  (alias e2e-preflight)
  (deps e2eSuite.exe ../../bin/gdfuse.exe)
  (action (run ./e2eSuite.exe --preflight)))
+
+(rule
+ (alias e2e-single-threaded)
+ (deps e2eSuite.exe ../../bin/gdfuse.exe)
+ (action (setenv GDFUSE_E2E_GDFUSE_ARGS "-s" (run ./e2eSuite.exe))))

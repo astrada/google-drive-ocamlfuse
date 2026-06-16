@@ -4,6 +4,7 @@ type t = {
   mount_timeout_seconds : float;
   unmount_timeout_seconds : float;
   fs_timeout_seconds : float;
+  gdfuse_args : string list;
   keep_local : bool;
   log_excerpt_lines : int;
 }
@@ -55,6 +56,13 @@ let parse_bool name default =
                    %S"
                   name value)))
 
+let parse_gdfuse_args () =
+  match env "GDFUSE_E2E_GDFUSE_ARGS" with
+  | None -> []
+  | Some value ->
+      value |> String.split_on_char ' ' |> List.map String.trim
+      |> List.filter (fun arg -> arg <> "")
+
 let load () =
   {
     mount_timeout_seconds =
@@ -63,13 +71,20 @@ let load () =
       parse_positive_float "GDFUSE_E2E_UNMOUNT_TIMEOUT_SECONDS" 10.0;
     fs_timeout_seconds =
       parse_positive_float "GDFUSE_E2E_FS_TIMEOUT_SECONDS" 30.0;
+    gdfuse_args = parse_gdfuse_args ();
     keep_local = parse_bool "GDFUSE_E2E_KEEP_LOCAL" false;
     log_excerpt_lines = parse_positive_int "GDFUSE_E2E_LOG_EXCERPT_LINES" 80;
   }
 
+let gdfuse_args_description = function
+  | [] -> "none"
+  | args -> Printf.sprintf "%d arg(s)" (List.length args)
+
 let describe settings =
   Printf.sprintf
     "mount_timeout=%.1fs; unmount_timeout=%.1fs; fs_timeout=%.1fs; \
-     keep_local=%b; log_excerpt_lines=%d"
+     gdfuse_args=%s; keep_local=%b; log_excerpt_lines=%d"
     settings.mount_timeout_seconds settings.unmount_timeout_seconds
-    settings.fs_timeout_seconds settings.keep_local settings.log_excerpt_lines
+    settings.fs_timeout_seconds
+    (gdfuse_args_description settings.gdfuse_args)
+    settings.keep_local settings.log_excerpt_lines

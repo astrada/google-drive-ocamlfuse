@@ -293,6 +293,7 @@ let start_mount run =
   | None ->
       let mount =
         E2eMount.start ~docs_mode:run.docs_mode
+          ~gdfuse_args:run.settings.gdfuse_args
           ~timeout:run.settings.mount_timeout_seconds ~gdfuse_exe:run.gdfuse_exe
           ~label:run.label ~config_path:run.paths.config_path
           ~mountpoint:run.paths.mountpoint ~stdout_path:run.paths.stdout_path

@@ -1,6 +1,6 @@
 # FUSE 3 Dependency Upgrade Plan
 
-Status: M0 through M2 complete; M3 planned.
+Status: M0 through M3 complete; M4 planned.
 
 ## Goal
 
@@ -32,6 +32,8 @@ FUSE 3 callback shape.
   raise legacy SQLite busy-timeout values for multithreaded operation.
 - The live e2e harness mounts the working-tree executable without `-s`, so it
   exercises the multithreaded default.
+- `make e2e-single-threaded` runs the same live e2e harness with
+  `GDFUSE_E2E_GDFUSE_ARGS="-s"` for explicit single-threaded coverage.
 
 ## Starting State
 
@@ -216,6 +218,8 @@ Result:
 
 ### M3: e2e Harness Single-Threaded Path
 
+Status: complete.
+
 Keep the default e2e path as multithreaded-default coverage and add explicit
 single-threaded coverage.
 
@@ -230,6 +234,20 @@ Exit criteria:
 
 - `make e2e` exercises the default multithreaded mode.
 - There is a documented and testable single-threaded e2e path.
+
+Result:
+
+- `GDFUSE_E2E_GDFUSE_ARGS` is parsed as whitespace-separated extra executable
+  arguments and appended before the mountpoint in the e2e `gdfuse` argv.
+- `make e2e-single-threaded` sets `GDFUSE_E2E_GDFUSE_ARGS="-s"` and supports
+  the same optional `CASE=...` filter as `make e2e`.
+- A Dune `@e2e-single-threaded` alias is available for Dune-native workflows.
+- `test/e2e/README.md` documents the single-threaded target and override.
+- `tools/format_ocaml test/e2e/e2eSettings.ml test/e2e/e2eMount.ml test/e2e/e2eHarness.ml`:
+  passed.
+- `dune build @install`: passed.
+- `dune runtest`: passed.
+- `make e2e-single-threaded` outside the sandbox: passed, 22 tests.
 
 ### M4: Native FUSE 3 Adapter
 
