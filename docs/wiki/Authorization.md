@@ -20,7 +20,7 @@ You can create OAuth2 credentials from the Google Cloud Console.
 [Here](https://support.google.com/cloud/answer/6158849?hl=en) you can find how
 to set up OAuth2. When creating a new client ID, you must select `Desktop` as
 `Application type`. You must also [activate the Google Drive
-API](https://cloud.google.com/service-usage/docs/enable-disable). You also need
+API](https://docs.cloud.google.com/apis/docs/getting-started#enabling_apis). You also need
 to set the Publishing status to "In Production" or you will have to re-download
 the token every 7 days ([#872](../issues/872)).
 
