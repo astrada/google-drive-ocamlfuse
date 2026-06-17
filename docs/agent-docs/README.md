@@ -57,6 +57,7 @@ Read these files in order:
 50. `application-flow.md`
 51. `workflows.md`
 52. `config-file-handling.md` for config-format and parser maintenance
+53. `tsan-testing.md` for ThreadSanitizer switch setup and current limitations
 
 The user-facing docs under `docs/wiki/` are the source for installation,
 authorization, and end-user configuration details. The files in
